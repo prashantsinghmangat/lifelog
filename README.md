@@ -1,5 +1,7 @@
 # lifelog
 
+Live: **https://lifelog-timeline.netlify.app** — installable to an Android home screen.
+
 A personal life timeline. Expenses, work hours, events and notes are the same thing —
 something that happened, or will happen, on a date. One table, one screen, one text box.
 
@@ -75,7 +77,7 @@ Vite reads env only at startup, so restart the dev server after editing this.
 Authentication → **URL Configuration**:
 
 - **Site URL**: `http://localhost:5173`
-- **Redirect URLs**: `http://localhost:5173/**` and, after deploying, `https://<app>.netlify.app/**`
+- **Redirect URLs**: `http://localhost:5173/**` and `https://lifelog-timeline.netlify.app/**`
 
 Login sends `emailRedirectTo: window.location.origin`. If that origin is not allow-listed the
 magic link silently bounces to the Site URL and no session is created — with no error shown.
@@ -165,9 +167,9 @@ Two steps that are easy to miss, and both fail quietly:
    `VITE_SUPABASE_ANON_KEY`, then **trigger a redeploy**. Vite inlines them at build time, so a
    build that ran without them ships a bundle that throws on load — adding the variables alone
    changes nothing.
-2. Supabase → Authentication → URL Configuration: add `https://<app>.netlify.app/**` to
-   **Redirect URLs**. Otherwise the magic link bounces to the Site URL and no session is created,
-   with no error shown.
+2. Supabase → Authentication → URL Configuration: add `https://lifelog-timeline.netlify.app/**`
+   to **Redirect URLs**. Otherwise the magic link bounces to the Site URL and no session is
+   created, with no error shown.
 
 `netlify.toml` also pins Node 22 (Vite 8 refuses Node 18) and serves `sw.js` with
 `max-age=0, must-revalidate`, without which a cached service worker can stall `autoUpdate` on
