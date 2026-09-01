@@ -95,7 +95,7 @@ actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 61 tests, 177 assertions
+npm test           # vitest run — 86 tests, 223 assertions
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -110,7 +110,7 @@ existed. Order matters: duration is read before amount, or `2h client work` beco
 | Event override | leading `+` |
 | Dates | `today`, `yesterday`, `tomorrow`, `3 days ago`, `3d ago`, `next friday`, `sat`, `friday`, `14 nov`, `nov 14`, `14/11`, `14/11/26` |
 | Times | `5pm`, `5:30pm`, `17:30`, `9am` |
-| Durations | `2h`, `90m`, `2.5h`, `1h30m`, `45 min`, `2 hrs` |
+| Durations | `2h`, `90m`, `2.5h`, `1h30m`, `2h30`, `45 min`, `2 hrs` |
 | Amounts | `350`, `₹350`, `rs 350`, `Rs.350`, `350rs`, `100 rupees`, `2,499`, `350.50` |
 | Filler stripped | `spent`, `paid`, `bought`, `for`, `on`, `at`, `worked`, `did` |
 
@@ -136,10 +136,10 @@ Measured with `npm run build`:
 
 | File | Raw | Gzipped |
 | --- | --- | --- |
-| `assets/index-*.js` | 393.70 kB | **113.59 kB** |
-| `assets/index-*.css` | 12.35 kB | 3.44 kB |
+| `assets/index-*.js` | 393.75 kB | **113.61 kB** |
+| `assets/index-*.css` | 12.22 kB | 3.40 kB |
 | `index.html` | 0.58 kB | 0.34 kB |
-| **Total** | | **117.37 kB** |
+| **Total** | | **117.35 kB** |
 
 Against a 150 KB budget. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
 `postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and

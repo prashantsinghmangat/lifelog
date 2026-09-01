@@ -453,3 +453,159 @@ describe('edge cases', () => {
     expect(a).toEqual(b)
   })
 })
+
+describe('amount shapes', () => {
+  it('parses a thousands separator with paise', () => {
+    const r = p('2,499.50 shoes')
+    expect(r?.amountPaise).toBe(249950)
+    expect(r?.title).toBe('shoes')
+  })
+
+  it('accepts an uppercase RS marker', () => {
+    const r = p('RS 350 dinner')
+    expect(r?.amountPaise).toBe(35000)
+    expect(r?.title).toBe('dinner')
+  })
+
+  it('accepts an INR marker', () => {
+    const r = p('INR 1200 flight')
+    expect(r?.amountPaise).toBe(120000)
+    expect(r?.title).toBe('flight')
+  })
+
+  it('keeps a zero amount as an expense', () => {
+    const r = p('0 free lunch')
+    expect(r?.kind).toBe('expense')
+    expect(r?.amountPaise).toBe(0)
+    expect(r?.category).toBe('food')
+  })
+
+  it('rounds a third decimal place rather than truncating', () => {
+    const r = p('10.5 chai')
+    expect(r?.amountPaise).toBe(1050)
+    expect(Number.isInteger(r?.amountPaise)).toBe(true)
+  })
+
+  it('drops a trailing full stop from the title', () => {
+    const r = p('350 lunch.')
+    expect(r?.amountPaise).toBe(35000)
+    expect(r?.title).toBe('lunch')
+  })
+})
+
+describe('clock times', () => {
+  it('reads noon as 12:00', () => {
+    const r = p('+ lunch 12pm')
+    expect(r?.occurredAt?.startsWith('2026-09-01T12:00:00')).toBe(true)
+  })
+
+  it('reads midnight as 00:00', () => {
+    const r = p('+ flight 12am')
+    expect(r?.occurredAt?.startsWith('2026-09-01T00:00:00')).toBe(true)
+  })
+
+  it('keeps an offset on occurredAt so the timestamp is unambiguous', () => {
+    const r = p('+ standup 9am')
+    expect(r?.occurredAt).toMatch(/T09:00:00([+-]\d{2}:\d{2}|Z)$/)
+  })
+
+  it('ignores an impossible 24-hour time', () => {
+    const r = p('+ standup 25:00')
+    expect(r?.occurredAt).toBeUndefined()
+  })
+
+  it('does not read a bare number as a time', () => {
+    const r = p('+ standup 9')
+    expect(r?.occurredAt).toBeUndefined()
+  })
+})
+
+describe('weekday resolution', () => {
+  it('resolves today\'s own weekday to today', () => {
+    // NOW is a Tuesday.
+    const r = p('200 chai tue')
+    expect(r?.occurredOn).toBe(TODAY)
+  })
+
+  it('sends "next <today\'s weekday>" a full week forward', () => {
+    const r = p('review next tuesday')
+    expect(r?.occurredOn).toBe('2026-09-08')
+    expect(r?.kind).toBe('event')
+  })
+
+  it('resolves "next monday" to the coming Monday', () => {
+    const r = p('call next monday')
+    expect(r?.occurredOn).toBe('2026-09-07')
+  })
+})
+
+describe('robustness', () => {
+  it('returns null for tabs and newlines only', () => {
+    expect(p('\t\n  ')).toBeNull()
+  })
+
+  it('collapses runs of whitespace in the title', () => {
+    const r = p('350    lunch     swiggy')
+    expect(r?.title).toBe('lunch swiggy')
+  })
+
+  it('accepts a + with no following space', () => {
+    const r = p('+standup')
+    expect(r?.kind).toBe('event')
+    expect(r?.title).toBe('standup')
+  })
+
+  it('keeps an amount on an explicit event', () => {
+    const r = p('+ 350 team lunch')
+    expect(r?.kind).toBe('event')
+    expect(r?.amountPaise).toBe(35000)
+    expect(r?.title).toBe('team lunch')
+  })
+
+  it('rejects an impossible calendar date instead of crashing', () => {
+    const r = p('31 feb dentist')
+    expect(r).not.toBeNull()
+    expect(r?.occurredOn).toBe(TODAY)
+  })
+
+  it('parses a four-digit year', () => {
+    const r = p('250 books 14/11/2026')
+    expect(r?.occurredOn).toBe(NOV_14)
+    expect(r?.amountPaise).toBe(25000)
+  })
+
+  it('reads "2h30" as two and a half hours', () => {
+    const r = p('2h30 client work')
+    expect(r?.kind).toBe('time')
+    expect(r?.durationMinutes).toBe(150)
+    expect(r?.title).toBe('client work')
+  })
+
+  it('does not fold a spaced number after hours into the duration', () => {
+    const r = p('2h 500 client work')
+    expect(r?.durationMinutes).toBe(120)
+    // Unmarked, so it is neither minutes nor money: it stays in the title.
+    expect(r?.amountPaise).toBeUndefined()
+    expect(r?.title).toBe('500 client work')
+  })
+
+  it('does not flag a birthday expense as recurring', () => {
+    const r = p('500 birthday gift')
+    expect(r?.kind).toBe('expense')
+    expect(r?.data.rrule).toBeUndefined()
+  })
+
+  it('does not flag a plain note as recurring', () => {
+    const r = p('birthday ideas for riya')
+    expect(r?.kind).toBe('note')
+    expect(r?.data.rrule).toBeUndefined()
+  })
+
+  it('gives every result its own data object', () => {
+    const a = p('+ riya birthday 14 nov')
+    const b = p('350 lunch')
+    expect(a?.data.rrule).toBe('FREQ=YEARLY')
+    expect(b?.data).toEqual({})
+    expect(a?.data).not.toBe(b?.data)
+  })
+})

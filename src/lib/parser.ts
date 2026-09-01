@@ -168,6 +168,9 @@ function takeDuration(input: string): Cut<number> | null {
     cut(input, new RegExp(`\\b(\\d+)\\s*${HOURS}\\s*(\\d+)\\s*${MINUTES}\\b`, 'i'), (m) =>
       int(m[1]) * 60 + int(m[2]),
     ) ??
+    // `2h30`, with the m dropped. The space is forbidden on purpose: in
+    // `2h 500 client work` the 500 is an amount, not thirty-plus hours of minutes.
+    cut(input, /\b(\d+)h([0-5]?\d)\b/i, (m) => int(m[1]) * 60 + int(m[2])) ??
     cut(input, new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*${HOURS}\\b`, 'i'), (m) =>
       Math.round(Number(m[1]) * 60),
     ) ??

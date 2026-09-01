@@ -1,4 +1,7 @@
-@import 'tailwindcss';
+/* source(none) disables automatic content detection, which otherwise scans the
+   README and the tests and lets prose change the CSS bundle. */
+@import 'tailwindcss' source(none);
+@source './**/*.tsx';
 
 @theme {
   --font-sans:
