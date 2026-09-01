@@ -25,7 +25,7 @@ Single user. No sharing, no onboarding, no settings.
 | Dates | `date-fns` |
 | Tests | Vitest |
 | PWA | `vite-plugin-pwa` |
-| Deploy | Vercel |
+| Deploy | Netlify (a Vercel config is committed too) |
 
 Runtime dependencies are exactly four: `react`, `react-dom`, `@supabase/supabase-js`,
 `date-fns`. No component library, no state manager, no data-fetching library, no icon
@@ -75,7 +75,7 @@ Vite reads env only at startup, so restart the dev server after editing this.
 Authentication → **URL Configuration**:
 
 - **Site URL**: `http://localhost:5173`
-- **Redirect URLs**: `http://localhost:5173/**` and, after deploying, `https://<app>.vercel.app/**`
+- **Redirect URLs**: `http://localhost:5173/**` and, after deploying, `https://<app>.netlify.app/**`
 
 Login sends `emailRedirectTo: window.location.origin`. If that origin is not allow-listed the
 magic link silently bounces to the Site URL and no session is created — with no error shown.
@@ -155,21 +155,26 @@ worker, not the page, and are not part of the above.
 
 ## Deploy
 
-```bash
-npm i -g vercel
-vercel            # first run: link the project
-vercel --prod
-```
+Netlify, from GitHub — **Add new site → Import an existing project**, pick this repo. Build
+settings come from [`netlify.toml`](netlify.toml) (`npm run build` → `dist`), so there is
+nothing to fill in. Every push to `main` then deploys itself.
 
-Then:
+Two steps that are easy to miss, and both fail quietly:
 
-1. Vercel → Project → Settings → **Environment Variables**: add `VITE_SUPABASE_URL` and
-   `VITE_SUPABASE_ANON_KEY`. They are build-time inlined, so redeploy after adding them.
-2. Supabase → Authentication → URL Configuration: add `https://<app>.vercel.app/**` to
-   **Redirect URLs**, or login will not work in production.
+1. Site configuration → **Environment variables**: add `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY`, then **trigger a redeploy**. Vite inlines them at build time, so a
+   build that ran without them ships a bundle that throws on load — adding the variables alone
+   changes nothing.
+2. Supabase → Authentication → URL Configuration: add `https://<app>.netlify.app/**` to
+   **Redirect URLs**. Otherwise the magic link bounces to the Site URL and no session is created,
+   with no error shown.
 
-[`vercel.json`](vercel.json) rewrites every path to `/index.html`. Static files still win, so
-`sw.js`, the manifest and the icons serve directly.
+`netlify.toml` also pins Node 22 (Vite 8 refuses Node 18) and serves `sw.js` with
+`max-age=0, must-revalidate`, without which a cached service worker can stall `autoUpdate` on
+an old build. The SPA redirect deliberately omits `force = true` so real files — `sw.js`, the
+manifest, the icons — are served directly and only navigations fall through to `index.html`.
+
+[`vercel.json`](vercel.json) is committed as well and does the same rewrite, if this ever moves.
 
 ### Install to a phone
 

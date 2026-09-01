@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Vite 8 needs Node ^20.19 or >=22.12; older Netlify sites still default to 18.
+  NODE_VERSION = "22"
+
+# SPA fallback. No force = true, so real files (sw.js, the manifest, the icons)
+# are served directly and only genuine navigations fall through to index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Without this the service worker itself can be served from cache, which stalls
+# the autoUpdate registration on a stale build.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
