@@ -5,6 +5,7 @@ type Props = {
   day: string
   now: Date
   onChange: (day: string) => void
+  onOpenCalendar: () => void
 }
 
 function Chevron({ dir }: { dir: 'left' | 'right' }) {
@@ -25,7 +26,7 @@ function Chevron({ dir }: { dir: 'left' | 'right' }) {
   )
 }
 
-export function DayHeader({ day, now, onChange }: Props) {
+export function DayHeader({ day, now, onChange, onOpenCalendar }: Props) {
   return (
     <div className="flex items-center justify-between">
       <button
@@ -37,19 +38,14 @@ export function DayHeader({ day, now, onChange }: Props) {
         <Chevron dir="left" />
       </button>
 
-      {/* The visible label is the picker: the native input sits on top of it, invisible. */}
-      <label className="relative cursor-pointer px-2 text-base font-semibold">
+      <button
+        type="button"
+        onClick={onOpenCalendar}
+        aria-label={`${dayLabel(day, now)} — open calendar`}
+        className="px-2 text-base font-semibold"
+      >
         {dayLabel(day, now)}
-        <input
-          type="date"
-          value={day}
-          aria-label="Pick a date"
-          onChange={(event) => {
-            if (event.target.value) onChange(event.target.value)
-          }}
-          className="absolute inset-0 h-full w-full opacity-0"
-        />
-      </label>
+      </button>
 
       <button
         type="button"

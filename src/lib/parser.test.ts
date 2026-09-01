@@ -324,6 +324,89 @@ describe('notes', () => {
   })
 })
 
+describe('a suffixed currency marker', () => {
+  it('parses "10rs karan" with no space', () => {
+    const r = p('10rs karan')
+    expect(r?.kind).toBe('expense')
+    expect(r?.amountPaise).toBe(1000)
+    expect(r?.title).toBe('karan')
+  })
+
+  it('parses "500 rs groceries"', () => {
+    const r = p('500 rs groceries')
+    expect(r?.amountPaise).toBe(50000)
+    expect(r?.title).toBe('groceries')
+    expect(r?.category).toBe('food')
+  })
+
+  it('parses "100 rupees chai"', () => {
+    const r = p('100 rupees chai')
+    expect(r?.amountPaise).toBe(10000)
+    expect(r?.title).toBe('chai')
+    expect(r?.category).toBe('food')
+  })
+
+  it('reads a suffixed amount on a time log', () => {
+    const r = p('2h consulting 500rs')
+    expect(r?.kind).toBe('time')
+    expect(r?.durationMinutes).toBe(120)
+    expect(r?.amountPaise).toBe(50000)
+    expect(r?.title).toBe('consulting')
+  })
+
+  it('does not mistake "rsvp" for a currency marker', () => {
+    const r = p('2h rsvp calls')
+    expect(r?.amountPaise).toBeUndefined()
+    expect(r?.title).toBe('rsvp calls')
+  })
+})
+
+describe('the default day', () => {
+  const onDay = (input: string, day: string) => parse(input, NOW, day)
+
+  it('files an undated entry on the day being viewed', () => {
+    const r = onDay('500 groceries', TWO_DAYS_AGO)
+    expect(r?.kind).toBe('expense')
+    expect(r?.amountPaise).toBe(50000)
+    expect(r?.occurredOn).toBe(TWO_DAYS_AGO)
+  })
+
+  it('lets an explicit date token win over the viewed day', () => {
+    const r = onDay('320 lunch yesterday', TWO_DAYS_AGO)
+    expect(r?.occurredOn).toBe(YESTERDAY)
+  })
+
+  it('still resolves "today" against now, not the viewed day', () => {
+    const r = onDay('100 chai today', TWO_DAYS_AGO)
+    expect(r?.occurredOn).toBe(TODAY)
+  })
+
+  it('infers an event when the viewed day is in the future', () => {
+    const r = onDay('dentist 5pm', TOMORROW)
+    expect(r?.kind).toBe('event')
+    expect(r?.title).toBe('dentist')
+    expect(r?.occurredOn).toBe(TOMORROW)
+    expect(r?.occurredAt?.startsWith('2026-09-02T17:00:00')).toBe(true)
+  })
+
+  it('keeps an undated note a note when the viewed day is past', () => {
+    const r = onDay('met rahul about the dtx', YESTERDAY)
+    expect(r?.kind).toBe('note')
+    expect(r?.title).toBe('met rahul about the dtx')
+    expect(r?.occurredOn).toBe(YESTERDAY)
+  })
+
+  it('carries the clock time onto the viewed day', () => {
+    const r = onDay('gym 7am', YESTERDAY)
+    expect(r?.occurredOn).toBe(YESTERDAY)
+    expect(r?.occurredAt?.startsWith('2026-08-31T07:00:00')).toBe(true)
+  })
+
+  it('behaves as before when no default day is given', () => {
+    expect(parse('500 groceries', NOW)?.occurredOn).toBe(TODAY)
+  })
+})
+
 describe('edge cases', () => {
   it('leaves a trailing number in the title of a time log', () => {
     const r = p('2h call with agency 99')

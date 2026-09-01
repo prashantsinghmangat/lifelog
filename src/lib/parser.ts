@@ -1,4 +1,4 @@
-import { addDays, format, startOfDay, subDays } from 'date-fns'
+import { addDays, format, parseISO, startOfDay, subDays } from 'date-fns'
 import type { Kind } from '../types'
 import { categoryForWord } from './merchants'
 
@@ -178,7 +178,11 @@ function takeDuration(input: string): Cut<number> | null {
 const AMOUNT = '(\\d[\\d,]*(?:\\.\\d{1,2})?)'
 
 function takeAmount(input: string, currencyOnly: boolean): Cut<number> | null {
-  const marked = cut(input, new RegExp(`(?:₹|\\brs\\.?|\\binr\\.?)\\s*${AMOUNT}`, 'i'), toPaise)
+  const marked =
+    cut(input, new RegExp(`(?:₹|\\brs\\.?|\\binr\\.?)\\s*${AMOUNT}`, 'i'), toPaise) ??
+    // Suffixed, as in `350rs` or `100 rupees`. No \b before `rs`: there is no word
+    // boundary between `0` and `r`, which is exactly the case this has to catch.
+    cut(input, new RegExp(`\\b${AMOUNT}\\s*(?:₹|rs\\.?|inr\\.?|rupees?)\\b`, 'i'), toPaise)
   if (marked || currencyOnly) return marked
   return cut(input, new RegExp(`\\b${AMOUNT}\\b`), toPaise)
 }
@@ -196,7 +200,13 @@ function collapse(text: string): string {
     .trim()
 }
 
-export function parse(input: string, now: Date): ParsedEntry | null {
+/**
+ * `defaultDay` is the day the entry lands on when the text carries no date token.
+ * It exists so that arrowing back a day and typing `500 groceries` files the entry
+ * on the day being viewed instead of silently jumping to today. Relative words are
+ * still resolved against `now`, so `yesterday` always means yesterday.
+ */
+export function parse(input: string, now: Date, defaultDay?: string): ParsedEntry | null {
   const original = input.trim()
   if (!original) return null
 
@@ -215,7 +225,8 @@ export function parse(input: string, now: Date): ParsedEntry | null {
     rest = date.rest
     matched = true
   }
-  const occurredOn = date?.value ?? startOfDay(now)
+  const fallback = defaultDay === undefined ? startOfDay(now) : startOfDay(parseISO(defaultDay))
+  const occurredOn = date?.value ?? fallback
 
   const time = takeTime(rest)
   if (time) {
@@ -242,15 +253,15 @@ export function parse(input: string, now: Date): ParsedEntry | null {
   if (!kind && occurredOn > startOfDay(now)) kind = 'event'
 
   const day = format(occurredOn, 'yyyy-MM-dd')
-
-  if (!matched) {
-    return { kind: 'note', occurredOn: day, title: original, data: {} }
-  }
-
   const resolved: Kind = kind ?? 'note'
-  const words = collapse(rest).split(' ').filter(Boolean)
-  const kept = words.filter((w) => !FILLER.has(w.toLowerCase()))
-  const title = collapse((kept.length > 0 ? kept : words).join(' ')) || DEFAULT_TITLE[resolved]
+
+  // Nothing was recognised, so the input stands untouched as the title.
+  let title = original
+  if (matched) {
+    const words = collapse(rest).split(' ').filter(Boolean)
+    const kept = words.filter((w) => !FILLER.has(w.toLowerCase()))
+    title = collapse((kept.length > 0 ? kept : words).join(' ')) || DEFAULT_TITLE[resolved]
+  }
 
   const entry: ParsedEntry = { kind: resolved, occurredOn: day, title, data: {} }
 

@@ -3,6 +3,7 @@ import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
 import { Login } from './components/Login'
+import { MonthSheet } from './components/MonthSheet'
 import { QuickAdd } from './components/QuickAdd'
 import { useEntries } from './hooks/useEntries'
 import { useSession } from './hooks/useSession'
@@ -23,8 +24,19 @@ function Day({ email }: { email: string }) {
   const [day, setDay] = useState(() => dayKey(new Date()))
   const [editing, setEditing] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const { entries, failedElsewhere, loading, error, add, update, remove, retry, fetchAll } =
-    useEntries(day)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const {
+    entries,
+    failedElsewhere,
+    loading,
+    error,
+    add,
+    update,
+    remove,
+    retry,
+    fetchAll,
+    fetchDays,
+  } = useEntries(day)
 
   // A tab left open overnight would keep parsing `today` as yesterday.
   useEffect(() => {
@@ -59,7 +71,25 @@ function Day({ email }: { email: string }) {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col px-4 pt-3 pb-6">
-      <DayHeader day={day} now={now} onChange={setDay} />
+      <DayHeader
+        day={day}
+        now={now}
+        onChange={setDay}
+        onOpenCalendar={() => setCalendarOpen(true)}
+      />
+
+      {calendarOpen && (
+        <MonthSheet
+          day={day}
+          now={now}
+          loadDays={fetchDays}
+          onPick={(picked) => {
+            setDay(picked)
+            setCalendarOpen(false)
+          }}
+          onClose={() => setCalendarOpen(false)}
+        />
+      )}
 
       {entries.length > 0 && (
         <div className="mt-2 flex gap-4 text-xs text-gray-500">

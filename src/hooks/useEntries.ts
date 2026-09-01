@@ -182,6 +182,20 @@ export function useEntries(day: string) {
     if (attempt) void attempt()
   }, [])
 
+  /** The distinct days in a range that hold at least one entry, for the calendar dots. */
+  const fetchDays = useCallback(async (from: string, to: string): Promise<string[]> => {
+    const { data, error: readError } = await supabase
+      .from('entries')
+      .select('occurred_on')
+      .gte('occurred_on', from)
+      .lte('occurred_on', to)
+      .is('deleted_at', null)
+
+    if (readError) throw new Error(readError.message)
+    const found = (data ?? []) as { occurred_on: string }[]
+    return [...new Set(found.map((row) => row.occurred_on))]
+  }, [])
+
   /** Every surviving entry, for Export JSON. */
   const fetchAll = useCallback(async (): Promise<Entry[]> => {
     const { data, error: readError } = await supabase
@@ -206,5 +220,16 @@ export function useEntries(day: string) {
     [rows, day],
   )
 
-  return { entries, failedElsewhere, loading, error, add, update, remove, retry, fetchAll }
+  return {
+    entries,
+    failedElsewhere,
+    loading,
+    error,
+    add,
+    update,
+    remove,
+    retry,
+    fetchAll,
+    fetchDays,
+  }
 }

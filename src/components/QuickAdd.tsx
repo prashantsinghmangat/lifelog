@@ -24,7 +24,8 @@ function summarise(parsed: ParsedEntry, sameDay: boolean, now: Date): string {
 
 export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
   const [text, setText] = useState('')
-  const parsed = useMemo(() => parse(text, now), [text, now])
+  // `day`, not today: an undated entry belongs to the day being viewed.
+  const parsed = useMemo(() => parse(text, now, day), [text, now, day])
   const sameDay = parsed === null || parsed.occurredOn === day
 
   function submit(event: FormEvent) {
