@@ -60,6 +60,13 @@ tab left open overnight keeps parsing `today` as yesterday.
 **`src/lib/format.ts`** is the only place money becomes a string, and the only place dates become
 `yyyy-MM-dd`.
 
+**`src/lib/ics.ts`** is how reminders happen at all: the OS calendar raises the alarm, because no
+web API can while the app is closed. Pure and `now`-injected like the parser, so it is tested
+rather than hoped at. An all-day alarm is a *relative* trigger (`PT9H` past local midnight), which
+is why nothing stores a timezone — change that to an absolute time and yearly birthdays break in
+every timezone but one. `src/lib/deliver.ts` prefers the share sheet over a download, since
+downloads are unreliable inside a standalone iOS PWA.
+
 **Colour never appears as a raw grey.** `src/index.css` defines semantic tokens — `surface`,
 `raised`, `sunken`, `ink`, `muted`, `faint`, `line`, `edge`, `focus`, plus the four kind colours —
 and a `[data-theme='dark']` block swaps their values. Components write `text-muted`, `bg-raised`,

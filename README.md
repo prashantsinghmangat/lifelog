@@ -186,7 +186,7 @@ that is what actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 95 tests, 234 assertions
+npm test           # vitest run — 116 tests, 266 assertions
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -221,16 +221,39 @@ Rules worth knowing:
 
 Time ranges (`9-6`, `10 to 6`) are deliberately not parsed. `9h worked` covers the same need.
 
+## Reminders
+
+The operating system does the reminding. No web API raises a notification while the app is
+closed — `setTimeout` dies with the tab, and Chrome's Notification Triggers API never shipped — so
+a real reminder would need a server pushing at the right moment. A calendar alarm instead keeps
+working with the app shut, the phone offline and the Supabase project paused, and needs no
+notification permission.
+
+Log an event and the toast offers **Add to calendar**. Any event can be added later from its
+entry sheet, and **Send events to calendar** in the profile sheet exports everything upcoming at
+once. On a phone this opens the share sheet, so the file goes straight to Calendar; on a desktop
+it downloads.
+
+- A timed event alarms at the event: `dentist tomorrow 5pm` fires at 5pm
+- An all-day event alarms at **9am** on the day
+- `birthday`, `bday` or `anniversary` repeat yearly, which is what `data.rrule` was always for
+
+The alarm on an all-day event is a *relative* trigger nine hours after local midnight, so it is
+9am in any timezone and stays correct every year. That is why no timezone is stored anywhere.
+
+**The calendar receives a copy.** Editing or deleting the entry afterwards does not change it; it
+has to be added again. That is the cost of having no backend.
+
 ## Bundle size
 
 Measured with `npm run build`:
 
 | File | Raw | Gzipped |
 | --- | --- | --- |
-| `assets/index-*.js` | 403.21 kB | **116.53 kB** |
-| `assets/index-*.css` | 14.62 kB | 4.14 kB |
-| `index.html` | 0.58 kB | 0.34 kB |
-| **Total** | | **121.01 kB** |
+| `assets/index-*.js` | 412.34 kB | **119.17 kB** |
+| `assets/index-*.css` | 15.92 kB | 4.40 kB |
+| `index.html` | 0.85 kB | 0.47 kB |
+| **Total** | | **124.04 kB** |
 
 Against a 150 KB budget. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
 `postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and

@@ -14,7 +14,9 @@ import { useEntries, type Row } from './hooks/useEntries'
 import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
+import { download, shareOrDownload } from './lib/deliver'
 import { dayKey, dayLabel, minutes, relativeDay, rupees } from './lib/format'
+import { forCalendar, toIcs } from './lib/ics'
 import { supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
 
@@ -105,18 +107,32 @@ function Day({ email, theme, onTheme }: DayProps) {
   const spent = entries.reduce((total, row) => total + (row.amount_paise ?? 0), 0)
   const logged = entries.reduce((total, row) => total + (row.duration_minutes ?? 0), 0)
 
-  /** The one confirmation that matters: an entry that landed on another day. */
+  /** Hands the entry to the OS calendar, which is what actually raises the alarm. */
+  async function addToCalendar(rows: Row[], name: string) {
+    try {
+      await shareOrDownload(name, 'text/calendar', toIcs(rows, now))
+    } catch (failure) {
+      setToast({ text: failure instanceof Error ? failure.message : 'Could not share' })
+    }
+  }
+
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
-    if (row.occurred_on === day) {
-      const what = [row.title, value(row)].filter(Boolean).join(' · ')
-      setToast({ text: `Added ${what}` })
-      return
-    }
-    setToast({
-      text: `Saved to ${relativeDay(row.occurred_on, now)}`,
-      action: { label: 'View', run: () => setDay(row.occurred_on) },
-    })
+    const elsewhere = row.occurred_on !== day
+    const text = elsewhere
+      ? `Saved to ${relativeDay(row.occurred_on, now)}`
+      : `Added ${[row.title, value(row)].filter(Boolean).join(' · ')}`
+
+    // An event's reminder belongs in the calendar, so offer that above all else.
+    // Otherwise the only thing worth saying is where an off-day entry went.
+    const action =
+      row.kind === 'event'
+        ? { label: 'Add to calendar', run: () => void addToCalendar([row], 'lifelog-event.ics') }
+        : elsewhere
+          ? { label: 'View', run: () => setDay(row.occurred_on) }
+          : undefined
+
+    setToast({ text, action })
   }
 
   function deleteRow(row: Row) {
@@ -128,15 +144,24 @@ function Day({ email, theme, onTheme }: DayProps) {
   async function exportJson() {
     try {
       const all = await fetchAll()
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' }),
-      )
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `lifelog-${dayKey(new Date())}.json`
-      link.click()
-      URL.revokeObjectURL(url)
+      // A download, not a share: a backup belongs on disk, not in a share sheet.
+      download(`lifelog-${dayKey(new Date())}.json`, 'application/json', JSON.stringify(all, null, 2))
       setProfileOpen(false)
+    } catch (failure) {
+      setToast({ text: failure instanceof Error ? failure.message : 'Export failed' })
+    }
+  }
+
+  async function exportCalendar() {
+    try {
+      const all = await fetchAll()
+      const wanted = forCalendar(all, now)
+      if (wanted.length === 0) {
+        setToast({ text: 'No upcoming events to export' })
+        return
+      }
+      setProfileOpen(false)
+      await addToCalendar(wanted, 'lifelog.ics')
     } catch (failure) {
       setToast({ text: failure instanceof Error ? failure.message : 'Export failed' })
     }
@@ -298,6 +323,7 @@ function Day({ email, theme, onTheme }: DayProps) {
           theme={theme}
           onTheme={onTheme}
           onExport={() => void exportJson()}
+          onExportCalendar={() => void exportCalendar()}
           onSignOut={() => void supabase.auth.signOut()}
           onClose={() => setProfileOpen(false)}
         />
@@ -312,6 +338,7 @@ function Day({ email, theme, onTheme }: DayProps) {
             setEditing(null)
           }}
           onDelete={() => deleteRow(editing)}
+          onAddToCalendar={() => void addToCalendar([editing], 'lifelog-event.ics')}
           onClose={() => setEditing(null)}
         />
       )}

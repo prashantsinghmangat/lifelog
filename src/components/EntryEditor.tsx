@@ -8,6 +8,7 @@ type Props = {
   now: Date
   onSave: (patch: Patch) => void
   onDelete: () => void
+  onAddToCalendar: () => void
   onClose: () => void
 }
 
@@ -35,7 +36,7 @@ function rupeeText(paise: number | null): string {
  * an Edit button — opening the entry is already the tap that says "I want to
  * change this", so a second one earns nothing.
  */
-export function EntryEditor({ row, now, onSave, onDelete, onClose }: Props) {
+export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClose }: Props) {
   const [title, setTitle] = useState(row.title)
   const [day, setDay] = useState(row.occurred_on)
   const [amount, setAmount] = useState(rupeeText(row.amount_paise))
@@ -137,7 +138,18 @@ export function EntryEditor({ row, now, onSave, onDelete, onClose }: Props) {
           )}
         </div>
 
-        <div className="mt-5 flex items-center gap-2">
+        {/* Only events have anything to remind about. */}
+        {row.kind === 'event' && (
+          <button
+            type="button"
+            onClick={onAddToCalendar}
+            className="mt-4 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink"
+          >
+            Add to calendar
+          </button>
+        )}
+
+        <div className="mt-4 flex items-center gap-2">
           <button
             type="submit"
             className="h-11 flex-1 rounded-lg bg-ink text-sm font-medium text-surface"

@@ -14,11 +14,20 @@ type Props = {
   theme: Theme
   onTheme: (theme: Theme) => void
   onExport: () => void
+  onExportCalendar: () => void
   onSignOut: () => void
   onClose: () => void
 }
 
-export function ProfileSheet({ email, theme, onTheme, onExport, onSignOut, onClose }: Props) {
+export function ProfileSheet({
+  email,
+  theme,
+  onTheme,
+  onExport,
+  onExportCalendar,
+  onSignOut,
+  onClose,
+}: Props) {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
@@ -96,6 +105,18 @@ export function ProfileSheet({ email, theme, onTheme, onExport, onSignOut, onClo
       </div>
       <p role="status" aria-live="polite" className="mt-1.5 min-h-4 text-xs text-muted">
         {note}
+      </p>
+
+      <button
+        type="button"
+        onClick={onExportCalendar}
+        className="mt-5 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink"
+      >
+        Send events to calendar
+      </button>
+      <p className="mt-1.5 text-xs text-faint">
+        Upcoming events and birthdays, each with its own reminder. Birthdays repeat yearly and
+        alarm at 9am.
       </p>
 
       <div className="mt-5 flex items-center justify-between">

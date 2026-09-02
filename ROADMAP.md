@@ -25,7 +25,9 @@ the moment totals appear on screen — that is Wave 4, and it stays parked.
 2. **Fix only the friction that testing actually finds** — not a speculative Wave 3B
 3. **Automated backup** — before any new functionality, `.ics` included
 4. **Use it normally for one to two weeks**
-5. **`.ics` calendar handoff** — birthday → yearly recurrence → 9am reminder
+5. ~~**`.ics` calendar handoff**~~ — **built**, ahead of the phone test at the owner's request.
+   `src/lib/ics.ts` with 21 tests, delivery via the share sheet with a download fallback. The
+   share path is the one part that still needs a real installed PWA to confirm
 6. **`useEntries` tests**
 7. **Then** decide whether Wave 4 is justified at all
 
