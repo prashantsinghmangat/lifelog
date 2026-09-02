@@ -136,7 +136,9 @@ function Day({ email, theme, onTheme }: DayProps) {
         </button>
       </aside>
 
-      <main {...swipe} className="swipe-area flex min-w-0 flex-col">
+      {/* Capped: across 900px the eye cannot connect a title on the left to its
+          amount on the right. A reading measure, not the whole column. */}
+      <main {...swipe} className="swipe-area flex w-full min-w-0 max-w-2xl flex-col">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <DayHeader
