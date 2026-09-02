@@ -43,6 +43,7 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
     <form onSubmit={submit}>
       <div className="relative">
         <input
+          id="quick-add"
           type="text"
           value={text}
           autoFocus

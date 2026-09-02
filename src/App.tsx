@@ -14,7 +14,7 @@ import { useEntries, type Row } from './hooks/useEntries'
 import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
-import { dayKey, minutes, relativeDay, rupees } from './lib/format'
+import { dayKey, dayLabel, minutes, relativeDay, rupees } from './lib/format'
 import { supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
 
@@ -74,6 +74,34 @@ function Day({ email, theme, onTheme }: DayProps) {
   )
   const swipe = useSwipe(goNext, goPrevious)
 
+  // Names the tab, which matters once the app is installed alongside others.
+  useEffect(() => {
+    document.title = `${dayLabel(day, now)} · lifelog`
+  }, [day, now])
+
+  const sheetOpen = calendarOpen || profileOpen || editing !== null
+
+  // Desktop navigation without reaching for the mouse. Deliberately inert while
+  // typing or while a sheet is open, where these keys already mean something.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || sheetOpen) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, [contenteditable]')) return
+
+      if (event.key === 'ArrowLeft') goPrevious()
+      else if (event.key === 'ArrowRight') goNext()
+      else if (event.key === 't') setDay(dayKey(new Date()))
+      else if (event.key === '/' || event.key === 'n') {
+        event.preventDefault()
+        document.getElementById('quick-add')?.focus()
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [goNext, goPrevious, sheetOpen])
+
   const spent = entries.reduce((total, row) => total + (row.amount_paise ?? 0), 0)
   const logged = entries.reduce((total, row) => total + (row.duration_minutes ?? 0), 0)
 
@@ -120,16 +148,38 @@ function Day({ email, theme, onTheme }: DayProps) {
   }
 
   return (
-    <div className="mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-4 pt-3 pb-6 lg:grid-cols-[17rem_minmax(0,1fr)] lg:px-8 lg:pt-8">
+    // The columns are sized, then centred as a pair — otherwise capping the
+    // timeline just moves the empty space to the right edge of a 1440px screen.
+    <div className="mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-4 pt-3 pb-6 lg:grid-cols-[17rem_minmax(0,42rem)] lg:justify-center lg:px-8 lg:pt-8">
+      {/* The only h1. The sidebar wordmark below is hidden on compact, where
+          display:none would take the page's heading with it. */}
+      <h1 className="sr-only">lifelog</h1>
+
       {/* Wide screens get the calendar permanently: navigation at zero taps.
           Narrow screens reach the same component through the header button. */}
       <aside className="hidden lg:block">
-        <h1 className="mb-5 text-sm font-semibold tracking-wide">lifelog</h1>
+        <p className="mb-5 text-sm font-semibold tracking-wide">lifelog</p>
         <MonthGrid day={day} now={now} loadDays={fetchDays} onPick={setDay} />
+
+        {/* Fills the space with something that removes interactions rather than
+            adding them. Keys only, no controls. */}
+        <dl className="mt-8 space-y-1.5 border-t border-line pt-5 text-xs text-faint">
+          {[
+            ['← →', 'previous / next day'],
+            ['t', 'jump to today'],
+            ['/', 'focus the box'],
+          ].map(([key, what]) => (
+            <div key={key} className="flex items-baseline gap-3">
+              <dt className="w-12 shrink-0 font-medium text-muted">{key}</dt>
+              <dd className="min-w-0">{what}</dd>
+            </div>
+          ))}
+        </dl>
+
         <button
           type="button"
           onClick={() => setProfileOpen(true)}
-          className="mt-6 flex h-11 w-full items-center gap-2 text-xs text-muted"
+          className="mt-8 flex h-11 w-full items-center gap-2 text-xs text-muted"
         >
           <PersonIcon size={16} />
           <span className="min-w-0 truncate">{email}</span>
@@ -138,7 +188,7 @@ function Day({ email, theme, onTheme }: DayProps) {
 
       {/* Capped: across 900px the eye cannot connect a title on the left to its
           amount on the right. A reading measure, not the whole column. */}
-      <main {...swipe} className="swipe-area flex w-full min-w-0 max-w-2xl flex-col">
+      <main {...swipe} className="swipe-area mx-auto flex w-full min-w-0 max-w-2xl flex-col">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <DayHeader
@@ -170,7 +220,9 @@ function Day({ email, theme, onTheme }: DayProps) {
           </p>
         )}
 
-        <div className="mt-4">
+        {/* Sticky: on a long day the capture box must never scroll out of
+            reach, since capture is the whole product. */}
+        <div className="sticky top-0 z-10 mt-4 bg-surface pt-1 pb-2">
           <QuickAdd
             day={day}
             now={now}
@@ -181,7 +233,20 @@ function Day({ email, theme, onTheme }: DayProps) {
 
         {error !== null && <p className="mt-3 text-xs text-expense">{error}</p>}
 
-        <div className="mt-5 flex-1">
+        <div className="mt-3 flex-1" aria-busy={loading}>
+          {/* Placeholders, not a spinner: the rows land where these sat, so
+              nothing jumps when the fetch resolves. */}
+          {loading && entries.length === 0 && (
+            <div aria-hidden="true">
+              {[0, 1, 2].map((index) => (
+                <div key={index} className="flex items-center gap-3 border-b border-line py-4">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-line" />
+                  <span className="h-3 flex-1 rounded bg-line" style={{ opacity: 1 - index * 0.3 }} />
+                </div>
+              ))}
+            </div>
+          )}
+
           {entries.map((row) => (
             <EntryRow
               key={row.id}
