@@ -5,6 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+npm run android                    # build, then copy the web assets into android/
+npm run android:open               # open the native project in Android Studio
 npm run dev                        # vite dev server on :5173
 npm test                           # vitest run (86 tests, 223 assertions)
 npm run test:watch                 # vitest watch
@@ -61,6 +63,12 @@ tab left open overnight keeps parsing `today` as yesterday.
 
 **`src/lib/format.ts`** is the only place money becomes a string, and the only place dates become
 `yyyy-MM-dd`.
+
+**`android/` is a generated Capacitor shell around the same `dist/`, not a second codebase.** The
+web app and the Android app are the same React, parser and Supabase calls. Web assets are copied
+in at `cap sync`, so `npm run android` must run before every device test or the phone shows stale
+code. Editing files under `android/` by hand is almost always wrong — the exception is the
+manifest and Gradle config, which are committed for that reason.
 
 **`src/lib/ics.ts`** is how reminders happen at all: the OS calendar raises the alarm, because no
 web API can while the app is closed. Pure and `now`-injected like the parser, so it is tested
@@ -168,9 +176,13 @@ into both accounts with the wrong one active.
 ## Code standards
 
 TypeScript strict with `noUncheckedIndexedAccess`. No `any`, no non-null assertions. Flat file
-layout — no barrel files, no `index.ts` re-exports, no directory per component. Four runtime
-dependencies only: `react`, `react-dom`, `@supabase/supabase-js`, `date-fns` — ask before adding
-a fifth. No component library, no state manager, no data-fetching library, no icon package;
+layout — no barrel files, no `index.ts` re-exports, no directory per component.
+
+**The runtime dependency list is `react`, `react-dom`, `@supabase/supabase-js`, `date-fns` and
+Capacitor. Ask before adding anything else.** The original "four dependencies only" rule was
+retired deliberately when the Android app was added, not broken by accident: Capacitor plugins
+are runtime dependencies. The bar is unchanged for everything else — no component library, no
+state manager, no data-fetching library, no icon package. No component library, no state manager, no data-fetching library, no icon package;
 icons are inline SVG. Comments only where the *why* is unobvious. Plain, dense, fast UI: system
 fonts, one 100ms fade on new rows, nothing else animated.
 

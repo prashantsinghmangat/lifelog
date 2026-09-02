@@ -224,6 +224,38 @@ Rules worth knowing:
 
 Time ranges (`9-6`, `10 to 6`) are deliberately not parsed. `9h worked` covers the same need.
 
+## The Android app
+
+Capacitor wraps the same build. There is no second codebase: `android/` is a generated native
+shell that loads `dist/`, so the web app and the Android app are the same React, the same parser
+and the same Supabase calls.
+
+**One-off setup:** install Android Studio, which bundles a suitable JDK and the SDK. Gradle 8.14
+needs **JDK 17 or newer** — a system Java 11 will fail. Then enable Developer options and USB
+debugging on the phone.
+
+```bash
+npm run android         # build the web app, then copy it into the native project
+npm run android:open    # open android/ in Android Studio, then press Run
+```
+
+Or from the command line, once the SDK is in place:
+
+```bash
+cd android && ./gradlew assembleDebug
+# android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+**`npm run android` before every device test.** The web assets are copied into the native project
+at sync time, so a change that is not built and synced is a change the phone will not see.
+
+`appId` is `com.prashant.lifelog`, `minSdk` 24, `compileSdk` 36. Build output, `local.properties`
+and the copied web assets are gitignored; the rest of `android/` is committed, because it holds
+the manifest and Gradle config that the app actually needs.
+
+Nothing about the web target changed: `@capacitor/core` only reaches the browser bundle if
+application code imports it, and the shell alone imports nothing.
+
 ## Reminders
 
 The operating system does the reminding. No web API raises a notification while the app is

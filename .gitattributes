@@ -1,0 +1,10 @@
+# core.autocrlf is on for this machine, which rewrites checked-out files to CRLF.
+# gradlew is a shell script: with CRLF it fails as "bad interpreter" on Linux and
+# in Git Bash, so it must stay LF wherever it is checked out.
+android/gradlew text eol=lf
+
+# Never line-ending-convert these.
+*.jar binary
+*.png binary
+*.keystore binary
+*.jks binary
