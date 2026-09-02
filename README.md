@@ -92,6 +92,15 @@ Authentication → Emails → **Magic Link** template. The default only contains
 <p>Or <a href="{{ .ConfirmationURL }}">open this link</a>.</p>
 ```
 
+The repo keeps a ready version at
+[`supabase/templates/magic-link.html`](supabase/templates/magic-link.html). Paste it into
+**Confirm signup** too: `signInWithOtp` uses Magic Link for an existing user but Confirm signup
+for one that does not exist yet, and each template saves separately.
+
+Note the built-in email service allows **2 messages per hour for the whole project**. Testing runs
+into that quickly; the app then shows `email rate limit exceeded`. Custom SMTP raises the default
+to 30/hour.
+
 Without `{{ .Token }}` the email carries no code and the sign-in screen cannot be completed on
 iOS. A link tapped in Mail opens in Safari, and an installed PWA has its own storage, so the app
 itself would stay signed out with no way to fix it. A code typed into the app creates the session

@@ -1,6 +1,11 @@
 <!--
   Paste into Supabase → Authentication → Emails → Magic Link.
 
+  Paste it into **Confirm signup** as well. signInWithOtp uses Magic Link for an
+  existing user but Confirm signup for one that does not exist yet, so a fresh
+  account otherwise receives a codeless email and cannot get in. Each template
+  has its own Save button.
+
   {{ .Token }} is the load-bearing part: without it the email carries no code,
   and an installed iOS PWA can never be signed in, because a link tapped in Mail
   opens in Safari and the PWA has its own storage.
