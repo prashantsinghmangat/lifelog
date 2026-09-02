@@ -239,12 +239,26 @@ npm run android         # build the web app, then copy it into the native projec
 npm run android:open    # open android/ in Android Studio, then press Run
 ```
 
-Or from the command line, once the SDK is in place:
+Or from the command line, once the SDK is in place. On Windows this is `gradlew.bat`, and
+`JAVA_HOME` must point at a JDK 17+ — Android Studio ships one at
+`C:\Program Files\Android\Android Studio\jbr`:
 
-```bash
-cd android && ./gradlew assembleDebug
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+cd android; .\gradlew.bat assembleDebug
 # android/app/build/outputs/apk/debug/app-debug.apk
 ```
+
+**Live reload while developing**, which avoids a rebuild per change: run `npm run dev -- --host`,
+then point the app at the dev server by adding to `capacitor.config.ts`
+
+```ts
+server: { url: 'http://<your-LAN-ip>:5173', cleartext: true }
+```
+
+and `npm run android` once. Edits then appear on the phone immediately. **Remove that block
+before building anything you intend to keep** — otherwise the APK is useless away from your
+network.
 
 **`npm run android` before every device test.** The web assets are copied into the native project
 at sync time, so a change that is not built and synced is a change the phone will not see.
