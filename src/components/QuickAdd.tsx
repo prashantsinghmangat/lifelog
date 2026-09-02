@@ -1,4 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
+import { MicIcon } from './Icons'
+import { useDictation } from '../hooks/useDictation'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, type ParsedEntry } from '../lib/parser'
 
@@ -24,6 +26,8 @@ function summarise(parsed: ParsedEntry, sameDay: boolean, now: Date): string {
 
 export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
   const [text, setText] = useState('')
+  const dictation = useDictation(setText)
+
   // `day`, not today: an undated entry belongs to the day being viewed.
   const parsed = useMemo(() => parse(text, now, day), [text, now, day])
   const sameDay = parsed === null || parsed.occurredOn === day
@@ -37,31 +41,54 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
 
   return (
     <form onSubmit={submit}>
-      <input
-        type="text"
-        value={text}
-        autoFocus
-        autoCapitalize="none"
-        autoCorrect="off"
-        spellCheck={false}
-        enterKeyHint="done"
-        placeholder="350 lunch swiggy"
-        aria-label="Quick add"
-        onChange={(event) => setText(event.target.value)}
-        className="w-full rounded border border-gray-300 px-3 py-2 text-base outline-none focus:border-gray-900"
-      />
+      <div className="relative">
+        <input
+          type="text"
+          value={text}
+          autoFocus
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          enterKeyHint="done"
+          placeholder="350 lunch swiggy"
+          aria-label="Quick add"
+          onChange={(event) => setText(event.target.value)}
+          className={`w-full rounded border border-edge bg-surface px-3 py-2 text-base text-ink outline-none focus:border-ink ${
+            dictation.supported ? 'pr-11' : ''
+          }`}
+        />
+        {dictation.supported && (
+          <button
+            type="button"
+            aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
+            aria-pressed={dictation.listening}
+            onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+            className={`absolute inset-y-0 right-0 flex w-11 items-center justify-center ${
+              dictation.listening ? 'text-expense' : 'text-faint'
+            }`}
+          >
+            <MicIcon size={18} />
+          </button>
+        )}
+      </div>
 
       <div className="mt-1 min-h-5 px-1 text-xs">
-        {parsed && (
-          <span className="text-gray-500">
-            {summarise(parsed, sameDay, now)}
-            {!sameDay && (
-              <span className="font-medium text-event">
-                {' → saving to '}
-                {relativeDay(parsed.occurredOn, now)}
-              </span>
-            )}
-          </span>
+        {dictation.error !== null ? (
+          <span className="text-expense">{dictation.error}</span>
+        ) : dictation.listening ? (
+          <span className="text-expense">Listening…</span>
+        ) : (
+          parsed && (
+            <span className="text-muted">
+              {summarise(parsed, sameDay, now)}
+              {!sameDay && (
+                <span className="font-medium text-event">
+                  {' → saving to '}
+                  {relativeDay(parsed.occurredOn, now)}
+                </span>
+              )}
+            </span>
+          )
         )}
       </div>
 
@@ -73,7 +100,7 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
               type="button"
               // Fills the input instead of submitting, so the syntax is learned by editing.
               onClick={() => setText(example)}
-              className="rounded-full border border-gray-200 px-3 py-1 text-xs text-gray-500 active:bg-gray-100"
+              className="rounded-full border border-line px-3 py-1 text-xs text-muted active:bg-raised"
             >
               {example}
             </button>

@@ -3,25 +3,56 @@
 @import 'tailwindcss' source(none);
 @source './**/*.tsx';
 
+/* Semantic tokens, not raw greys. Dark mode swaps the values below, so no
+   component needs a `dark:` variant. */
 @theme {
   --font-sans:
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
+
+  --color-surface: #ffffff;
+  --color-raised: #f9fafb;
+  --color-ink: #111827;
+  --color-muted: #6b7280;
+  --color-faint: #9ca3af;
+  --color-line: #eef0f3;
+  --color-edge: #d1d5db;
+
   --color-expense: #f26d5b;
   --color-time: #2aa198;
   --color-event: #8b5cf6;
   --color-note: #9ca3af;
 }
 
+[data-theme='dark'] {
+  --color-surface: #0d1220;
+  --color-raised: #161d2f;
+  --color-ink: #e8eaf0;
+  --color-muted: #9aa3b2;
+  --color-faint: #6d7686;
+  --color-line: #1e2536;
+  --color-edge: #333c50;
+
+  /* Lifted a little: the light-mode hues go muddy on a dark ground. */
+  --color-expense: #ff8f7a;
+  --color-time: #3ec5b9;
+  --color-event: #a78bfa;
+  --color-note: #808a9b;
+
+  /* Native date inputs, scrollbars and focus rings follow this. */
+  color-scheme: dark;
+}
+
 html {
   font-family: var(--font-sans);
   -webkit-text-size-adjust: 100%;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
-  background: #ffffff;
-  color: #111827;
+  background: var(--color-surface);
+  color: var(--color-ink);
 }
 
 /* The only animation in the app. */
@@ -33,4 +64,10 @@ body {
 
 .row-in {
   animation: row-in 100ms ease-out;
+}
+
+/* A horizontal day swipe must not also pan the page sideways. Vertical scroll
+   and pinch-zoom stay with the browser. */
+.swipe-area {
+  touch-action: pan-y pinch-zoom;
 }

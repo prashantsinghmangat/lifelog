@@ -11,6 +11,7 @@ import {
   subMonths,
 } from 'date-fns'
 import { useEffect, useState } from 'react'
+import { Chevron } from './Icons'
 import { dayKey } from '../lib/format'
 
 // Monday first. Duplicated letters are fine at this size; the columns are positional.
@@ -24,24 +25,6 @@ type Props = {
   loadDays: (from: string, to: string) => Promise<string[]>
   onPick: (day: string) => void
   onClose: () => void
-}
-
-function Chevron({ dir }: { dir: 'left' | 'right' }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="18"
-      height="18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d={dir === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
-    </svg>
-  )
 }
 
 export function MonthSheet({ day, now, loadDays, onPick, onClose }: Props) {
@@ -83,36 +66,36 @@ export function MonthSheet({ day, now, loadDays, onPick, onClose }: Props) {
     <div
       role="presentation"
       onClick={onClose}
-      className="fixed inset-0 z-10 flex items-start justify-center bg-black/30 px-4 pt-14"
+      className="fixed inset-0 z-10 flex items-start justify-center bg-black/40 px-4 pt-14"
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Pick a date"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-sm rounded-lg bg-white p-3 shadow-xl"
+        className="w-full max-w-sm rounded-lg bg-raised p-3 shadow-xl"
       >
         <div className="flex items-center justify-between">
           <button
             type="button"
             aria-label="Previous month"
             onClick={() => setMonth(subMonths(month, 1))}
-            className="p-1.5 text-gray-400 active:text-gray-900"
+            className="p-1.5 text-faint active:text-ink"
           >
-            <Chevron dir="left" />
+            <Chevron dir="left" size={18} />
           </button>
           <span className="text-sm font-semibold">{format(month, 'MMMM yyyy')}</span>
           <button
             type="button"
             aria-label="Next month"
             onClick={() => setMonth(addMonths(month, 1))}
-            className="p-1.5 text-gray-400 active:text-gray-900"
+            className="p-1.5 text-faint active:text-ink"
           >
-            <Chevron dir="right" />
+            <Chevron dir="right" size={18} />
           </button>
         </div>
 
-        <div className="mt-2 grid grid-cols-7 text-center text-xs text-gray-400">
+        <div className="mt-2 grid grid-cols-7 text-center text-xs text-faint">
           {WEEKDAYS.map((letter, index) => (
             <span key={index}>{letter}</span>
           ))}
@@ -132,23 +115,19 @@ export function MonthSheet({ day, now, loadDays, onPick, onClose }: Props) {
                 aria-current={selected ? 'date' : undefined}
                 className={`flex flex-col items-center rounded py-1.5 text-sm ${
                   selected
-                    ? 'bg-gray-900 text-white'
+                    ? 'bg-ink text-surface'
                     : outside
-                      ? 'text-gray-300'
+                      ? 'text-faint'
                       : key === today
-                        ? 'font-semibold text-gray-900'
-                        : 'text-gray-700'
+                        ? 'font-semibold text-ink'
+                        : 'text-muted'
                 }`}
               >
                 {format(date, 'd')}
                 <span
                   aria-hidden="true"
                   className={`mt-1 h-1 w-1 rounded-full ${
-                    !marked.has(key)
-                      ? 'bg-transparent'
-                      : selected
-                        ? 'bg-white'
-                        : 'bg-note'
+                    !marked.has(key) ? 'bg-transparent' : selected ? 'bg-surface' : 'bg-note'
                   }`}
                 />
               </button>
@@ -157,10 +136,10 @@ export function MonthSheet({ day, now, loadDays, onPick, onClose }: Props) {
         </div>
 
         <div className="mt-2 flex items-center justify-between text-xs">
-          <button type="button" onClick={() => onPick(today)} className="text-gray-500 underline">
+          <button type="button" onClick={() => onPick(today)} className="text-muted underline">
             Today
           </button>
-          <button type="button" onClick={onClose} className="px-1 text-gray-400">
+          <button type="button" onClick={onClose} className="px-1 text-faint">
             Close
           </button>
         </div>

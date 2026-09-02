@@ -27,7 +27,7 @@ export function Login() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4">
       <h1 className="mb-1 text-lg font-semibold">lifelog</h1>
-      <p className="mb-4 text-sm text-gray-500">Sign in with a magic link.</p>
+      <p className="mb-4 text-sm text-muted">Sign in with a magic link.</p>
 
       <form onSubmit={submit} className="flex gap-2">
         <input
@@ -38,19 +38,21 @@ export function Login() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="you@example.com"
-          className="min-w-0 flex-1 rounded border border-gray-300 px-3 py-2 text-base outline-none focus:border-gray-900"
+          className="min-w-0 flex-1 rounded border border-edge bg-surface px-3 py-2 text-base text-ink outline-none focus:border-ink"
         />
         <button
           type="submit"
           disabled={status === 'sending'}
-          className="rounded bg-gray-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded bg-ink px-4 py-2 text-sm font-medium text-surface disabled:opacity-50"
         >
           {status === 'sending' ? '…' : 'Send'}
         </button>
       </form>
 
       {status === 'sent' && (
-        <p className="mt-3 text-sm text-gray-600">Link sent. Check {email} and open it on this device.</p>
+        <p className="mt-3 text-sm text-muted">
+          Link sent. Check {email} and open it in this browser — the session is stored here.
+        </p>
       )}
       {status === 'error' && <p className="mt-3 text-sm text-expense">{message}</p>}
     </div>

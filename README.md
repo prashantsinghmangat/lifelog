@@ -138,10 +138,10 @@ Measured with `npm run build`:
 
 | File | Raw | Gzipped |
 | --- | --- | --- |
-| `assets/index-*.js` | 393.75 kB | **113.61 kB** |
-| `assets/index-*.css` | 12.22 kB | 3.40 kB |
+| `assets/index-*.js` | 399.89 kB | **115.39 kB** |
+| `assets/index-*.css` | 12.87 kB | 3.59 kB |
 | `index.html` | 0.58 kB | 0.34 kB |
-| **Total** | | **117.35 kB** |
+| **Total** | | **119.32 kB** |
 
 Against a 150 KB budget. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
 `postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and
@@ -206,8 +206,9 @@ and an insert is rejected with `42501 new row violates row-level security policy
 ```
 src/
   lib/        supabase.ts  parser.ts  parser.test.ts  merchants.ts  format.ts
-  hooks/      useEntries.ts  useSession.ts
-  components/ Login.tsx  DayHeader.tsx  MonthSheet.tsx  QuickAdd.tsx  EntryRow.tsx  EntryEditor.tsx
+  hooks/      useEntries.ts  useSession.ts  useTheme.ts  useSwipe.ts  useDictation.ts
+  components/ Login.tsx  DayHeader.tsx  MonthSheet.tsx  ProfileSheet.tsx
+              QuickAdd.tsx  EntryRow.tsx  EntryEditor.tsx  Icons.tsx
   types.ts  App.tsx  main.tsx
 supabase/migrations/0001_entries.sql
 public/icon-192.png  public/icon-512.png
@@ -228,6 +229,12 @@ set, rows are never removed.
   day, and the export wants it. It was already a column.
 - **`App.tsx` holds an inner `Day` component**, because `useEntries` cannot be called before the
   auth gate returns.
+- **There is a settings surface after all** — a profile sheet with theme (System / Light / Dark),
+  Export JSON and Sign out. Dark mode needs somewhere to live, and the footer was already carrying
+  export and sign-out.
+- **Swipe left or right** changes day, alongside the arrows. Ignores gestures that start on a
+  field, inside an open sheet, or within 24px of a screen edge, where Android's back gesture lives.
+- **Dictation** via the Web Speech API. Unsupported in iOS Safari, where the mic button is hidden.
 
 ## Not built, on purpose
 

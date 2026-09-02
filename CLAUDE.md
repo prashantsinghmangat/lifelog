@@ -60,6 +60,13 @@ tab left open overnight keeps parsing `today` as yesterday.
 **`src/lib/format.ts`** is the only place money becomes a string, and the only place dates become
 `yyyy-MM-dd`.
 
+**Colour never appears as a raw grey.** `src/index.css` defines semantic tokens — `surface`,
+`raised`, `ink`, `muted`, `faint`, `line`, `edge`, plus the four kind colours — and a
+`[data-theme='dark']` block swaps their values. Components write `text-muted`, `bg-raised`,
+`border-line`. **Do not add `dark:` variants**; the token swap covers both themes, so a new
+`text-gray-500` is a bug that will look fine in light mode and unreadable in dark.
+`useTheme` resolves `system` against `prefers-color-scheme` and stamps `data-theme` on `<html>`.
+
 ## Data model
 
 One table, `entries` ([supabase/migrations/0001_entries.sql](supabase/migrations/0001_entries.sql)).
@@ -119,11 +126,13 @@ fonts, one 100ms fade on new rows, nothing else animated.
 No AI or LLM calls, no SMS parsing, no notification listeners, no Capacitor or native Android, no
 recurring event expansion, no push notifications, no offline sync (the service worker precaches
 the app shell only — **never cache API responses**), no charts, no category management UI, no
-search, no tags, no multi-day views, no settings screen. Time ranges (`9-6`, `10 to 6`) are
-explicitly out of the parser; `9h worked` covers the same need.
+search, no tags, no multi-day views. Time ranges (`9-6`, `10 to 6`) are explicitly out of the
+parser; `9h worked` covers the same need.
 
-A month calendar sheet *was* added after the spec froze, replacing an invisible native date input.
-The four deviations from the original spec are listed at the end of [README.md](README.md).
+Added after the spec froze, on the owner's request: the month calendar sheet (replacing an
+invisible native date input), a **profile sheet** holding theme, export and sign out — which is
+the settings screen the spec said not to build — swipe-to-change-day, and dictation. The
+deviations are listed at the end of [README.md](README.md).
 
 ## Known rough edges
 
@@ -132,3 +141,7 @@ The four deviations from the original spec are listed at the end of [README.md](
 - The filler-word list is exactly `spent, paid, bought, for, on, at, worked, did`, so `to` in
   `20000 to neha` survives into the title.
 - Supabase's free tier pauses a project after 7 days idle; unpausing is manual.
+- Dictation uses the Web Speech API, which iOS Safari does not implement. `useDictation` reports
+  `supported: false` there and `QuickAdd` hides the mic rather than offering a dead button.
+- The session lives in `localStorage`, so it is per-browser. Opening the magic link in a different
+  browser than the one that requested it leaves the original signed out. This is not a bug.

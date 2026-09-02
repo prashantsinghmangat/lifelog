@@ -9,7 +9,8 @@ type Props = {
   onCancel: () => void
 }
 
-const FIELD = 'w-full rounded border border-gray-300 px-2 py-1.5 text-sm outline-none focus:border-gray-900'
+const FIELD =
+  'w-full rounded border border-edge bg-surface px-2 py-1.5 text-sm text-ink outline-none focus:border-ink'
 
 function rupeeText(paise: number | null): string {
   if (paise === null) return ''
@@ -43,7 +44,7 @@ export function EntryEditor({ row, onSave, onDelete, onCancel }: Props) {
   }
 
   return (
-    <form onSubmit={save} className="border-b border-gray-100 bg-gray-50 px-2 py-3">
+    <form onSubmit={save} className="border-b border-line bg-raised px-2 py-3">
       <input
         type="text"
         value={title}
@@ -88,10 +89,10 @@ export function EntryEditor({ row, onSave, onDelete, onCancel }: Props) {
       </div>
 
       <div className="mt-3 flex items-center gap-2">
-        <button type="submit" className="rounded bg-gray-900 px-3 py-1.5 text-sm font-medium text-white">
+        <button type="submit" className="rounded bg-ink px-3 py-1.5 text-sm font-medium text-surface">
           Save
         </button>
-        <button type="button" onClick={onCancel} className="px-2 py-1.5 text-sm text-gray-500">
+        <button type="button" onClick={onCancel} className="px-2 py-1.5 text-sm text-muted">
           Cancel
         </button>
         <button type="button" onClick={onDelete} className="ml-auto px-2 py-1.5 text-sm text-expense">
