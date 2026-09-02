@@ -165,9 +165,10 @@ function Day({ email, theme, onTheme }: DayProps) {
             adding them. Keys only, no controls. */}
         <dl className="mt-8 space-y-1.5 border-t border-line pt-5 text-xs text-faint">
           {[
+            ['esc', 'leave the box'],
             ['← →', 'previous / next day'],
             ['t', 'jump to today'],
-            ['/', 'focus the box'],
+            ['/', 'back to the box'],
           ].map(([key, what]) => (
             <div key={key} className="flex items-baseline gap-3">
               <dt className="w-12 shrink-0 font-medium text-muted">{key}</dt>

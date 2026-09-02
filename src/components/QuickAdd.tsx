@@ -54,6 +54,12 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
           placeholder="What happened?"
           aria-label="What happened?"
           onChange={(event) => setText(event.target.value)}
+          // The box is autofocused, so without a way out every keyboard
+          // shortcut is unreachable. Blur, never clear: a half-typed entry
+          // is not worth losing to a stray Escape.
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') event.currentTarget.blur()
+          }}
           className={`w-full rounded-lg border border-edge bg-surface px-3.5 py-3 text-base text-ink outline-none focus:border-ink ${
             dictation.supported ? 'pr-12' : ''
           }`}
