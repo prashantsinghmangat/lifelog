@@ -35,8 +35,10 @@ parse(input: string, now: Date, defaultDay?: string): ParsedEntry | null
 ```
 
 Its order of operations is load-bearing and documented in the function: leading `+` → date →
-clock time → **duration → amount** → infer `event` from a future date → strip filler words →
-title. Duration must be read before amount, or `2h client work` becomes a ₹2 expense. Once a
+clock time → **duration → amount** → infer `event` from anything still ahead → strip filler
+words → title. That inference covers both a future date and a clock time later today, which is
+what makes `ping 8:15pm` a reminder without a leading `+`; it runs *after* amount, so
+`500 dinner 9pm` stays an expense. Duration must be read before amount, or `2h client work` becomes a ₹2 expense. Once a
 duration has matched, only a *currency-marked* amount is accepted, which is why
 `2h call with agency 99` keeps the `99` in its title. Reordering these breaks tests in ways that
 look unrelated to the change.

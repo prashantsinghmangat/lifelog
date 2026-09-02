@@ -186,7 +186,7 @@ that is what actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 116 tests, 266 assertions
+npm test           # vitest run — 120 tests, 276 assertions
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -208,7 +208,10 @@ existed. Order matters: duration is read before amount, or `2h client work` beco
 Rules worth knowing:
 
 - A bare weekday resolves **backwards** to the most recent past occurrence. `next friday` goes forward.
-- A future date with no other signal means `event` — you cannot have already spent money tomorrow.
+- Anything still ahead with no other signal means `event` — you cannot have already spent money
+  tomorrow, nor done something at 8:15pm while it is 8:10pm. So `ping 8:15pm` is a reminder in the
+  evening but a note the next morning, and `+` is only needed for an event whose time has passed
+  or that has no time at all.
 - With no date token, the entry files on **the day you are viewing**, so arrowing back a day and
   typing `500 groceries` backfills correctly.
 - `birthday`, `bday` or `anniversary` on an event sets `data.rrule = 'FREQ=YEARLY'`. V1 stores it

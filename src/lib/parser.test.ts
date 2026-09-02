@@ -178,6 +178,33 @@ describe('events', () => {
     expect(r?.title).toBe('gym')
   })
 
+  it('infers an event from a clock time still ahead today', () => {
+    // NOW is 10:00, so 8:15pm has not happened: it is a reminder, not a note.
+    const r = p('ping 8:15pm')
+    expect(r?.kind).toBe('event')
+    expect(r?.title).toBe('ping')
+    expect(r?.occurredOn).toBe(TODAY)
+    expect(r?.occurredAt?.startsWith('2026-09-01T20:15:00')).toBe(true)
+  })
+
+  it('leaves a clock time already past today as a note', () => {
+    const r = p('ping 8:15am')
+    expect(r?.kind).toBe('note')
+    expect(r?.occurredAt?.startsWith('2026-09-01T08:15:00')).toBe(true)
+  })
+
+  it('does not turn a past-dated timed entry into an event', () => {
+    const r = p('gym 7am yesterday')
+    expect(r?.kind).toBe('note')
+    expect(r?.occurredOn).toBe(YESTERDAY)
+  })
+
+  it('keeps an expense an expense even when it is still ahead', () => {
+    const r = p('500 dinner 9pm')
+    expect(r?.kind).toBe('expense')
+    expect(r?.amountPaise).toBe(50000)
+  })
+
   it('parses "Riya birthday 14 nov" with a yearly rrule', () => {
     const r = p('Riya birthday 14 nov')
     expect(r?.kind).toBe('event')

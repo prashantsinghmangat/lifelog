@@ -252,8 +252,17 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     kind ??= 'expense'
   }
 
-  // You cannot have already spent money tomorrow, so a future date means an event.
-  if (!kind && occurredOn > startOfDay(now)) kind = 'event'
+  // A clock time is only meaningful as a moment once the day is fixed.
+  let at: Date | null = null
+  if (time) {
+    at = new Date(occurredOn)
+    at.setHours(time.value.hours, time.value.minutes, 0, 0)
+  }
+
+  // You cannot have already spent money tomorrow, nor done something at 8:15pm
+  // while it is 8:10pm — so anything still ahead is an event. The clock half of
+  // this is what lets `ping 8:15pm` work without a leading `+`.
+  if (!kind && (occurredOn > startOfDay(now) || (at !== null && at > now))) kind = 'event'
 
   const day = format(occurredOn, 'yyyy-MM-dd')
   const resolved: Kind = kind ?? 'note'
@@ -268,11 +277,7 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
 
   const entry: ParsedEntry = { kind: resolved, occurredOn: day, title, data: {} }
 
-  if (time) {
-    const at = new Date(occurredOn)
-    at.setHours(time.value.hours, time.value.minutes, 0, 0)
-    entry.occurredAt = format(at, "yyyy-MM-dd'T'HH:mm:ssXXX")
-  }
+  if (at !== null) entry.occurredAt = format(at, "yyyy-MM-dd'T'HH:mm:ssXXX")
   if (duration) entry.durationMinutes = duration.value
   if (amount) entry.amountPaise = amount.value
 
