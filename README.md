@@ -82,7 +82,19 @@ Authentication → **URL Configuration**:
 Login sends `emailRedirectTo: window.location.origin`. If that origin is not allow-listed the
 magic link silently bounces to the Site URL and no session is created — with no error shown.
 
-### 5. Put the code in the email template — needs custom SMTP first
+### 5. Set a password — the route that needs no email
+
+Sign in once with the link or a code, then open the person icon → **Password** → type one →
+**Save**. It goes through `updateUser` on the session you already have, which sidesteps the
+confirmation email a password signup would normally need.
+
+After that every device signs in with email and password, no message to route, no rate limit, no
+deliverability. This is what makes the installed iOS app usable, since a link tapped in Mail
+opens in Safari and cannot reach the app's storage.
+
+Everything below is optional: it buys a branded email and a six-digit code, not access.
+
+### 6. Put the code in the email template — needs custom SMTP first
 
 **On the built-in email sender the template editor is read-only.** The banner reads *"Set up
 custom SMTP to edit templates"* and the Subject field shows a lock. Supabase then sends its own
@@ -160,7 +172,7 @@ iOS. A link tapped in Mail opens in Safari, and an installed PWA has its own sto
 itself would stay signed out with no way to fix it. A code typed into the app creates the session
 in the app.
 
-### 6. First login
+### 7. First login
 
 ```bash
 npm run dev

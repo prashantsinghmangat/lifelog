@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { Sheet } from './Sheet'
+import { supabase } from '../lib/supabase'
 import type { Theme } from '../hooks/useTheme'
 
 const THEMES: { value: Theme; label: string }[] = [
@@ -17,6 +19,35 @@ type Props = {
 }
 
 export function ProfileSheet({ email, theme, onTheme, onExport, onSignOut, onClose }: Props) {
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+
+  /**
+   * Sets a password on the account from inside an existing session, which is
+   * what makes password sign-in usable here at all: creating an account with a
+   * password normally needs a confirmation email, and this project cannot send
+   * a usable one. Once set, any device signs in without email.
+   */
+  async function savePassword() {
+    if (password.length < 6) {
+      setNote('At least six characters.')
+      return
+    }
+
+    setBusy(true)
+    setNote(null)
+    const { error } = await supabase.auth.updateUser({ password })
+    setBusy(false)
+
+    if (error) {
+      setNote(error.message)
+      return
+    }
+    setPassword('')
+    setNote('Password saved. Use it to sign in on any device.')
+  }
+
   return (
     <Sheet label="Profile and settings" onClose={onClose}>
       <p className="truncate text-sm font-medium">{email}</p>
@@ -40,6 +71,32 @@ export function ProfileSheet({ email, theme, onTheme, onExport, onSignOut, onClo
           </button>
         ))}
       </div>
+
+      <p className="mt-5 mb-2 text-xs text-muted" id="password-label">
+        Password
+      </p>
+      <div className="flex gap-2">
+        <input
+          type="password"
+          autoComplete="new-password"
+          value={password}
+          aria-labelledby="password-label"
+          placeholder="Set a password"
+          onChange={(event) => setPassword(event.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-edge bg-surface px-3 py-2.5 text-base text-ink outline-none focus:border-ink"
+        />
+        <button
+          type="button"
+          disabled={busy || password === ''}
+          onClick={() => void savePassword()}
+          className="h-11 shrink-0 rounded-lg bg-ink px-3 text-sm font-medium text-surface disabled:opacity-50"
+        >
+          {busy ? '…' : 'Save'}
+        </button>
+      </div>
+      <p role="status" aria-live="polite" className="mt-1.5 min-h-4 text-xs text-muted">
+        {note}
+      </p>
 
       <div className="mt-5 flex items-center justify-between">
         <button type="button" onClick={onExport} className="h-11 text-sm text-muted underline">

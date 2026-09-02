@@ -135,12 +135,20 @@ anywhere other than a `.tsx` file will not be compiled.
 `emailRedirectTo: window.location.origin`; an origin missing from Authentication → URL
 Configuration makes the magic link bounce with no error shown anywhere.
 
-**`Login` has two routes in and both are load-bearing.** A six-digit code needs `{{ .Token }}` in
-the email template — but Supabase locked template editing for free projects created after 3 June
-2026 unless custom SMTP is configured, so on this project the email carries only a link. The
-paste-the-link route reads the token out of the URL (`src/lib/signinLink.ts`, tested) and calls
-`verifyOtp` in the app. That is the *only* way to sign in an installed iOS PWA: a tapped link
-opens in Safari, which has separate storage. Do not "simplify" either route away.
+**`Login` has three routes in and each covers a hole in the others. Do not "simplify" any away.**
+
+- **Password** is the default and the only route that touches no email. Normally unusable here,
+  because creating a password account needs a confirmation email this project cannot send — so
+  the password is set instead from `ProfileSheet` via `updateUser`, from inside a session that
+  already exists.
+- **Six-digit code** needs `{{ .Token }}` in the email template, which requires custom SMTP:
+  Supabase locked template editing for free projects created after 3 June 2026.
+- **Paste the sign-in link** works with the default template as it ships.
+  `src/lib/signinLink.ts` pulls the token out of whatever was pasted (tested — note `access_token`
+  must not match, and Gmail percent-encodes wrapped URLs).
+
+The last two exist because a link tapped in Mail opens in Safari, and an installed iOS PWA has
+separate storage, so a tapped link can never sign in the app itself.
 
 **The git remote uses an SSH host alias**, `git@github-personal:...`. The machine's default key
 belongs to a different GitHub account and a plain `github.com` URL is rejected. `gh` is logged
