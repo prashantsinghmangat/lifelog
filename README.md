@@ -230,9 +230,32 @@ Capacitor wraps the same build. There is no second codebase: `android/` is a gen
 shell that loads `dist/`, so the web app and the Android app are the same React, the same parser
 and the same Supabase calls.
 
-**One-off setup:** install Android Studio, which bundles a suitable JDK and the SDK. Gradle 8.14
-needs **JDK 17 or newer** — a system Java 11 will fail. Then enable Developer options and USB
-debugging on the phone.
+**One-off setup.** What is required is the Android SDK and a **JDK 17 or newer** — Gradle 8.14
+rejects Java 11. Android Studio is only a convenient bundle of those two and is not needed: every
+line of real code here is TypeScript, so the IDE would rarely be opened.
+
+*Either* install Android Studio and let its Standard setup fetch everything, *or* take the
+command-line route and stay in VS Code:
+
+```powershell
+winget install Microsoft.OpenJDK.21
+
+# Command line tools only, from developer.android.com/studio
+# The zip's *contents* go into cmdline-tools\latest\, so that
+# C:\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat exists.
+# Getting that nesting wrong is what produces "Could not determine SDK root".
+
+$env:JAVA_HOME = 'C:\Program Files\Microsoft\jdk-21'   # match the real folder name
+$env:ANDROID_HOME = 'C:\Android\Sdk'
+$sdk = "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat"
+& $sdk --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+& $sdk --licenses
+```
+
+Persist `ANDROID_HOME` and add `%ANDROID_HOME%\platform-tools` to PATH for `adb`. Prefer setting
+`JAVA_HOME` per session rather than globally if other projects on the machine need an older JDK.
+
+Then enable Developer options and USB debugging on the phone.
 
 ```bash
 npm run android         # build the web app, then copy it into the native project
