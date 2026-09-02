@@ -99,6 +99,35 @@ token is read out of the URL and verified in the app, which is the only way to s
 installed iOS PWA — tapping the link opens Safari, and that has separate storage. Do not open the
 link first; it works once.
 
+#### Brevo SMTP, for a setup with no custom domain
+
+Brevo is free to 300 emails a day and will verify a single sender address, so no domain is
+needed.
+
+1. Sign up at brevo.com and confirm the account email.
+2. **Senders, Domains & Dedicated IPs → Senders → Add a sender.** Name `lifelog`, your own email
+   address, then click the link Brevo sends. Without a domain this is the only address that can
+   appear in the From field, and Brevo rejects anything else with a 550.
+3. **SMTP & API → SMTP.** Note the login and generate an **SMTP key**. The key is the password —
+   not the Brevo account password. If Supabase later reports an auth failure, regenerate the
+   login and key: Brevo sometimes shows the account email where it wants
+   `something@smtp-brevo.com`.
+4. Supabase → Authentication → Emails → **SMTP Settings** → enable custom SMTP:
+
+   | Field | Value |
+   | --- | --- |
+   | Host | `smtp-relay.brevo.com` |
+   | Port | `587` |
+   | Username | the Brevo SMTP login |
+   | Password | the Brevo SMTP key |
+   | Sender email | the address verified in step 2 |
+   | Sender name | `lifelog` |
+
+5. Authentication → **Rate Limits** — the default becomes 30 emails/hour, which is ample.
+
+Mail from a brand-new Brevo account can land in spam or Promotions the first time. Check those
+folders before assuming it did not send.
+
 Then, Authentication → Emails → **Magic link or OTP**. The default only contains
 `{{ .ConfirmationURL }}`; add the code as well:
 
