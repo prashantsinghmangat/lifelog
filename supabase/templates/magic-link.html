@@ -1,5 +1,12 @@
 <!--
-  Paste into Supabase → Authentication → Emails → Magic Link.
+  Paste into Supabase → Authentication → Emails → "Magic link or OTP".
+  Subject: Your lifelog sign-in code
+
+  The subject matters more than it looks: keeping Supabase's default
+  "Your sign-in link" threads every new email under the old ones in Gmail, so a
+  fresh code hides behind a stale message. And the editor holds a draft until
+  Save changes is pressed at the foot of the form — an unsaved paste looks
+  identical to a saved one while the server still sends the default.
 
   Paste it into **Confirm signup** as well. signInWithOtp uses Magic Link for an
   existing user but Confirm signup for one that does not exist yet, so a fresh
