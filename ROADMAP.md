@@ -143,6 +143,69 @@ at the moment of capture, versus exporting everything at once. Per-entry fits "t
 the reminder" better; export-all is the one that catches up on history. They can coexist, but the
 first one built should be the per-entry action.
 
+### Option A — implementation plan
+
+Decided and specified, to be built at step 5. No schema change, no backend, no new dependency,
+no notification permission. Everything below is derivable from what `entries` already stores.
+
+**`src/lib/ics.ts` — `toIcs(entries: Entry[], now: Date): string`.** Pure, `now` injected, so the
+output is byte-identical for the same input and the tests do not chase the clock. Mirrors the
+parser's arrangement: the logic is testable, the plumbing around it is not interesting.
+
+Rules:
+
+| Case | iCalendar |
+| --- | --- |
+| Timed event | `DTSTART`/`DTEND` as UTC stamps (`20261114T113000Z`), `VALARM TRIGGER:-PT0M` |
+| All-day event | `DTSTART;VALUE=DATE`, `DTEND` the next day, `VALARM TRIGGER;RELATED=START:PT9H` |
+| Birthday / anniversary | the above plus `RRULE:FREQ=YEARLY`, from the `data.rrule` flag already stored |
+
+The 9am alarm is a **relative** trigger on purpose. An all-day event starts at local midnight, so
+`PT9H` is 9am wherever the reader is, and it recurs correctly every year — an absolute trigger
+would fire once and be wrong in another timezone. This is also why no timezone needs storing: the
+only absolute timestamps are converted to UTC.
+
+Details that break strict parsers if skipped: CRLF line endings, lines folded at 75 octets with a
+leading space, and `\` `;` `,` and newlines escaped in every text value. `UID` is
+`<entry id>@lifelog`, stable so a re-import updates rather than duplicates — though client
+behaviour varies, and without a `SEQUENCE` some clients ignore the update. Deriving `SEQUENCE`
+from `updated_at` is the fix if that turns out to matter.
+
+Only `kind === 'event'` is exported; an expense is not something to be reminded about. Past
+one-offs are filtered out, yearly ones are kept regardless of their year because the `RRULE` is
+what makes them recur.
+
+**Delivery is the part with a real unknown.** A `Blob` download is the desktop answer, but in a
+standalone iOS PWA downloads are unreliable. The Web Share API is the idiomatic mobile path:
+
+```
+navigator.canShare?.({ files: [file] })  →  navigator.share({ files: [file] })
+                                        →  fall back to a blob download
+```
+
+Sharing hands the file straight to the Calendar app. This needs verifying on a real installed PWA
+before the feature can be called done — it is the one step that cannot be reasoned about.
+
+**Where it appears**, in order of how often it will be used:
+
+1. **The toast after capture.** Typing `+ Mom birthday 14 nov` already produces a toast; for an
+   event it gains an **Add to calendar** action. Zero navigation, one optional tap, exactly the
+   sketched UX.
+2. **The entry sheet**, for any event — the catch-up path for anything already logged.
+3. **Export calendar** in the profile sheet, beside Export JSON, for everything at once.
+
+**Tests** (~15, following `parser.test.ts`): timed versus all-day output, the yearly rule, alarm
+triggers, escaping of a title containing a comma and a semicolon, folding a long title, CRLF
+endings, past one-offs excluded, yearly kept, non-events excluded, and a golden-file comparison
+for one full calendar.
+
+**The honest limitation:** the calendar receives a copy. Editing or deleting the entry afterwards
+does not change it — the copy has to be re-added. That is the price of having no backend, and it
+is the strongest argument for Option B later.
+
+**Explicitly not in scope:** lead-time settings, per-entry alarm times, reminders on expenses,
+time logs or notes, and the subscribable feed with its token exposure.
+
 ### Option B — real Web Push
 
 Works on Chrome desktop, Chrome Android, and iOS Safari 16.4+ **only for a home-screen-installed
