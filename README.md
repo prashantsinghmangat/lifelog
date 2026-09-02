@@ -138,10 +138,10 @@ Measured with `npm run build`:
 
 | File | Raw | Gzipped |
 | --- | --- | --- |
-| `assets/index-*.js` | 399.89 kB | **115.39 kB** |
-| `assets/index-*.css` | 12.87 kB | 3.59 kB |
+| `assets/index-*.js` | 403.21 kB | **116.53 kB** |
+| `assets/index-*.css` | 14.62 kB | 4.14 kB |
 | `index.html` | 0.58 kB | 0.34 kB |
-| **Total** | | **119.32 kB** |
+| **Total** | | **121.01 kB** |
 
 Against a 150 KB budget. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
 `postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and
@@ -207,8 +207,9 @@ and an insert is rejected with `42501 new row violates row-level security policy
 src/
   lib/        supabase.ts  parser.ts  parser.test.ts  merchants.ts  format.ts
   hooks/      useEntries.ts  useSession.ts  useTheme.ts  useSwipe.ts  useDictation.ts
-  components/ Login.tsx  DayHeader.tsx  MonthSheet.tsx  ProfileSheet.tsx
-              QuickAdd.tsx  EntryRow.tsx  EntryEditor.tsx  Icons.tsx
+  components/ Login.tsx  DayHeader.tsx  MonthGrid.tsx  MonthSheet.tsx
+              ProfileSheet.tsx  QuickAdd.tsx  EntryRow.tsx  EntryEditor.tsx
+              Sheet.tsx  Toast.tsx  Icons.tsx
   types.ts  App.tsx  main.tsx
 supabase/migrations/0001_entries.sql
 public/icon-192.png  public/icon-512.png

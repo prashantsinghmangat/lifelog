@@ -4,40 +4,45 @@
 @source './**/*.tsx';
 
 /* Semantic tokens, not raw greys. Dark mode swaps the values below, so no
-   component needs a `dark:` variant. */
+   component needs a `dark:` variant. A third theme (high contrast) would be
+   another block here and nothing else. */
 @theme {
   --font-sans:
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
 
   --color-surface: #ffffff;
-  --color-raised: #f9fafb;
+  --color-raised: #ffffff;
+  --color-sunken: #f6f7f9;
   --color-ink: #111827;
-  --color-muted: #6b7280;
-  --color-faint: #9ca3af;
-  --color-line: #eef0f3;
-  --color-edge: #d1d5db;
+  --color-muted: #5b6472;
+  --color-faint: #8b93a1;
+  --color-line: #e9ebef;
+  --color-edge: #cbd1da;
+  --color-focus: #2563eb;
 
-  --color-expense: #f26d5b;
-  --color-time: #2aa198;
-  --color-event: #8b5cf6;
-  --color-note: #9ca3af;
+  --color-expense: #d9503b;
+  --color-time: #167f77;
+  --color-event: #6d3fd4;
+  --color-note: #6b7484;
 }
 
 [data-theme='dark'] {
   --color-surface: #0d1220;
   --color-raised: #161d2f;
+  --color-sunken: #131a2a;
   --color-ink: #e8eaf0;
-  --color-muted: #9aa3b2;
-  --color-faint: #6d7686;
-  --color-line: #1e2536;
-  --color-edge: #333c50;
+  --color-muted: #a3abba;
+  --color-faint: #78818f;
+  --color-line: #212940;
+  --color-edge: #39425a;
+  --color-focus: #7aa2ff;
 
-  /* Lifted a little: the light-mode hues go muddy on a dark ground. */
+  /* Lifted: the light-mode hues go muddy on a dark ground. */
   --color-expense: #ff8f7a;
   --color-time: #3ec5b9;
   --color-event: #a78bfa;
-  --color-note: #808a9b;
+  --color-note: #8892a3;
 
   /* Native date inputs, scrollbars and focus rings follow this. */
   color-scheme: dark;
@@ -55,7 +60,14 @@ body {
   color: var(--color-ink);
 }
 
-/* The only animation in the app. */
+/* One visible focus treatment for everything, so no component can forget it.
+   :focus-visible keeps it off mouse clicks and on for keyboard users. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 @keyframes row-in {
   from {
     opacity: 0;
@@ -66,8 +78,29 @@ body {
   animation: row-in 100ms ease-out;
 }
 
+@keyframes sheet-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+.sheet-in {
+  animation: sheet-in 120ms ease-out;
+}
+
 /* A horizontal day swipe must not also pan the page sideways. Vertical scroll
    and pinch-zoom stay with the browser. */
 .swipe-area {
   touch-action: pan-y pinch-zoom;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

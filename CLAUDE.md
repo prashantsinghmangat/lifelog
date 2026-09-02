@@ -61,11 +61,40 @@ tab left open overnight keeps parsing `today` as yesterday.
 `yyyy-MM-dd`.
 
 **Colour never appears as a raw grey.** `src/index.css` defines semantic tokens — `surface`,
-`raised`, `ink`, `muted`, `faint`, `line`, `edge`, plus the four kind colours — and a
-`[data-theme='dark']` block swaps their values. Components write `text-muted`, `bg-raised`,
+`raised`, `sunken`, `ink`, `muted`, `faint`, `line`, `edge`, `focus`, plus the four kind colours —
+and a `[data-theme='dark']` block swaps their values. Components write `text-muted`, `bg-raised`,
 `border-line`. **Do not add `dark:` variants**; the token swap covers both themes, so a new
-`text-gray-500` is a bug that will look fine in light mode and unreadable in dark.
-`useTheme` resolves `system` against `prefers-color-scheme` and stamps `data-theme` on `<html>`.
+`text-gray-500` is a bug that will look fine in light mode and unreadable in dark. A third theme
+would be one more block and no component changes. `useTheme` resolves `system` against
+`prefers-color-scheme` and stamps `data-theme` on `<html>`.
+
+**Tailwind classes are never interpolated.** ``className={`text-${kind}`}`` compiles to nothing,
+because Tailwind only emits classes it can literally see. Kind colours go through written-out
+`Record<Kind, string>` maps.
+
+## UX rules that are architecture, not taste
+
+**Minimum interaction → maximum outcome.** Before adding a control, ask whether a default can
+remove it. Capture is the product: anything that adds a step to logging is a regression.
+
+**One component tree, three layouts.** Breakpoints are compact (`<640`), medium, wide (`lg`,
+`≥1024`) — never device-specific. **Never create `MobileX.tsx` / `DesktopX.tsx`.** Where the
+interaction genuinely differs, one component changes presentation: `Sheet` is a bottom sheet on
+compact and a centred dialog from `sm` up. `MonthGrid` is the calendar; `MonthSheet` is that same
+grid in a `Sheet` for narrow screens, while the wide layout renders `MonthGrid` straight into the
+sidebar where navigation costs no taps at all.
+
+**`Sheet` owns modal correctness** — focus moves in, is trapped, and returns to the trigger on
+close; Escape closes; body scroll locks. Any new modal goes through it rather than reimplementing
+an overlay.
+
+**Undo, not confirmation.** Reversible actions happen immediately and offer `Undo` in the toast
+(`useEntries.restore` clears `deleted_at`). Do not add "are you sure?" to a normal delete.
+
+**Accessibility is a build requirement.** Interactive targets are 44px (`h-11`), focus is a single
+global `:focus-visible` outline so no component can forget it, `prefers-reduced-motion` is honoured
+globally, and meaning is never carried by colour alone — the kind icon is `aria-hidden` and an
+`sr-only` kind name sits beside it.
 
 ## Data model
 

@@ -50,11 +50,11 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
           autoCorrect="off"
           spellCheck={false}
           enterKeyHint="done"
-          placeholder="350 lunch swiggy"
-          aria-label="Quick add"
+          placeholder="What happened?"
+          aria-label="What happened?"
           onChange={(event) => setText(event.target.value)}
-          className={`w-full rounded border border-edge bg-surface px-3 py-2 text-base text-ink outline-none focus:border-ink ${
-            dictation.supported ? 'pr-11' : ''
+          className={`w-full rounded-lg border border-edge bg-surface px-3.5 py-3 text-base text-ink outline-none focus:border-ink ${
+            dictation.supported ? 'pr-12' : ''
           }`}
         />
         {dictation.supported && (
@@ -63,7 +63,7 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
             aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
             aria-pressed={dictation.listening}
             onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
-            className={`absolute inset-y-0 right-0 flex w-11 items-center justify-center ${
+            className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center ${
               dictation.listening ? 'text-expense' : 'text-faint'
             }`}
           >
@@ -72,7 +72,9 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
         )}
       </div>
 
-      <div className="mt-1 min-h-5 px-1 text-xs">
+      {/* Announced politely: the parse changes as you type, and a screen reader
+          should hear the result without losing your place in the field. */}
+      <div id="quick-add-preview" role="status" aria-live="polite" className="mt-1.5 min-h-5 px-1 text-xs">
         {dictation.error !== null ? (
           <span className="text-expense">{dictation.error}</span>
         ) : dictation.listening ? (

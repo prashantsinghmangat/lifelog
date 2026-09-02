@@ -5,19 +5,22 @@ import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
 import { PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
+import { MonthGrid } from './components/MonthGrid'
 import { MonthSheet } from './components/MonthSheet'
 import { ProfileSheet } from './components/ProfileSheet'
 import { QuickAdd } from './components/QuickAdd'
-import { useEntries } from './hooks/useEntries'
+import { Toast, type ToastState } from './components/Toast'
+import { useEntries, type Row } from './hooks/useEntries'
 import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
-import { dayKey, minutes, rupees } from './lib/format'
+import { dayKey, minutes, relativeDay, rupees } from './lib/format'
 import { supabase } from './lib/supabase'
+import type { ParsedEntry } from './lib/parser'
 
 export default function App() {
   const { session, loading } = useSession()
-  // Applied before the auth gate, so the login screen honours the choice too.
+  // Resolved before the auth gate, so the login screen honours the choice too.
   const { theme, choose } = useTheme()
 
   if (loading) return <div className="p-4 text-sm text-faint">…</div>
@@ -35,8 +38,8 @@ type DayProps = {
 function Day({ email, theme, onTheme }: DayProps) {
   const [now, setNow] = useState(() => new Date())
   const [day, setDay] = useState(() => dayKey(new Date()))
-  const [editing, setEditing] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Row | null>(null)
+  const [toast, setToast] = useState<ToastState | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const {
@@ -47,6 +50,7 @@ function Day({ email, theme, onTheme }: DayProps) {
     add,
     update,
     remove,
+    restore,
     retry,
     fetchAll,
     fetchDays,
@@ -64,11 +68,34 @@ function Day({ email, theme, onTheme }: DayProps) {
   }, [])
 
   const goNext = useCallback(() => setDay((current) => dayKey(addDays(parseISO(current), 1))), [])
-  const goPrevious = useCallback(() => setDay((current) => dayKey(subDays(parseISO(current), 1))), [])
+  const goPrevious = useCallback(
+    () => setDay((current) => dayKey(subDays(parseISO(current), 1))),
+    [],
+  )
   const swipe = useSwipe(goNext, goPrevious)
 
   const spent = entries.reduce((total, row) => total + (row.amount_paise ?? 0), 0)
   const logged = entries.reduce((total, row) => total + (row.duration_minutes ?? 0), 0)
+
+  /** The one confirmation that matters: an entry that landed on another day. */
+  function submit(parsed: ParsedEntry) {
+    const row = add(parsed)
+    if (row.occurred_on === day) {
+      const what = [row.title, value(row)].filter(Boolean).join(' · ')
+      setToast({ text: `Added ${what}` })
+      return
+    }
+    setToast({
+      text: `Saved to ${relativeDay(row.occurred_on, now)}`,
+      action: { label: 'View', run: () => setDay(row.occurred_on) },
+    })
+  }
+
+  function deleteRow(row: Row) {
+    remove(row)
+    setEditing(null)
+    setToast({ text: 'Entry deleted', action: { label: 'Undo', run: () => restore(row) } })
+  }
 
   async function exportJson() {
     try {
@@ -81,34 +108,118 @@ function Day({ email, theme, onTheme }: DayProps) {
       link.download = `lifelog-${dayKey(new Date())}.json`
       link.click()
       URL.revokeObjectURL(url)
-      setNotice(null)
       setProfileOpen(false)
     } catch (failure) {
-      setNotice(failure instanceof Error ? failure.message : 'Export failed')
+      setToast({ text: failure instanceof Error ? failure.message : 'Export failed' })
     }
   }
 
+  const pick = (picked: string) => {
+    setDay(picked)
+    setCalendarOpen(false)
+  }
+
   return (
-    <div
-      {...swipe}
-      className="swipe-area mx-auto flex min-h-dvh max-w-md flex-col px-4 pt-3 pb-6"
-    >
-      <DayHeader
-        day={day}
-        now={now}
-        onChange={setDay}
-        onOpenCalendar={() => setCalendarOpen(true)}
-      />
+    <div className="mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-4 pt-3 pb-6 lg:grid-cols-[17rem_minmax(0,1fr)] lg:px-8 lg:pt-8">
+      {/* Wide screens get the calendar permanently: navigation at zero taps.
+          Narrow screens reach the same component through the header button. */}
+      <aside className="hidden lg:block">
+        <h1 className="mb-5 text-sm font-semibold tracking-wide">lifelog</h1>
+        <MonthGrid day={day} now={now} loadDays={fetchDays} onPick={setDay} />
+        <button
+          type="button"
+          onClick={() => setProfileOpen(true)}
+          className="mt-6 flex h-11 w-full items-center gap-2 text-xs text-muted"
+        >
+          <PersonIcon size={16} />
+          <span className="min-w-0 truncate">{email}</span>
+        </button>
+      </aside>
+
+      <main {...swipe} className="swipe-area flex min-w-0 flex-col">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <DayHeader
+              day={day}
+              now={now}
+              onChange={setDay}
+              onOpenCalendar={() => setCalendarOpen(true)}
+            />
+          </div>
+          <button
+            type="button"
+            aria-label="Profile and settings"
+            onClick={() => setProfileOpen(true)}
+            className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center text-faint active:text-ink lg:hidden"
+          >
+            <PersonIcon size={18} />
+          </button>
+        </div>
+
+        {entries.length > 0 && (
+          <p className="mt-1.5 text-xs text-muted">
+            {[
+              spent > 0 ? `${rupees(spent)} spent` : null,
+              logged > 0 ? `${minutes(logged)} logged` : null,
+              `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+        )}
+
+        <div className="mt-4">
+          <QuickAdd
+            day={day}
+            now={now}
+            showExamples={!loading && entries.length === 0}
+            onSubmit={submit}
+          />
+        </div>
+
+        {error !== null && <p className="mt-3 text-xs text-expense">{error}</p>}
+
+        <div className="mt-5 flex-1">
+          {entries.map((row) => (
+            <EntryRow
+              key={row.id}
+              row={row}
+              now={now}
+              onOpen={() => setEditing(row)}
+              onRetry={() => retry(row)}
+            />
+          ))}
+
+          {!loading && entries.length === 0 && (
+            <p className="text-xs text-faint">
+              Nothing on this day. Type above, or swipe sideways to move between days.
+            </p>
+          )}
+
+          {failedElsewhere.length > 0 && (
+            <div className="mt-6">
+              <p className="mb-1 text-xs font-medium text-expense">Did not save</p>
+              {failedElsewhere.map((row) => (
+                <EntryRow
+                  key={row.id}
+                  row={row}
+                  now={now}
+                  offDay
+                  onOpen={() => setDay(row.occurred_on)}
+                  onRetry={() => retry(row)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
 
       {calendarOpen && (
         <MonthSheet
           day={day}
           now={now}
           loadDays={fetchDays}
-          onPick={(picked) => {
-            setDay(picked)
-            setCalendarOpen(false)
-          }}
+          onPick={pick}
           onClose={() => setCalendarOpen(false)}
         />
       )}
@@ -124,87 +235,26 @@ function Day({ email, theme, onTheme }: DayProps) {
         />
       )}
 
-      {entries.length > 0 && (
-        <div className="mt-2 flex gap-4 text-xs text-muted">
-          {spent > 0 && <span>{rupees(spent)} spent</span>}
-          {logged > 0 && <span>{minutes(logged)} logged</span>}
-          <span>
-            {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
-          </span>
-        </div>
+      {editing !== null && (
+        <EntryEditor
+          row={editing}
+          now={now}
+          onSave={(patch) => {
+            update(editing, patch)
+            setEditing(null)
+          }}
+          onDelete={() => deleteRow(editing)}
+          onClose={() => setEditing(null)}
+        />
       )}
 
-      <div className="mt-3">
-        <QuickAdd
-          day={day}
-          now={now}
-          showExamples={!loading && entries.length === 0}
-          onSubmit={add}
-        />
-      </div>
-
-      {error !== null && <p className="mt-3 text-xs text-expense">{error}</p>}
-
-      <div className="mt-4 flex-1">
-        {entries.map((row) =>
-          editing === row.id ? (
-            <EntryEditor
-              key={row.id}
-              row={row}
-              onSave={(patch) => {
-                update(row, patch)
-                setEditing(null)
-              }}
-              onDelete={() => {
-                remove(row)
-                setEditing(null)
-              }}
-              onCancel={() => setEditing(null)}
-            />
-          ) : (
-            <EntryRow
-              key={row.id}
-              row={row}
-              now={now}
-              onOpen={() => setEditing(row.id)}
-              onDelete={() => remove(row)}
-              onRetry={() => retry(row)}
-            />
-          ),
-        )}
-
-        {failedElsewhere.length > 0 && (
-          <div className="mt-5">
-            <p className="mb-1 text-xs font-medium text-expense">Did not save</p>
-            {failedElsewhere.map((row) => (
-              <EntryRow
-                key={row.id}
-                row={row}
-                now={now}
-                offDay
-                onOpen={() => setDay(row.occurred_on)}
-                onDelete={() => remove(row)}
-                onRetry={() => retry(row)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="mt-6 flex items-center justify-between gap-2 text-xs text-faint">
-        {/* Only worth saying while the screen is empty anyway. */}
-        <span>{entries.length === 0 ? 'swipe sideways to change day' : ''}</span>
-        <button
-          type="button"
-          aria-label="Profile and settings"
-          onClick={() => setProfileOpen(true)}
-          className="flex items-center gap-1.5 rounded px-1 py-1 active:text-ink"
-        >
-          <PersonIcon size={16} />
-        </button>
-      </div>
-
-      {notice !== null && <p className="mt-2 text-xs text-expense">{notice}</p>}
+      {toast !== null && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   )
+}
+
+function value(row: Row): string | null {
+  if (row.amount_paise !== null) return rupees(row.amount_paise)
+  if (row.duration_minutes !== null) return minutes(row.duration_minutes)
+  return null
 }

@@ -16,7 +16,7 @@ export function DayHeader({ day, now, onChange, onOpenCalendar }: Props) {
         type="button"
         aria-label="Previous day"
         onClick={() => onChange(dayKey(subDays(parseISO(day), 1)))}
-        className="-ml-2 p-2 text-faint active:text-ink"
+        className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center text-faint active:text-ink"
       >
         <Chevron dir="left" />
       </button>
@@ -26,7 +26,7 @@ export function DayHeader({ day, now, onChange, onOpenCalendar }: Props) {
         type="button"
         onClick={onOpenCalendar}
         aria-label={`${dayLabel(day, now)} — open calendar`}
-        className="flex items-center gap-1.5 px-2 text-base font-semibold"
+        className="flex h-11 min-w-0 items-center justify-center gap-1.5 px-2 text-base font-semibold"
       >
         <CalendarIcon size={16} className="text-faint" />
         {dayLabel(day, now)}
@@ -36,7 +36,7 @@ export function DayHeader({ day, now, onChange, onOpenCalendar }: Props) {
         type="button"
         aria-label="Next day"
         onClick={() => onChange(dayKey(addDays(parseISO(day), 1)))}
-        className="-mr-2 p-2 text-faint active:text-ink"
+        className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center text-faint active:text-ink"
       >
         <Chevron dir="right" />
       </button>

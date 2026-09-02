@@ -177,6 +177,32 @@ export function useEntries(day: string) {
     void attempt()
   }, [])
 
+  /** Undo a soft delete. Reversible actions get an undo, not a confirmation. */
+  const restore = useCallback(
+    (row: Row) => {
+      const attempt = async (): Promise<void> => {
+        setRows((prev) =>
+          prev.some((current) => current.id === row.id) ? prev : [...prev, { ...row, status: 'saving' }],
+        )
+        const { error: writeError } = await supabase
+          .from('entries')
+          .update({ deleted_at: null })
+          .eq('id', row.id)
+
+        if (writeError) {
+          mark(row.id, 'failed')
+          return
+        }
+        retries.current.delete(row.id)
+        mark(row.id, undefined)
+      }
+
+      retries.current.set(row.id, attempt)
+      void attempt()
+    },
+    [mark],
+  )
+
   const retry = useCallback((row: Row) => {
     const attempt = retries.current.get(row.id)
     if (attempt) void attempt()
@@ -228,6 +254,7 @@ export function useEntries(day: string) {
     add,
     update,
     remove,
+    restore,
     retry,
     fetchAll,
     fetchDays,
