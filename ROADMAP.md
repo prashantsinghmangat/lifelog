@@ -1,10 +1,85 @@
 # Roadmap
 
-Nothing here is committed to. It is the option set, with costs and a recommendation for each,
-so a decision can be made in one read rather than rediscovered every time.
-
 Judged against the product rule: **minimum interaction → maximum outcome**, universal web
 standards, accessibility, clear feedback. A step added to logging is a regression.
+
+## Decided
+
+| Question | Decision |
+| --- | --- |
+| Reminders | **A — one-tap `.ics` export.** Not Web Push, not a token feed |
+| Birthday alarm | **9am on the day.** Not the day before, and not exposed as a setting |
+| Next step | **Real device testing**, before anything else is built |
+| Month totals in the sidebar | **Wait.** An empty sidebar is not a reason to introduce analytics |
+| Wave 4 | Only after evidence from real usage |
+
+The reasoning worth keeping: reminders via the calendar need no backend, no notification
+permission, no service-worker rewrite, and keep working when the app is closed, the phone is
+offline and the Supabase project is paused. Web Push is a large architectural jump for a need that
+has not been demonstrated. And LifeLog is drifting from *record my life* toward *analyse my life*
+the moment totals appear on screen — that is Wave 4, and it stays parked.
+
+## Order of work
+
+1. **Real device testing** — iPhone Safari, Chrome Android, 375px and 1440px
+2. **Fix only the friction that testing actually finds** — not a speculative Wave 3B
+3. **Automated backup** — before any new functionality, `.ics` included
+4. **Use it normally for one to two weeks**
+5. **`.ics` calendar handoff** — birthday → yearly recurrence → 9am reminder
+6. **`useEntries` tests**
+7. **Then** decide whether Wave 4 is justified at all
+
+Backup sits at 3 rather than after `.ics`: the stated principle was "before adding significant new
+functionality", and `.ics` is significant new functionality.
+
+**Explicitly not now**, despite each being defensible: recurring expenses, offline queue, category
+learning, search, recently-deleted, Web Push, Ask, month analytics. The risk is no longer whether
+useful things can be built. It is whether LifeLog stays small enough to be opened every day.
+
+## Device test checklist
+
+The one thing that cannot be verified from a terminal. Known-risky items are marked, with what to
+do if they fail.
+
+**Capture**
+
+- [ ] Quick Add is reachable and feels instant; typing `350 lunch swiggy` and pressing Enter is one motion
+- [ ] The parser preview line is readable at arm's length
+- [ ] ⚠️ **`autoFocus` behaviour differs by platform.** iOS generally will not open the keyboard
+      without a gesture; Android Chrome may. Either is acceptable — note which happens
+- [ ] Enter on the on-screen keyboard submits (`enterKeyHint="done"`)
+- [ ] ⚠️ **Dictation is absent on iOS entirely** — the mic is hidden by design, not broken. On
+      Android, check whether it beats the keyboard's own mic
+
+**Sheets against the keyboard** — the likeliest failure
+
+- [ ] ⚠️ Open an entry and focus a field. **iOS resizes the visual viewport, not the layout
+      viewport**, so a `fixed` sheet can end up behind the keyboard. If it does, the fix is
+      `interactive-widget=resizes-content` on the viewport meta, or the VisualViewport API
+- [ ] The sheet scrolls internally rather than the page behind it
+- [ ] Closing returns focus and the page has not jumped to the top
+- [ ] The bottom sheet clears the iOS home indicator (`env(safe-area-inset-bottom)`)
+
+**Navigation**
+
+- [ ] ⚠️ Sticky Quick Add versus swipe: does a horizontal drag starting on the input still get
+      swallowed, and does the sticky box behave during iOS rubber-band scrolling
+- [ ] ⚠️ Swipe versus the platform back gesture. The guard ignores the outer 24px; iOS Safari's
+      gesture zone is wider. Inside the installed PWA there is no back gesture, so compare both
+- [ ] Chevrons and the calendar button are comfortable one-handed, not merely 44px
+- [ ] The month sheet is thumb-reachable; dots are visible on a bright screen outdoors
+
+**Platform**
+
+- [ ] ⚠️ `min-h-dvh` behaves on iOS Safari with the toolbars collapsing
+- [ ] Dark mode: follows the system, and the **native date input** in the entry sheet is legible
+      (this is what `color-scheme` is for)
+- [ ] PWA opens with no browser chrome; the status bar colour matches the theme
+- [ ] A hard refresh keeps you signed in
+- [ ] The undo toast appears above the home indicator and is tappable before it expires
+- [ ] It feels fast — the 100ms row fade should be the only thing perceptible
+
+## Everything below is options, not commitments
 
 ---
 
@@ -57,8 +132,16 @@ generation, so it is unit-testable rather than hope-driven.
   cannot do OAuth, so it needs an unguessable revocable token URL, and **whoever holds that URL
   reads your events**. A real privacy trade, not a technicality.
 
-Alarm defaults: at the event time for a timed event; 9am on the day for a birthday, via a
-`TRIGGER;RELATED=START:PT9H` relative trigger so it recurs correctly every year.
+Alarm defaults: at the event time for a timed event; **9am on the day** for a birthday, via a
+`TRIGGER;RELATED=START:PT9H` relative trigger so it recurs correctly every year. Not exposed as a
+setting.
+
+One detail still open, to settle at step 5 rather than now: the decision says *one-tap export of
+the calendar*, while the sketched UX shows an **Add to calendar** action on a single event
+(`+ Mom birthday 14 nov` → one optional action). Those are different features — per-entry handoff
+at the moment of capture, versus exporting everything at once. Per-entry fits "the calendar owns
+the reminder" better; export-all is the one that catches up on history. They can coexist, but the
+first one built should be the per-entry action.
 
 ### Option B — real Web Push
 
@@ -161,8 +244,14 @@ the Supabase client or extract the state transitions into pure functions and tes
 the most valuable non-feature work available.
 
 **There is no backup.** A single-user financial history exists in one Supabase project with manual
-JSON export as the only copy, and point-in-time recovery is not on the free tier. Worth an
-automated periodic export.
+JSON export as the only copy, and point-in-time recovery is not on the free tier. Now scheduled at
+step 3.
+
+One trap when it is built: **a dump written into Supabase Storage is not a backup**, because it
+shares the fate of the thing it is backing up. It has to leave the project — a commit to a private
+repo, an object store, or an emailed attachment. The scheduler can be a Netlify scheduled function
+holding the service-role key as a server-side environment variable, which must never reach the
+client bundle.
 
 **Sign-ups are still open.** Anyone with the publishable key from the bundle can create an account
 on the project. RLS keeps them out of the data — verified — but there is no reason to leave it
