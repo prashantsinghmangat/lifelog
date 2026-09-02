@@ -301,7 +301,66 @@ API, per-question latency, and contradicts the spec's *no AI* line.
 
 ---
 
-## 5. Debt and risk
+## 5. Native apps, and when they would be worth it
+
+Not now, but the destination if reminders become the point of the app.
+
+**The constraint that decides most of this: building and signing an iOS app requires macOS and
+Xcode.** That is Apple's rule, not a framework's, so no toolchain escapes it — Capacitor, React
+Native and Flutter are identical on this point. Development here is Windows and the daily device
+is an iPhone, so "native" means one of: cloud CI (Codemagic, Appflow — free tiers exist, signing
+is fiddly), a Mac, or borrowing one. Distribution to one's own phone still needs the Apple
+Developer Program at $99/year, TestFlight included. Android alone is free and buildable on Windows
+today, but does not help an iPhone user.
+
+### What native buys over the web
+
+| Capability | Web today, or with Push | Native |
+| --- | --- | --- |
+| Own notifications at an exact time | with Web Push | yes |
+| **Scheduled on-device, no server** | no — needs a backend awake | **yes, strictly better** |
+| Fires when the Supabase project is paused | no | yes |
+| **Writing to a calendar silently** | impossible | yes, with a permission prompt |
+| System alarm in the clock app | no | Android only — **iOS forbids it even natively** |
+| Widget, share-target, SMS capture | no | Android |
+| Deploy in under a minute | yes | no: build, sign, submit |
+
+Local notifications scheduled on the device are the real prize — no server, no paused-project
+failure, works offline. "Set a 4pm alarm" still will not be a system alarm on an iPhone, though;
+iOS permits no app to do that.
+
+### Which toolchain
+
+| | iOS needs a Mac | Reuses this codebase |
+| --- | --- | --- |
+| **Capacitor** | yes | **all of it** — the existing build *is* the app |
+| React Native | yes | the parser and libs could port; every component is rewritten |
+| Flutter | yes | nothing. Dart rewrite, and its web output discards the bundle budget and the accessible DOM |
+
+Capacitor wins on the only axis that matters here: `npx cap add ios android` wraps what already
+exists. Same components, same parser, same Supabase calls, and the web build keeps deploying to
+Netlify untouched. Reminder logic stays; only delivery changes. Which also means **postponing
+costs nothing** — no work done now is wasted by going native later.
+
+### Triggers for revisiting
+
+Go native when one of these is actually true, not before:
+
+- An Android widget or share-target capture is wanted
+- Reminders must fire on a project that has been idle a week
+- Silent calendar writing matters more than one tap
+- It belongs in the App Store
+
+### Order, if it is ever wanted
+
+Backup → Web Push (proves the reminder habit and the data shape) → Capacitor for Android as a free
+experiment on Windows → iOS once build infrastructure exists. That way native is a delivery
+change rather than a discovery exercise.
+
+Note that Capacitor plugins are runtime dependencies, so **the four-dependency rule would have to
+be retired deliberately**, not broken by accident.
+
+## 6. Debt and risk
 
 **Only the parser is tested.** `useEntries` is the second-most load-bearing file — the refetch
 merge, the retry closure map, optimistic rollback, restore — and has no tests at all. Either mock
@@ -335,7 +394,7 @@ off via Netlify's settings or plan, not via code.
 
 ---
 
-## 6. What should not change
+## 7. What should not change
 
 The constraints are what keep this app fast, and each has already resisted a plausible reason to
 break it.
@@ -353,7 +412,7 @@ break it.
 
 ---
 
-## 7. Decisions needed
+## 8. Decisions needed
 
 1. **Reminders:** A (one-tap export), A (subscribable feed, with the token exposure), or straight
    to B?
