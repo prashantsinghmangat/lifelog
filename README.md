@@ -82,16 +82,30 @@ Authentication → **URL Configuration**:
 Login sends `emailRedirectTo: window.location.origin`. If that origin is not allow-listed the
 magic link silently bounces to the Site URL and no session is created — with no error shown.
 
-### 5. First login
+### 5. Put the code in the email template
+
+Authentication → Emails → **Magic Link** template. The default only contains
+`{{ .ConfirmationURL }}`; add the code as well:
+
+```html
+<p>Your code: <strong>{{ .Token }}</strong></p>
+<p>Or <a href="{{ .ConfirmationURL }}">open this link</a>.</p>
+```
+
+Without `{{ .Token }}` the email carries no code and the sign-in screen cannot be completed on
+iOS. A link tapped in Mail opens in Safari, and an installed PWA has its own storage, so the app
+itself would stay signed out with no way to fix it. A code typed into the app creates the session
+in the app.
+
+### 6. First login
 
 ```bash
 npm run dev
 ```
 
-`signInWithOtp` creates the user on first use, so the first magic link is also the signup.
-Open the link in the same browser that requested it. Once you are in, switch off
-**Allow new users to sign up** under Authentication → Sign In / Providers — that is what
-actually makes this single-user.
+`signInWithOtp` creates the user on first use, so the first sign-in is also the signup. Once you
+are in, switch off **Allow new users to sign up** under Authentication → Sign In / Providers —
+that is what actually makes this single-user.
 
 ## Scripts
 

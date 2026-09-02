@@ -135,6 +135,11 @@ anywhere other than a `.tsx` file will not be compiled.
 `emailRedirectTo: window.location.origin`; an origin missing from Authentication → URL
 Configuration makes the magic link bounce with no error shown anywhere.
 
+**Sign-in is a six-digit code, and the email template must contain `{{ .Token }}`.** The link
+still works and is convenient on desktop, but it cannot sign in an installed iOS PWA: the link
+opens in Safari, and the PWA has separate storage. `verifyOtp` in the app is the only route
+there, so do not "simplify" `Login` back to a link-only flow.
+
 **The git remote uses an SSH host alias**, `git@github-personal:...`. The machine's default key
 belongs to a different GitHub account and a plain `github.com` URL is rejected. `gh` is logged
 into both accounts with the wrong one active.
