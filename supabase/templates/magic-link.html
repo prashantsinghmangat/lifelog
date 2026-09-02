@@ -1,4 +1,10 @@
 <!--
+  REQUIRES CUSTOM SMTP. On the built-in email sender the template editor is
+  read-only — the Subject field shows a lock and the banner reads "Set up custom
+  SMTP to edit templates". Until SMTP is configured, Supabase sends its default
+  template, which carries only the link and no code, so the code sign-in cannot
+  be completed at all.
+
   Paste into Supabase → Authentication → Emails → "Magic link or OTP".
   Subject: Your lifelog sign-in code
 

@@ -82,9 +82,18 @@ Authentication → **URL Configuration**:
 Login sends `emailRedirectTo: window.location.origin`. If that origin is not allow-listed the
 magic link silently bounces to the Site URL and no session is created — with no error shown.
 
-### 5. Put the code in the email template
+### 5. Put the code in the email template — needs custom SMTP first
 
-Authentication → Emails → **Magic Link** template. The default only contains
+**On the built-in email sender the template editor is read-only.** The banner reads *"Set up
+custom SMTP to edit templates"* and the Subject field shows a lock. Supabase then sends its own
+default template, which carries only the link and no code — so the code sign-in cannot be
+completed, and an installed iOS PWA cannot be signed in at all.
+
+Configuring custom SMTP fixes three things together: templates unlock, the 2/hour cap becomes
+30/hour, and Supabase's own footer disappears. Brevo suits a setup with no custom domain, since it
+verifies a single sender address.
+
+Then, Authentication → Emails → **Magic link or OTP**. The default only contains
 `{{ .ConfirmationURL }}`; add the code as well:
 
 ```html
