@@ -135,10 +135,12 @@ anywhere other than a `.tsx` file will not be compiled.
 `emailRedirectTo: window.location.origin`; an origin missing from Authentication → URL
 Configuration makes the magic link bounce with no error shown anywhere.
 
-**Sign-in is a six-digit code, and the email template must contain `{{ .Token }}`.** The link
-still works and is convenient on desktop, but it cannot sign in an installed iOS PWA: the link
-opens in Safari, and the PWA has separate storage. `verifyOtp` in the app is the only route
-there, so do not "simplify" `Login` back to a link-only flow.
+**`Login` has two routes in and both are load-bearing.** A six-digit code needs `{{ .Token }}` in
+the email template — but Supabase locked template editing for free projects created after 3 June
+2026 unless custom SMTP is configured, so on this project the email carries only a link. The
+paste-the-link route reads the token out of the URL (`src/lib/signinLink.ts`, tested) and calls
+`verifyOtp` in the app. That is the *only* way to sign in an installed iOS PWA: a tapped link
+opens in Safari, which has separate storage. Do not "simplify" either route away.
 
 **The git remote uses an SSH host alias**, `git@github-personal:...`. The machine's default key
 belongs to a different GitHub account and a plain `github.com` URL is rejected. `gh` is logged

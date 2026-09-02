@@ -93,6 +93,12 @@ Configuring custom SMTP fixes three things together: templates unlock, the 2/hou
 30/hour, and Supabase's own footer disappears. Brevo suits a setup with no custom domain, since it
 verifies a single sender address.
 
+**Without SMTP the app still works**, because the sign-in screen offers *"No code in the email?
+Paste the link instead"*. Press and hold **Sign in** in the email, Copy Link, paste it in. The
+token is read out of the URL and verified in the app, which is the only way to sign in an
+installed iOS PWA — tapping the link opens Safari, and that has separate storage. Do not open the
+link first; it works once.
+
 Then, Authentication → Emails → **Magic link or OTP**. The default only contains
 `{{ .ConfirmationURL }}`; add the code as well:
 
@@ -129,7 +135,7 @@ that is what actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 86 tests, 223 assertions
+npm test           # vitest run — 95 tests, 234 assertions
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
