@@ -128,6 +128,16 @@ needed.
 Mail from a brand-new Brevo account can land in spam or Promotions the first time. Check those
 folders before assuming it did not send.
 
+#### Or Gmail, with no new account
+
+Custom SMTP does not have to mean a new provider — `smtp.gmail.com` on port 465 or 587, username
+and sender both your own Gmail address, password a 16-character **App Password** from
+myaccount.google.com/apppasswords. That page needs 2-Step Verification enabled. It unlocks
+template editing identically.
+
+Fine for one recipient and a few messages a day, wrong for a real product: Gmail is a personal
+mailbox, not a transactional sender, and caps at roughly 500 a day.
+
 Then, Authentication → Emails → **Magic link or OTP**. The default only contains
 `{{ .ConfirmationURL }}`; add the code as well:
 
