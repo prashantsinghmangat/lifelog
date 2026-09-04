@@ -272,16 +272,47 @@ cd android; .\gradlew.bat assembleDebug
 # android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-**Live reload while developing**, which avoids a rebuild per change: run `npm run dev -- --host`,
-then point the app at the dev server by adding to `capacitor.config.ts`
+### Testing on a device without reinstalling
 
-```ts
-server: { url: 'http://<your-LAN-ip>:5173', cleartext: true }
+Two things worth setting up once. Together they mean the APK is rarely rebuilt at all.
+
+**Wireless adb**, so no cable and no copying files around. On the phone: Developer options →
+**Wireless debugging** → *Pair device with pairing code*.
+
+```powershell
+$adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+& $adb pair 192.168.0.50:41234        # the pairing dialog's ip:port, then the 6-digit code
+& $adb connect 192.168.0.50:5555      # the ip:port from the Wireless debugging screen
+& $adb devices
 ```
 
-and `npm run android` once. Edits then appear on the phone immediately. **Remove that block
-before building anything you intend to keep** — otherwise the APK is useless away from your
-network.
+Then `cd android; .\gradlew.bat installDebug` builds and installs in one step, and
+`& $adb logcat -s Capacitor:V chromium:V` streams the device's console.
+
+**Live reload**, which removes the rebuild entirely. `CAP_DEV_URL` points the installed app at
+the Vite dev server instead of its bundled assets:
+
+```powershell
+npm run dev:host                                     # terminal 1, binds 0.0.0.0
+$env:CAP_DEV_URL = 'http://192.168.0.194:5173'       # terminal 2, your LAN IP
+npm run android                                      # then reinstall once
+```
+
+After that, every edit appears on the phone immediately. Unset `CAP_DEV_URL` and re-run
+`npm run android` to go back to a standalone build. It is an environment variable rather than an
+edited-in URL deliberately: a hardcoded `server` block is the classic way to ship an APK that
+only works on the network it was built on.
+
+Windows Firewall blocks inbound 5173 by default, so the phone cannot reach the dev server until
+this is allowed once, from an **admin** terminal:
+
+```powershell
+New-NetFirewallRule -DisplayName "Vite dev server" -Direction Inbound `
+  -LocalPort 5173 -Protocol TCP -Action Allow -Profile Private
+```
+
+If the phone still cannot load it, check that the Wi-Fi network is marked **Private** rather than
+Public in Windows, and that both devices are on the same subnet — a guest network will not work.
 
 **`npm run android` before every device test.** The web assets are copied into the native project
 at sync time, so a change that is not built and synced is a change the phone will not see.
