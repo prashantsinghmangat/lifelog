@@ -18,7 +18,13 @@ import { download, shareOrDownload } from './lib/deliver'
 import { clock, dayKey, dayLabel, minutes, relativeDay, rupees } from './lib/format'
 import { forCalendar, toIcs } from './lib/ics'
 import { isNative } from './lib/platform'
-import { cancel as cancelReminder, schedule as scheduleReminder, sync } from './lib/reminders'
+import {
+  cancel as cancelReminder,
+  permission as reminderPermission,
+  requestPermission,
+  schedule as scheduleReminder,
+  sync,
+} from './lib/reminders'
 import { supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
 
@@ -46,6 +52,7 @@ function Day({ email, theme, onTheme }: DayProps) {
   const [toast, setToast] = useState<ToastState | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [notify, setNotify] = useState<'granted' | 'denied' | 'unavailable' | null>(null)
   const {
     entries,
     failedElsewhere,
@@ -123,6 +130,23 @@ function Day({ email, theme, onTheme }: DayProps) {
     }
   }
 
+  // A reinstall resets the permission, so the state has to be read on launch
+  // rather than assumed — otherwise reminders quietly stop working and the app
+  // is the last to know.
+  useEffect(() => {
+    let live = true
+    void reminderPermission().then((state) => {
+      if (live) setNotify(state)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  async function allowReminders() {
+    setNotify((await requestPermission()) ? 'granted' : 'denied')
+  }
+
   // Re-arms reminders on launch, so an event logged on the web still fires on
   // the phone, and a reinstall does not lose the lot. No-op away from native.
   useEffect(() => {
@@ -167,10 +191,8 @@ function Day({ email, theme, onTheme }: DayProps) {
         const at = row.occurred_at === null ? `9am ${where}` : clock(row.occurred_at)
         setToast({ text: `Reminder set for ${at}` })
       } else if (result === 'blocked') {
-        setToast({
-          text: 'Saved, but reminders are blocked',
-          action: { label: 'Fix', run: () => setProfileOpen(true) },
-        })
+        setNotify('denied')
+        setToast({ text: 'Saved, but reminders are blocked' })
       }
     })
   }
@@ -300,6 +322,24 @@ function Day({ email, theme, onTheme }: DayProps) {
             onSubmit={submit}
           />
         </div>
+
+        {/* Asked for in the app, not left to the OS: a reinstall silently
+            revokes this, and a reminder that cannot fire is worse than no
+            reminder because it was trusted. */}
+        {notify === 'denied' && (
+          <div className="mt-3 flex items-center gap-3 rounded-lg border border-line bg-sunken px-3 py-2.5">
+            <p className="min-w-0 flex-1 text-xs text-muted">
+              Allow notifications, or reminders cannot reach you.
+            </p>
+            <button
+              type="button"
+              onClick={() => void allowReminders()}
+              className="h-9 shrink-0 rounded-md bg-ink px-3 text-xs font-medium text-surface"
+            >
+              Allow
+            </button>
+          </div>
+        )}
 
         {error !== null && <p className="mt-3 text-xs text-expense">{error}</p>}
 
