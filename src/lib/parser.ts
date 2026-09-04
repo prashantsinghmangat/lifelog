@@ -182,6 +182,34 @@ function takeDuration(input: string): Cut<number> | null {
   )
 }
 
+/**
+ * `in 5 minutes`, `after 2 hours`, `10 mins from now` — a moment, not a length.
+ *
+ * Must be read before the duration, or `in 5 minutes` is eaten as a five-minute
+ * time log. The `in`/`after`/`from now` wrapper is what separates the two: a
+ * bare `45 min gym` is still a duration.
+ */
+function takeRelative(input: string, now: Date): Cut<Date> | null {
+  const ahead = (raw: string | undefined, perUnit: number): Date | null => {
+    const value = Number(raw)
+    if (!Number.isFinite(value) || value <= 0) return null
+    return new Date(now.getTime() + Math.round(value * perUnit * 60_000))
+  }
+
+  return (
+    cut(input, new RegExp(`\\b(?:in|after)\\s+(\\d+(?:\\.\\d+)?)\\s*${HOURS}\\b`, 'i'), (m) =>
+      ahead(m[1], 60),
+    ) ??
+    cut(input, new RegExp(`\\b(?:in|after)\\s+(\\d+)\\s*${MINUTES}\\b`, 'i'), (m) =>
+      ahead(m[1], 1),
+    ) ??
+    cut(input, new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*${HOURS}\\s+from\\s+now\\b`, 'i'), (m) =>
+      ahead(m[1], 60),
+    ) ??
+    cut(input, new RegExp(`\\b(\\d+)\\s*${MINUTES}\\s+from\\s+now\\b`, 'i'), (m) => ahead(m[1], 1))
+  )
+}
+
 const AMOUNT = '(\\d[\\d,]*(?:\\.\\d{1,2})?)'
 
 function takeAmount(input: string, currencyOnly: boolean): Cut<number> | null {
@@ -232,8 +260,17 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     rest = date.rest
     matched = true
   }
+  // Before duration, or `in 5 minutes` becomes a five-minute time log.
+  const relative = takeRelative(rest, now)
+  if (relative) {
+    rest = relative.rest
+    matched = true
+  }
+
   const fallback = defaultDay === undefined ? startOfDay(now) : startOfDay(parseISO(defaultDay))
-  const occurredOn = date?.value ?? fallback
+  // A relative offset can roll past midnight, so it decides the day too.
+  const occurredOn =
+    date?.value ?? (relative ? startOfDay(relative.value) : fallback)
 
   const time = takeTime(rest)
   if (time) {
@@ -256,9 +293,10 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     kind ??= 'expense'
   }
 
-  // A clock time is only meaningful as a moment once the day is fixed.
-  let at: Date | null = null
-  if (time) {
+  // A clock time is only meaningful as a moment once the day is fixed. A
+  // relative offset is already a moment, and wins if both somehow appear.
+  let at: Date | null = relative?.value ?? null
+  if (at === null && time) {
     at = new Date(occurredOn)
     at.setHours(time.value.hours, time.value.minutes, 0, 0)
   }

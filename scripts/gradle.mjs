@@ -6,23 +6,64 @@
 // which would then be wrong on any other machine, including the Mac an iOS
 // build would need — the JDK is resolved here, per invocation.
 import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 
-const CANDIDATES = [
-  process.env.CAPACITOR_ANDROID_STUDIO_PATH,
-  'C:/Program Files/Android/Android Studio/jbr',
-  `${process.env.LOCALAPPDATA ?? ''}/Programs/Android Studio/jbr`,
-  '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
-].filter((path) => typeof path === 'string' && path !== '')
+// The Android Gradle plugin refuses anything below 17, and Gradle 8.14 cannot
+// run on 25 at all — it fails compiling build scripts with "Unsupported class
+// file major version 69". Android Studio bundles a 25, so the version has to be
+// read rather than assumed.
+const MIN_JDK = 17
+const MAX_JDK = 24
+
+/** JDK homes to consider, before filtering by version. */
+function homes() {
+  const roots = [
+    'C:/Program Files/Microsoft',
+    'C:/Program Files/Eclipse Adoptium',
+    'C:/Program Files/Java',
+    '/Library/Java/JavaVirtualMachines',
+    '/usr/lib/jvm',
+  ]
+
+  const found = []
+  for (const root of roots) {
+    if (!existsSync(root)) continue
+    for (const name of readdirSync(root)) {
+      const home = join(root, name)
+      // macOS nests the real home inside the bundle.
+      found.push(existsSync(join(home, 'Contents/Home')) ? join(home, 'Contents/Home') : home)
+    }
+  }
+
+  return [
+    process.env.JAVA_HOME,
+    ...found,
+    'C:/Program Files/Android/Android Studio/jbr',
+    `${process.env.LOCALAPPDATA ?? ''}/Programs/Android Studio/jbr`,
+    '/Applications/Android Studio.app/Contents/jbr/Contents/Home',
+  ].filter((path) => typeof path === 'string' && path !== '' && existsSync(path))
+}
+
+/** Reads the major version out of a JDK's own `release` file. */
+function major(home) {
+  try {
+    const release = readFileSync(join(home, 'release'), 'utf8')
+    const found = /JAVA_VERSION="?(\d+)/.exec(release)
+    return found?.[1] === undefined ? null : Number(found[1])
+  } catch {
+    return null
+  }
+}
 
 function jdk() {
-  // An explicit JAVA_HOME wins if it is not the one AGP refuses.
-  const current = process.env.JAVA_HOME
-  if (current !== undefined && current !== '' && !/jdk-?1[0-6]\b|jdk1\.8/.test(current)) {
-    return current
-  }
-  return CANDIDATES.find((path) => existsSync(path))
+  const usable = homes()
+    .map((home) => ({ home, version: major(home) }))
+    .filter((found) => found.version !== null && found.version >= MIN_JDK && found.version <= MAX_JDK)
+    // Newest usable wins, so an added JDK is picked up without configuration.
+    .sort((a, b) => (b.version ?? 0) - (a.version ?? 0))
+
+  return usable[0]?.home
 }
 
 const SDKS = [
@@ -40,8 +81,9 @@ function sdk() {
 const home = jdk()
 if (home === undefined) {
   console.error(
-    'No usable JDK found. Android Gradle plugin needs JDK 17+.\n' +
-      'Install Android Studio, or set JAVA_HOME to a JDK 17 or newer.',
+    `No JDK between ${MIN_JDK} and ${MAX_JDK} found.\n` +
+      'Android Gradle plugin needs 17 or newer; Gradle 8.14 cannot run on 25.\n' +
+      'Install one, for example: winget install Microsoft.OpenJDK.21',
   )
   process.exit(1)
 }

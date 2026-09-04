@@ -17,6 +17,7 @@ import { useTheme } from './hooks/useTheme'
 import { download, shareOrDownload } from './lib/deliver'
 import { dayKey, dayLabel, minutes, relativeDay, rupees } from './lib/format'
 import { forCalendar, toIcs } from './lib/ics'
+import { cancel as cancelReminder, schedule as scheduleReminder, sync } from './lib/reminders'
 import { supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
 
@@ -116,8 +117,20 @@ function Day({ email, theme, onTheme }: DayProps) {
     }
   }
 
+  // Re-arms reminders on launch, so an event logged on the web still fires on
+  // the phone, and a reinstall does not lose the lot. No-op away from native.
+  useEffect(() => {
+    void fetchAll()
+      .then((all) => sync(all, new Date()))
+      .catch(() => {
+        // A reminder that could not be re-armed is not worth an error on screen.
+      })
+  }, [fetchAll])
+
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
+    // Inside the submit gesture, which is where a permission prompt is allowed.
+    void scheduleReminder(row, now)
     const elsewhere = row.occurred_on !== day
     const text = elsewhere
       ? `Saved to ${relativeDay(row.occurred_on, now)}`
@@ -137,6 +150,7 @@ function Day({ email, theme, onTheme }: DayProps) {
 
   function deleteRow(row: Row) {
     remove(row)
+    void cancelReminder(row)
     setEditing(null)
     setToast({ text: 'Entry deleted', action: { label: 'Undo', run: () => restore(row) } })
   }
@@ -338,6 +352,9 @@ function Day({ email, theme, onTheme }: DayProps) {
           now={now}
           onSave={(patch) => {
             update(editing, patch)
+            // Re-arm against the edited values, or the old time still fires.
+            const updated = { ...editing, ...patch }
+            void cancelReminder(updated).then(() => scheduleReminder(updated, now))
             setEditing(null)
           }}
           onDelete={() => deleteRow(editing)}

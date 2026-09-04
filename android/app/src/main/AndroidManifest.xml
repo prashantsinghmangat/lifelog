@@ -38,4 +38,17 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Reminders. POST_NOTIFICATIONS is a runtime permission from Android 13, and
+      is requested at the moment an entry is scheduled.
+
+      SCHEDULE_EXACT_ALARM is what keeps "in 5 minutes" honest: from Android 12
+      an inexact alarm can be batched and drift by minutes. On Android 14 the
+      user may still have to allow "Alarms & reminders" for the app by hand.
+      RECEIVE_BOOT_COMPLETED lets scheduled reminders survive a restart.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 </manifest>

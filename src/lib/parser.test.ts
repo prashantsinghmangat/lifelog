@@ -505,6 +505,62 @@ describe('edge cases', () => {
   })
 })
 
+describe('relative reminders', () => {
+  it('reads "in 5 minutes" as a moment, not a duration', () => {
+    const r = p('ping me in 5 minutes')
+    expect(r?.kind).toBe('event')
+    expect(r?.durationMinutes).toBeUndefined()
+    expect(r?.occurredAt?.startsWith('2026-09-01T10:05:00')).toBe(true)
+    expect(r?.title).toBe('ping me')
+  })
+
+  it('reads "after 5 minutes"', () => {
+    const r = p('after 5 minutes call mum')
+    expect(r?.occurredAt?.startsWith('2026-09-01T10:05:00')).toBe(true)
+    expect(r?.title).toBe('call mum')
+  })
+
+  it('reads "5 minutes from now"', () => {
+    const r = p('ping 5 minutes from now')
+    expect(r?.occurredAt?.startsWith('2026-09-01T10:05:00')).toBe(true)
+  })
+
+  it('reads hours', () => {
+    const r = p('in 2 hours standup')
+    expect(r?.occurredAt?.startsWith('2026-09-01T12:00:00')).toBe(true)
+  })
+
+  it('reads fractional hours', () => {
+    const r = p('in 1.5h gym')
+    expect(r?.occurredAt?.startsWith('2026-09-01T11:30:00')).toBe(true)
+  })
+
+  it('reads the "in 30m" shorthand', () => {
+    const r = p('in 30m tea')
+    expect(r?.occurredAt?.startsWith('2026-09-01T10:30:00')).toBe(true)
+  })
+
+  it('rolls onto the next day when the offset passes midnight', () => {
+    const lateNight = new Date(2026, 8, 1, 23, 30, 0)
+    const r = parse('in 45 minutes sleep', lateNight)
+    expect(r?.occurredOn).toBe('2026-09-02')
+    expect(r?.occurredAt?.startsWith('2026-09-02T00:15:00')).toBe(true)
+  })
+
+  it('leaves a bare duration alone', () => {
+    // No in/after/from-now wrapper, so this is still a time log.
+    const r = p('45 min gym')
+    expect(r?.kind).toBe('time')
+    expect(r?.durationMinutes).toBe(45)
+    expect(r?.occurredAt).toBeUndefined()
+  })
+
+  it('does not treat a zero offset as a reminder', () => {
+    const r = p('in 0 minutes nothing')
+    expect(r?.occurredAt).toBeUndefined()
+  })
+})
+
 describe('amount shapes', () => {
   it('parses a thousands separator with paise', () => {
     const r = p('2,499.50 shoes')
