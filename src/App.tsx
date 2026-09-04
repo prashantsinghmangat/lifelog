@@ -60,12 +60,17 @@ function Day({ email, theme, onTheme }: DayProps) {
     fetchDays,
   } = useEntries(day)
 
-  // A tab left open overnight would keep parsing `today` as yesterday.
+  // A tab left open overnight would keep parsing `today` as yesterday. The
+  // interval matters as much as the events: with the app simply left open,
+  // nothing fires, and the preview for "in 2 minutes" would be measured from
+  // whenever it was last focused.
   useEffect(() => {
     const refresh = () => setNow(new Date())
+    const ticking = window.setInterval(refresh, 30_000)
     window.addEventListener('focus', refresh)
     document.addEventListener('visibilitychange', refresh)
     return () => {
+      window.clearInterval(ticking)
       window.removeEventListener('focus', refresh)
       document.removeEventListener('visibilitychange', refresh)
     }
@@ -130,8 +135,13 @@ function Day({ email, theme, onTheme }: DayProps) {
 
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
+    // The real clock, for the same reason QuickAdd re-parses against it: a
+    // reminder compared with a stale `now` looks overdue and is dropped.
+    const current = new Date()
+    setNow(current)
+
     const elsewhere = row.occurred_on !== day
-    const where = relativeDay(row.occurred_on, now)
+    const where = relativeDay(row.occurred_on, current)
 
     // The calendar is only offered where the app cannot do it itself. Natively
     // the reminder is already scheduled, so pushing the calendar as well would
@@ -152,7 +162,7 @@ function Day({ email, theme, onTheme }: DayProps) {
 
     // Inside the submit gesture, which is where a permission prompt is allowed.
     // A blocked reminder has to say so: silence here is why nothing fired.
-    void scheduleReminder(row, now).then((result) => {
+    void scheduleReminder(row, current).then((result) => {
       if (result === 'scheduled') {
         const at = row.occurred_at === null ? `9am ${where}` : clock(row.occurred_at)
         setToast({ text: `Reminder set for ${at}` })

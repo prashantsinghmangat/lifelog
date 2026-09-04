@@ -37,8 +37,13 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
 
   function submit(event: FormEvent | KeyboardEvent) {
     event.preventDefault()
-    if (!parsed) return
-    onSubmit(parsed)
+    // Re-parsed against the real clock. `now` is held in state and refreshed
+    // only on focus, which is fine for a preview but wrong for saving: with the
+    // app left open, "in 2 minutes" measured from the last focus can already be
+    // in the past, and the reminder is then silently skipped as overdue.
+    const fresh = parse(text, new Date(), day)
+    if (!fresh) return
+    onSubmit(fresh)
     setText('')
   }
 
