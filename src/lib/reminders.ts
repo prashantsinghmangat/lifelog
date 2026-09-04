@@ -30,12 +30,22 @@ async function plugin() {
  */
 export type ScheduleResult = 'scheduled' | 'blocked' | 'skipped'
 
-/** Grant state without asking, for launch-time work that has no user gesture. */
+/**
+ * Grant state without asking, for launch-time work that has no user gesture.
+ *
+ * Never rejects. A rejection here left the state unknown, which the UI then
+ * rendered as "not granted" — so a plugin that failed to load looked exactly
+ * like a permission the user had refused.
+ */
 export async function permission(): Promise<'granted' | 'denied' | 'unavailable'> {
-  const api = await plugin()
-  if (!api) return 'unavailable'
-  const current = await api.checkPermissions()
-  return current.display === 'granted' ? 'granted' : 'denied'
+  try {
+    const api = await plugin()
+    if (!api) return 'unavailable'
+    const current = await api.checkPermissions()
+    return current.display === 'granted' ? 'granted' : 'denied'
+  } catch {
+    return 'unavailable'
+  }
 }
 
 /** Asks. Only call this from something the user just did. */
@@ -103,15 +113,17 @@ export async function schedule(entry: Entry, now: Date): Promise<ScheduleResult>
  * waiting minutes per attempt to find out is not a diagnosis.
  */
 export async function test(): Promise<string> {
-  const api = await plugin()
-  if (!api) return 'Only available in the app, not the browser.'
-
-  const state = await permission()
-  if (state !== 'granted' && !(await requestPermission())) {
-    return 'Notifications are blocked for this app.'
-  }
-
+  // Everything is inside the try, including the import: a module that fails to
+  // load must produce a message rather than a rejected promise nobody reads.
   try {
+    const api = await plugin()
+    if (!api) return 'Only available in the app, not the browser.'
+
+    const state = await permission()
+    if (state !== 'granted' && !(await requestPermission())) {
+      return 'Notifications are blocked for this app.'
+    }
+
     await api.schedule({
       notifications: [
         {

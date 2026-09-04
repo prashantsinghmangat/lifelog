@@ -103,20 +103,9 @@ export function ProfileSheet({
       {isNative() && (
         <>
           <p className="mt-5 mb-2 text-xs text-muted">Reminders</p>
-          {reminders === 'granted' ? (
-            <>
-              <button
-                type="button"
-                onClick={() => void testReminder().then(setNote)}
-                className="h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink"
-              >
-                Send a test reminder
-              </button>
-              <p className="mt-1.5 text-xs text-faint">
-                Arrives in ten seconds. If it does not, the message here says why.
-              </p>
-            </>
-          ) : (
+          {reminders === 'granted' && <p className="text-sm text-time">Notifications allowed.</p>}
+
+          {reminders === 'denied' && (
             <>
               <button
                 type="button"
@@ -125,14 +114,31 @@ export function ProfileSheet({
               >
                 Allow notifications
               </button>
-              {reminders === 'denied' && (
-                <p className="mt-1.5 text-xs text-faint">
-                  If nothing happens, Android has stopped asking. Settings → Apps → lifelog →
-                  Notifications, and turn them on there.
-                </p>
-              )}
+              <p className="mt-1.5 text-xs text-faint">
+                If nothing happens, Android has stopped asking. Settings → Apps → lifelog →
+                Notifications, and turn them on there.
+              </p>
             </>
           )}
+
+          {reminders === 'unavailable' && (
+            <p className="text-sm text-expense">
+              The reminder plugin did not load. Test below for the reason.
+            </p>
+          )}
+
+          {/* Always reachable. Hiding this behind a granted permission hid the
+              one control that can report why the permission looks ungranted. */}
+          <button
+            type="button"
+            onClick={() => void testReminder().then(setNote)}
+            className="mt-2 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink"
+          >
+            Send a test reminder
+          </button>
+          <p className="mt-1.5 text-xs text-faint">
+            Arrives in ten seconds. If it does not, the message below says why.
+          </p>
         </>
       )}
 
