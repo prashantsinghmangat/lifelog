@@ -119,7 +119,7 @@ export function Login() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4">
+    <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
       <h1 className="mb-4 text-lg font-semibold">lifelog</h1>
 
       {mode === 'password' && (

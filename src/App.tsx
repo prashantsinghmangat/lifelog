@@ -175,7 +175,10 @@ function Day({ email, theme, onTheme }: DayProps) {
   return (
     // The columns are sized, then centred as a pair — otherwise capping the
     // timeline just moves the empty space to the right edge of a 1440px screen.
-    <div className="mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-4 pt-3 pb-6 lg:grid-cols-[17rem_minmax(0,42rem)] lg:justify-center lg:px-8 lg:pt-8">
+    // Safe-area padding, not decoration: Android draws the WebView edge-to-edge
+    // from targetSdk 35, and an installed iOS PWA has no browser chrome either,
+    // so without this the day header sits underneath the status bar.
+    <div className="mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] lg:grid-cols-[17rem_minmax(0,42rem)] lg:justify-center lg:px-8 lg:pt-8">
       {/* The only h1. The sidebar wordmark below is hidden on compact, where
           display:none would take the page's heading with it. */}
       <h1 className="sr-only">lifelog</h1>

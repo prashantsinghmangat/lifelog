@@ -145,11 +145,15 @@ function fullYear(raw: string | undefined, now: Date): number {
 
 function takeTime(input: string): Cut<{ hours: number; minutes: number }> | null {
   return (
-    cut(input, /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i, (m) => {
+    // `5pm`, `5 pm`, `4:00 p.m.`, `9 A.M.` — the dotted forms matter because a
+    // phone keyboard autocorrects "pm" to "p.m.", and without them `4:00 p.m.`
+    // falls through to the 24-hour branch and becomes 4am. A trailing \b cannot
+    // be used: after the final dot there is no word boundary.
+    cut(input, /\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s?m\.?(?![a-z])/i, (m) => {
       const hour = int(m[1])
       const minutes = m[2] === undefined ? 0 : int(m[2])
       if (hour < 1 || hour > 12 || minutes > 59) return null
-      const pm = (m[3] ?? '').toLowerCase() === 'pm'
+      const pm = (m[3] ?? '').toLowerCase() === 'p'
       return { hours: (hour % 12) + (pm ? 12 : 0), minutes }
     }) ??
     cut(input, /\b(\d{1,2}):(\d{2})\b/, (m) => {

@@ -463,6 +463,30 @@ describe('edge cases', () => {
     expect(r?.occurredAt?.startsWith('2026-09-01T17:30:00')).toBe(true)
   })
 
+  it('parses a dotted meridiem, which phone keyboards produce', () => {
+    // Without this, 4:00 p.m. matches the 24-hour branch and becomes 4am.
+    const r = p('+ set alarm 4:00 p.m.')
+    expect(r?.occurredAt?.startsWith('2026-09-01T16:00:00')).toBe(true)
+    expect(r?.title).toBe('set alarm')
+  })
+
+  it('parses a dotted meridiem without minutes', () => {
+    const r = p('+ ping 4 p.m.')
+    expect(r?.occurredAt?.startsWith('2026-09-01T16:00:00')).toBe(true)
+    expect(r?.title).toBe('ping')
+  })
+
+  it('parses an uppercase dotted meridiem', () => {
+    const r = p('+ ping 9 A.M.')
+    expect(r?.occurredAt?.startsWith('2026-09-01T09:00:00')).toBe(true)
+  })
+
+  it('does not read a word beginning with a or p as a meridiem', () => {
+    const r = p('5 apples')
+    expect(r?.occurredAt).toBeUndefined()
+    expect(r?.amountPaise).toBe(500)
+  })
+
   it('does not treat a word starting with a duration unit as a duration', () => {
     const r = p('3 mangoes 120')
     expect(r?.durationMinutes).toBeUndefined()
