@@ -76,6 +76,14 @@ export function PersonIcon(props: Props) {
   )
 }
 
+export function ArrowUpIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 20V5M6 11l6-6 6 6" />
+    </Svg>
+  )
+}
+
 export function CloseIcon(props: Props) {
   return (
     <Svg {...props}>

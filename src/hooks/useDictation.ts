@@ -21,7 +21,15 @@ function constructor(): RecognitionCtor | null {
   const scope = window as unknown as {
     SpeechRecognition?: RecognitionCtor
     webkitSpeechRecognition?: RecognitionCtor
+    Capacitor?: { isNativePlatform?: () => boolean }
   }
+
+  // Android's WebView exposes the constructor but does not implement speech
+  // recognition — it is a Chrome feature, not a WebView one — so starting it
+  // fails with "not-allowed" no matter what permissions are granted. A button
+  // that cannot work should not be on screen.
+  if (scope.Capacitor?.isNativePlatform?.() === true) return null
+
   return scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null
 }
 
@@ -79,10 +87,10 @@ export function useDictation(onText: (text: string) => void) {
     recogniser_.onerror = (event) => {
       setError(
         event.error === 'not-allowed'
-          ? 'Microphone blocked. Allow it in the address bar.'
+          ? 'Microphone blocked. Allow it in your browser settings.'
           : event.error === 'no-speech'
             ? 'Did not catch that.'
-            : 'Dictation failed.',
+            : 'Dictation failed. Type instead.',
       )
       setListening(false)
     }
@@ -94,5 +102,7 @@ export function useDictation(onText: (text: string) => void) {
     recogniser_.start()
   }, [])
 
-  return { supported, listening, error, start, stop }
+  const clearError = useCallback(() => setError(null), [])
+
+  return { supported, listening, error, clearError, start, stop }
 }

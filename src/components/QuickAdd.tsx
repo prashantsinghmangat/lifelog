@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { MicIcon } from './Icons'
+import { ArrowUpIcon, MicIcon } from './Icons'
 import { useDictation } from '../hooks/useDictation'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, type ParsedEntry } from '../lib/parser'
@@ -32,7 +32,10 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
   const parsed = useMemo(() => parse(text, now, day), [text, now, day])
   const sameDay = parsed === null || parsed.occurredOn === day
 
-  function submit(event: FormEvent) {
+  /** There is something worth saving, so the send button takes the mic's place. */
+  const ready = parsed !== null
+
+  function submit(event: FormEvent | KeyboardEvent) {
     event.preventDefault()
     if (!parsed) return
     onSubmit(parsed)
@@ -50,32 +53,59 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          enterKeyHint="done"
+          // "send", not "done": on Android the Done action only dismisses the
+          // keyboard, which left no way at all to save an entry on a phone.
+          enterKeyHint="send"
           placeholder="What happened?"
           aria-label="What happened?"
-          onChange={(event) => setText(event.target.value)}
-          // The box is autofocused, so without a way out every keyboard
-          // shortcut is unreachable. Blur, never clear: a half-typed entry
-          // is not worth losing to a stray Escape.
+          onChange={(event) => {
+            setText(event.target.value)
+            // A stale dictation error otherwise sits over the parse preview.
+            if (dictation.error !== null) dictation.clearError()
+          }}
           onKeyDown={(event) => {
+            // Explicit, because implicit form submission on an IME action key
+            // is not something every Android keyboard agrees about.
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              submit(event)
+              return
+            }
+            // The box is autofocused, so without a way out every keyboard
+            // shortcut is unreachable. Blur, never clear: a half-typed entry
+            // is not worth losing to a stray Escape.
             if (event.key === 'Escape') event.currentTarget.blur()
           }}
           className={`w-full rounded-lg border border-edge bg-surface px-3.5 py-3 text-base text-ink outline-none focus:border-ink ${
-            dictation.supported ? 'pr-12' : ''
+            ready || dictation.supported ? 'pr-12' : ''
           }`}
         />
-        {dictation.supported && (
+
+        {/* One slot: the mic while the box is empty, send once there is
+            something to save. A send affordance has to be visible — on a phone
+            the keyboard's action key was the only way in, and it did nothing. */}
+        {ready ? (
           <button
-            type="button"
-            aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
-            aria-pressed={dictation.listening}
-            onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
-            className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center ${
-              dictation.listening ? 'text-expense' : 'text-faint'
-            }`}
+            type="submit"
+            aria-label="Save entry"
+            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-ink"
           >
-            <MicIcon size={18} />
+            <ArrowUpIcon size={20} />
           </button>
+        ) : (
+          dictation.supported && (
+            <button
+              type="button"
+              aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
+              aria-pressed={dictation.listening}
+              onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+              className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center ${
+                dictation.listening ? 'text-expense' : 'text-faint'
+              }`}
+            >
+              <MicIcon size={18} />
+            </button>
+          )
         )}
       </div>
 
