@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isNative } from '../lib/platform'
 
 // The Web Speech API is not in lib.dom on every TypeScript version, and the
 // vendor-prefixed constructor never is. Declaring only what is used keeps this
@@ -18,18 +19,16 @@ type Recognition = {
 type RecognitionCtor = new () => Recognition
 
 function constructor(): RecognitionCtor | null {
-  const scope = window as unknown as {
-    SpeechRecognition?: RecognitionCtor
-    webkitSpeechRecognition?: RecognitionCtor
-    Capacitor?: { isNativePlatform?: () => boolean }
-  }
-
   // Android's WebView exposes the constructor but does not implement speech
   // recognition — it is a Chrome feature, not a WebView one — so starting it
   // fails with "not-allowed" no matter what permissions are granted. A button
   // that cannot work should not be on screen.
-  if (scope.Capacitor?.isNativePlatform?.() === true) return null
+  if (isNative()) return null
 
+  const scope = window as unknown as {
+    SpeechRecognition?: RecognitionCtor
+    webkitSpeechRecognition?: RecognitionCtor
+  }
   return scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null
 }
 

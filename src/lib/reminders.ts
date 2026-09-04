@@ -1,3 +1,4 @@
+import { isNative } from './platform'
 import type { Entry } from '../types'
 
 /**
@@ -17,10 +18,32 @@ import type { Entry } from '../types'
 const ALL_DAY_HOUR = 9
 
 async function plugin() {
-  const { Capacitor } = await import('@capacitor/core')
-  if (!Capacitor.isNativePlatform()) return null
+  if (!isNative()) return null
   const { LocalNotifications } = await import('@capacitor/local-notifications')
   return LocalNotifications
+}
+
+/**
+ * What happened, so the caller can say so. Silence was the original bug: the
+ * permission was never granted, nothing was scheduled, and the app reported
+ * neither.
+ */
+export type ScheduleResult = 'scheduled' | 'blocked' | 'skipped'
+
+/** Grant state without asking, for launch-time work that has no user gesture. */
+export async function permission(): Promise<'granted' | 'denied' | 'unavailable'> {
+  const api = await plugin()
+  if (!api) return 'unavailable'
+  const current = await api.checkPermissions()
+  return current.display === 'granted' ? 'granted' : 'denied'
+}
+
+/** Asks. Only call this from something the user just did. */
+export async function requestPermission(): Promise<boolean> {
+  const api = await plugin()
+  if (!api) return false
+  const asked = await api.requestPermissions()
+  return asked.display === 'granted'
 }
 
 /**
@@ -46,24 +69,17 @@ export function fireAt(entry: Entry): Date | null {
   return new Date(year, month - 1, day, ALL_DAY_HOUR, 0, 0, 0)
 }
 
-/** Asked at the moment of scheduling, which is inside a user gesture. */
-async function permitted(): Promise<boolean> {
+export async function schedule(entry: Entry, now: Date): Promise<ScheduleResult> {
   const api = await plugin()
-  if (!api) return false
-
-  const current = await api.checkPermissions()
-  if (current.display === 'granted') return true
-  const asked = await api.requestPermissions()
-  return asked.display === 'granted'
-}
-
-export async function schedule(entry: Entry, now: Date): Promise<void> {
-  const api = await plugin()
-  if (!api) return
+  if (!api) return 'skipped'
 
   const at = fireAt(entry)
-  if (at === null || at.getTime() <= now.getTime()) return
-  if (!(await permitted())) return
+  if (at === null || at.getTime() <= now.getTime()) return 'skipped'
+
+  // Asked here because scheduling follows something the user just did, which
+  // is the only moment a permission prompt is not an ambush.
+  const state = await permission()
+  if (state !== 'granted' && !(await requestPermission())) return 'blocked'
 
   await api.schedule({
     notifications: [
@@ -76,6 +92,8 @@ export async function schedule(entry: Entry, now: Date): Promise<void> {
       },
     ],
   })
+
+  return 'scheduled'
 }
 
 export async function cancel(entry: Entry): Promise<void> {
@@ -97,7 +115,9 @@ export async function sync(entries: Entry[], now: Date): Promise<void> {
     return at !== null && at.getTime() > now.getTime()
   })
   if (due.length === 0) return
-  if (!(await permitted())) return
+  // Checks, never asks: a prompt at launch with no context invites a reflexive
+  // refusal, and Android stops offering it after two of those.
+  if ((await permission()) !== 'granted') return
 
   await api.schedule({
     notifications: due.map((entry) => ({

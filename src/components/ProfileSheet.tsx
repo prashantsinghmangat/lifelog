@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sheet } from './Sheet'
+import { isNative } from '../lib/platform'
+import { permission, requestPermission } from '../lib/reminders'
 import { supabase } from '../lib/supabase'
 import type { Theme } from '../hooks/useTheme'
 
@@ -31,6 +33,22 @@ export function ProfileSheet({
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
+  const [reminders, setReminders] = useState<'granted' | 'denied' | 'unavailable' | null>(null)
+
+  useEffect(() => {
+    let live = true
+    void permission().then((state) => {
+      if (live) setReminders(state)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  async function allowReminders() {
+    const granted = await requestPermission()
+    setReminders(granted ? 'granted' : 'denied')
+  }
 
   /**
    * Sets a password on the account from inside an existing session, which is
@@ -80,6 +98,32 @@ export function ProfileSheet({
           </button>
         ))}
       </div>
+
+      {/* Only meaningful in the native app; the web has no reminders to grant. */}
+      {isNative() && (
+        <>
+          <p className="mt-5 mb-2 text-xs text-muted">Reminders</p>
+          {reminders === 'granted' ? (
+            <p className="text-sm text-time">Notifications allowed.</p>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => void allowReminders()}
+                className="h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface"
+              >
+                Allow notifications
+              </button>
+              {reminders === 'denied' && (
+                <p className="mt-1.5 text-xs text-faint">
+                  If nothing happens, Android has stopped asking. Settings → Apps → lifelog →
+                  Notifications, and turn them on there.
+                </p>
+              )}
+            </>
+          )}
+        </>
+      )}
 
       <p className="mt-5 mb-2 text-xs text-muted" id="password-label">
         Password

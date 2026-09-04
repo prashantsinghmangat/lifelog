@@ -130,7 +130,15 @@ function Day({ email, theme, onTheme }: DayProps) {
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
     // Inside the submit gesture, which is where a permission prompt is allowed.
-    void scheduleReminder(row, now)
+    // A blocked reminder has to say so: silence here is why nothing fired.
+    void scheduleReminder(row, now).then((result) => {
+      if (result === 'blocked') {
+        setToast({
+          text: 'Saved, but reminders are blocked',
+          action: { label: 'Fix', run: () => setProfileOpen(true) },
+        })
+      }
+    })
     const elsewhere = row.occurred_on !== day
     const text = elsewhere
       ? `Saved to ${relativeDay(row.occurred_on, now)}`
