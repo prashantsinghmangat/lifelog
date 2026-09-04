@@ -15,8 +15,9 @@ import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { download, shareOrDownload } from './lib/deliver'
-import { dayKey, dayLabel, minutes, relativeDay, rupees } from './lib/format'
+import { clock, dayKey, dayLabel, minutes, relativeDay, rupees } from './lib/format'
 import { forCalendar, toIcs } from './lib/ics'
+import { isNative } from './lib/platform'
 import { cancel as cancelReminder, schedule as scheduleReminder, sync } from './lib/reminders'
 import { supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
@@ -129,31 +130,39 @@ function Day({ email, theme, onTheme }: DayProps) {
 
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
+    const elsewhere = row.occurred_on !== day
+    const where = relativeDay(row.occurred_on, now)
+
+    // The calendar is only offered where the app cannot do it itself. Natively
+    // the reminder is already scheduled, so pushing the calendar as well would
+    // be asking for a step the app just took.
+    const calendar =
+      !isNative() && row.kind === 'event'
+        ? { label: 'Add to calendar', run: () => void addToCalendar([row], 'lifelog-event.ics') }
+        : undefined
+
+    setToast({
+      text: elsewhere
+        ? `Saved to ${where}`
+        : `Added ${[row.title, value(row)].filter(Boolean).join(' · ')}`,
+      action:
+        calendar ??
+        (elsewhere ? { label: 'View', run: () => setDay(row.occurred_on) } : undefined),
+    })
+
     // Inside the submit gesture, which is where a permission prompt is allowed.
     // A blocked reminder has to say so: silence here is why nothing fired.
     void scheduleReminder(row, now).then((result) => {
-      if (result === 'blocked') {
+      if (result === 'scheduled') {
+        const at = row.occurred_at === null ? `9am ${where}` : clock(row.occurred_at)
+        setToast({ text: `Reminder set for ${at}` })
+      } else if (result === 'blocked') {
         setToast({
           text: 'Saved, but reminders are blocked',
           action: { label: 'Fix', run: () => setProfileOpen(true) },
         })
       }
     })
-    const elsewhere = row.occurred_on !== day
-    const text = elsewhere
-      ? `Saved to ${relativeDay(row.occurred_on, now)}`
-      : `Added ${[row.title, value(row)].filter(Boolean).join(' · ')}`
-
-    // An event's reminder belongs in the calendar, so offer that above all else.
-    // Otherwise the only thing worth saying is where an off-day entry went.
-    const action =
-      row.kind === 'event'
-        ? { label: 'Add to calendar', run: () => void addToCalendar([row], 'lifelog-event.ics') }
-        : elsewhere
-          ? { label: 'View', run: () => setDay(row.occurred_on) }
-          : undefined
-
-    setToast({ text, action })
   }
 
   function deleteRow(row: Row) {
