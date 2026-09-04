@@ -195,6 +195,13 @@ function Day({ email, theme, onTheme }: DayProps) {
         setToast({ text: 'Saved, but reminders are blocked' })
       }
     })
+      // Without this the promise rejects into nothing: a plugin that throws
+      // looked exactly like a reminder that worked.
+      .catch((failure: unknown) => {
+        setToast({
+          text: `Reminder failed: ${failure instanceof Error ? failure.message : String(failure)}`,
+        })
+      })
   }
 
   function deleteRow(row: Row) {

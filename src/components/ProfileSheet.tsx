@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Sheet } from './Sheet'
 import { isNative } from '../lib/platform'
-import { permission, requestPermission } from '../lib/reminders'
+import { permission, requestPermission, test as testReminder } from '../lib/reminders'
 import { supabase } from '../lib/supabase'
 import type { Theme } from '../hooks/useTheme'
 
@@ -104,7 +104,18 @@ export function ProfileSheet({
         <>
           <p className="mt-5 mb-2 text-xs text-muted">Reminders</p>
           {reminders === 'granted' ? (
-            <p className="text-sm text-time">Notifications allowed.</p>
+            <>
+              <button
+                type="button"
+                onClick={() => void testReminder().then(setNote)}
+                className="h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink"
+              >
+                Send a test reminder
+              </button>
+              <p className="mt-1.5 text-xs text-faint">
+                Arrives in ten seconds. If it does not, the message here says why.
+              </p>
+            </>
           ) : (
             <>
               <button
