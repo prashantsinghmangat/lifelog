@@ -9,6 +9,11 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Registered from main.tsx instead of an injected script, because it must
+      // not happen inside the native shell: there the worker caches the app
+      // shell and then serves it in place of the freshly installed assets, so
+      // every update silently fails to arrive.
+      injectRegister: null,
       manifest: {
         name: 'lifelog',
         short_name: 'lifelog',
