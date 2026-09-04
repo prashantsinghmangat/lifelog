@@ -11,6 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "android": "npm run build && cap sync android",
+    "android:install": "npm run android && node scripts/gradle.mjs installDebug",
+    "android:apk": "npm run android && node scripts/gradle.mjs assembleDebug",
     "android:open": "cap open android"
   },
   "dependencies": {
