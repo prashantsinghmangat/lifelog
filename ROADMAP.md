@@ -95,17 +95,17 @@ are all easy to mistake for validation. They are not. The only measure that matt
 > **When something happens, do I instinctively open lifelog to record it?**
 
 **1. A component harness.** ~~Done.~~ `@testing-library/react` and `jsdom`, journeys rather than
-coverage. Remaining: the reminder outcome and the delete-undo toast, which live in `App` and need
-it mounted with a mocked session.
+coverage.
 
 - ✅ quick add → submit, from Enter and from the button
 - ✅ `?` question → answer appears, and does *not* become an entry
 - ✅ prefill from the manual → box, edited before saving
 - ✅ edit → save, including the time and the kind
-- ⬜ reminder created → outcome reported
-- ⬜ delete → undo → restored, *through the toast*
-- ✅ failed write → retry (at the hook)
-- ⬜ dictation → preview → submit
+- ✅ reminder created → outcome reported, blocked or scheduled
+- ✅ delete → undo → restored, *through the toast*
+- ✅ failed write → retry
+- ⬜ dictation → preview → submit, which jsdom cannot exercise: the Web Speech
+  API does not exist there, and the mic is correctly hidden as a result
 
 **2. `useEntries` tests.** ~~Done.~~ Eleven, covering the transitions rather than the rendering:
 
