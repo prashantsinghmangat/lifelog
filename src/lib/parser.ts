@@ -210,6 +210,9 @@ function takeRelative(input: string, now: Date): Cut<Date> | null {
   )
 }
 
+/** Words that make an entry an anniversary, whatever year its date falls in. */
+const RECURRING = /\b(bdays?|birthdays?|anniversary|anniversaries)\b/i
+
 const AMOUNT = '(\\d[\\d,]*(?:\\.\\d{1,2})?)'
 
 function takeAmount(input: string, currencyOnly: boolean): Cut<number> | null {
@@ -301,6 +304,15 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     at.setHours(time.value.hours, time.value.minutes, 0, 0)
   }
 
+  // A birthday is recurring by its nature, so this year's date having passed
+  // does not make it a note. Without this, "deepak birthday 13 feb" typed in
+  // September becomes a note, gets no yearly rule, and can never answer the
+  // question it exists for: when is it next.
+  // Only with a date: an anniversary needs a day to recur on, and without one
+  // "birthday ideas for riya" is a note about planning, not an event.
+  const recurring = RECURRING.test(rest)
+  if (!kind && recurring && date !== null) kind = 'event'
+
   // You cannot have already spent money tomorrow, nor done something at 8:15pm
   // while it is 8:10pm — so anything still ahead is an event. The clock half of
   // this is what lets `ping 8:15pm` work without a leading `+`.
@@ -333,9 +345,7 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     }
   }
 
-  if (resolved === 'event' && /\b(bday|birthday|anniversary)\b/i.test(title)) {
-    entry.data.rrule = 'FREQ=YEARLY'
-  }
+  if (resolved === 'event' && recurring) entry.data.rrule = 'FREQ=YEARLY'
 
   return entry
 }

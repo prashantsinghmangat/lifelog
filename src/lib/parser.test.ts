@@ -234,6 +234,40 @@ describe('events', () => {
     expect(r?.data.rrule).toBe('FREQ=YEARLY')
   })
 
+  it('makes a birthday an event even when this year has already passed', () => {
+    // NOW is September; 13 Feb has gone. A birthday is recurring by nature, so
+    // it must not be demoted to a note, or it can never answer "when is it".
+    const r = p('deepak birthday 13 feb')
+    expect(r?.kind).toBe('event')
+    expect(r?.occurredOn).toBe('2026-02-13')
+    expect(r?.data.rrule).toBe('FREQ=YEARLY')
+    expect(r?.title).toBe('deepak birthday')
+  })
+
+  it('needs a date, so a thought about a birthday stays a note', () => {
+    const r = p('birthday ideas for riya')
+    expect(r?.kind).toBe('note')
+    expect(r?.data.rrule).toBeUndefined()
+  })
+
+  it('does the same for bday and anniversary', () => {
+    expect(p('kiran bday 2 march')?.data.rrule).toBe('FREQ=YEARLY')
+    expect(p('our anniversary 10 jan')?.kind).toBe('event')
+  })
+
+  it('still lets money win over recurrence', () => {
+    // A present bought for a birthday is an expense, not an anniversary.
+    const r = p('500 birthday gift')
+    expect(r?.kind).toBe('expense')
+    expect(r?.data.rrule).toBeUndefined()
+  })
+
+  it('still lets a duration win over recurrence', () => {
+    const r = p('2h birthday party setup')
+    expect(r?.kind).toBe('time')
+    expect(r?.data.rrule).toBeUndefined()
+  })
+
   it('flags anniversaries as yearly', () => {
     const r = p('anniversary 20 dec')
     expect(r?.kind).toBe('event')
