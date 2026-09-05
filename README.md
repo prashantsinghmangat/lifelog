@@ -324,6 +324,30 @@ the manifest and Gradle config that the app actually needs.
 Nothing about the web target changed: `@capacitor/core` only reaches the browser bundle if
 application code imports it, and the shell alone imports nothing.
 
+## Asking
+
+A leading `?` turns the same box into a question, the way a leading `+` forces an event. The
+answer appears in the preview line **as you type** — nothing to submit, no screen to leave.
+
+```
+? gym                                  14 entries · 11 days · 12h · last today
+? how many days gym                    11 days · 12h · last today
+? how many days deepak kiran store     6 days · ₹1,240 · last yesterday
+? how much on swiggy last month        ₹3,480 · 9 entries · last 28 Aug
+? hours worked this week               18h 30m · 12 entries
+```
+
+Every term must match, so `deepak kiran store` will not answer for a different Deepak. Titles,
+categories and kinds are all searched. Periods understood: `today`, `yesterday`, `this week`,
+`last week`, `this month`, `last month`, `this year`, `last N days`, `last N months`, and a bare
+month name, which means the most recent one already begun.
+
+A question the grammar does not recognise still answers with counts rather than an apology, and
+`?` on its own summarises everything.
+
+No AI is involved — it is arithmetic over rows, which is why the answers can be tested exactly
+([`query.test.ts`](src/lib/query.test.ts)).
+
 ## Reminders
 
 **In the Android app**, lifelog raises its own notification, scheduled on the device: no server,

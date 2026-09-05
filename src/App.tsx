@@ -1,5 +1,5 @@
 import { addDays, parseISO, subDays } from 'date-fns'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
@@ -27,6 +27,7 @@ import {
 } from './lib/reminders'
 import { supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
+import type { Entry } from './types'
 
 export default function App() {
   const { session, loading } = useSession()
@@ -53,6 +54,10 @@ function Day({ email, theme, onTheme }: DayProps) {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [notify, setNotify] = useState<'granted' | 'denied' | 'unavailable' | null>(null)
+  // Every entry, fetched only once a question is actually asked, and dropped
+  // whenever the log changes so an answer is never quietly out of date.
+  const [corpus, setCorpus] = useState<Entry[] | null>(null)
+  const loading_ = useRef(false)
   const {
     entries,
     failedElsewhere,
@@ -82,6 +87,17 @@ function Day({ email, theme, onTheme }: DayProps) {
       document.removeEventListener('visibilitychange', refresh)
     }
   }, [])
+
+  const loadCorpus = useCallback(() => {
+    if (corpus !== null || loading_.current) return
+    loading_.current = true
+    void fetchAll()
+      .then(setCorpus)
+      .catch(() => setCorpus([]))
+      .finally(() => {
+        loading_.current = false
+      })
+  }, [corpus, fetchAll])
 
   const goNext = useCallback(() => setDay((current) => dayKey(addDays(parseISO(current), 1))), [])
   const goPrevious = useCallback(
@@ -159,6 +175,9 @@ function Day({ email, theme, onTheme }: DayProps) {
 
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
+    // Answers are computed from a cached copy of the log, so a new entry has to
+    // invalidate it or the next question quietly ignores what was just added.
+    setCorpus(null)
     // The real clock, for the same reason QuickAdd re-parses against it: a
     // reminder compared with a stale `now` looks overdue and is dropped.
     const current = new Date()
@@ -327,6 +346,8 @@ function Day({ email, theme, onTheme }: DayProps) {
             now={now}
             showExamples={!loading && entries.length === 0}
             onSubmit={submit}
+            corpus={corpus}
+            onNeedCorpus={loadCorpus}
           />
         </div>
 

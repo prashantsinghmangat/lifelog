@@ -1,8 +1,10 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { ArrowUpIcon, MicIcon } from './Icons'
 import { useDictation } from '../hooks/useDictation'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, type ParsedEntry } from '../lib/parser'
+import { parseQuestion, phrase, summarise as summariseLog } from '../lib/query'
+import type { Entry } from '../types'
 
 const EXAMPLES = ['350 lunch swiggy', '2h client work', 'dentist tomorrow 5pm']
 
@@ -11,6 +13,9 @@ type Props = {
   now: Date
   showExamples: boolean
   onSubmit: (parsed: ParsedEntry) => void
+  /** Every entry, for answering questions. Null until asked for. */
+  corpus: Entry[] | null
+  onNeedCorpus: () => void
 }
 
 /** `expense · ₹350 · food · today` — the date token is dropped when it needs its own warning. */
@@ -24,16 +29,33 @@ function summarise(parsed: ParsedEntry, sameDay: boolean, now: Date): string {
   return bits.join(' · ')
 }
 
-export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
+export function QuickAdd({ day, now, showExamples, onSubmit, corpus, onNeedCorpus }: Props) {
   const [text, setText] = useState('')
   const dictation = useDictation(setText)
 
+  // A leading `?` asks rather than logs, the same way a leading `+` overrides
+  // the kind. Explicit, because guessing at questions would occasionally
+  // swallow an entry someone meant to keep.
+  const question = useMemo(() => parseQuestion(text, now), [text, now])
+
   // `day`, not today: an undated entry belongs to the day being viewed.
-  const parsed = useMemo(() => parse(text, now, day), [text, now, day])
+  const parsed = useMemo(() => (question ? null : parse(text, now, day)), [question, text, now, day])
   const sameDay = parsed === null || parsed.occurredOn === day
 
+  const asking = question !== null
+  useEffect(() => {
+    if (asking) onNeedCorpus()
+  }, [asking, onNeedCorpus])
+
+  const answer =
+    question === null
+      ? null
+      : corpus === null
+        ? '…'
+        : phrase(summariseLog(corpus, question), question, now)
+
   /** There is something worth saving, so the send button takes the mic's place. */
-  const ready = parsed !== null
+  const ready = parsed !== null && !asking
 
   function submit(event: FormEvent | KeyboardEvent) {
     event.preventDefault()
@@ -121,6 +143,9 @@ export function QuickAdd({ day, now, showExamples, onSubmit }: Props) {
           <span className="text-expense">{dictation.error}</span>
         ) : dictation.listening ? (
           <span className="text-expense">Listening…</span>
+        ) : answer !== null ? (
+          // The answer is the preview. Nothing to submit, nothing to dismiss.
+          <span className="text-ink">{answer}</span>
         ) : (
           parsed && (
             <span className="text-muted">
