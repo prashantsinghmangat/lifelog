@@ -1,4 +1,13 @@
-import { addDays, format, parseISO, startOfDay, subDays, subMonths, subYears } from 'date-fns'
+import {
+  addDays,
+  differenceInCalendarDays,
+  format,
+  parseISO,
+  startOfDay,
+  subDays,
+  subMonths,
+  subYears,
+} from 'date-fns'
 import { dayKey, minutes as durationText, rupees } from './format'
 import type { Entry } from '../types'
 
@@ -14,8 +23,8 @@ import type { Entry } from '../types'
  * instead of nothing.
  */
 
-/** Which number the question is really after. */
-export type Measure = 'days' | 'times' | 'money' | 'hours'
+/** Which answer the question is really after. */
+export type Measure = 'days' | 'times' | 'money' | 'hours' | 'when'
 
 export type Range = { from: string; to: string; label: string }
 
@@ -32,12 +41,40 @@ export type Summary = {
   minutes: number
   /** Most recent matching day, which is usually the thing worth knowing. */
   last: string | null
+  /** Soonest upcoming occurrence, which for an event is the whole answer. */
+  next: string | null
+}
+
+/**
+ * When an event happens next.
+ *
+ * A birthday logged on 13 February is in the past for most of the year, so the
+ * date on the row is the wrong answer — `data.rrule` makes it an anniversary,
+ * and the useful answer is the next one. Asking "when is Deepak's birthday" in
+ * September should say February, not report an entry from seven months ago.
+ */
+export function nextOccurrence(entry: Entry, now: Date): Date | null {
+  if (entry.kind !== 'event') return null
+
+  const on = parseISO(entry.occurred_on)
+  const today = startOfDay(now)
+
+  if (entry.data.rrule === 'FREQ=YEARLY') {
+    const thisYear = new Date(today.getFullYear(), on.getMonth(), on.getDate())
+    return thisYear >= today
+      ? thisYear
+      : new Date(today.getFullYear() + 1, on.getMonth(), on.getDate())
+  }
+
+  // A one-off that has passed has no next.
+  return on >= today ? on : null
 }
 
 /** Words that carry no subject: question scaffolding, and the measures themselves. */
 const NOISE = new Set([
   'how', 'many', 'much', 'often', 'total', 'count', 'number', 'of',
   'day', 'days', 'time', 'times', 'hour', 'hours', 'hrs',
+  'when', 'what', 'date', 'next', 'upcoming', 'due', 'coming',
   'did', 'do', 'does', 'have', 'has', 'had', 'was', 'were', 'is', 'are', 'am',
   'i', 'my', 'me', 'we', 'the', 'a', 'an', 'to', 'on', 'at', 'in', 'for', 'from',
   'spend', 'spent', 'spending', 'go', 'gone', 'went', 'visit', 'visited',
@@ -128,6 +165,8 @@ export function periodOf(text: string, now: Date): { range: Range | null; rest: 
 }
 
 function measureOf(text: string): Measure | null {
+  // Checked first: "when is the next gym session" is asking for a date, not a count.
+  if (/\bwhen\b|\bwhat\s+date\b|\bnext\b|\bupcoming\b|\bdue\b/i.test(text)) return 'when'
   if (/\bhow\s+many\s+days?\b|\bdays?\b/i.test(text)) return 'days'
   if (/\bhow\s+(?:many\s+)?(?:times|often)\b/i.test(text)) return 'times'
   if (/\bhow\s+much\b|\bspen[dt]\b|\btotal\b|\bcost\b/i.test(text)) return 'money'
@@ -164,7 +203,7 @@ function within(entry: Entry, period: Range | null): boolean {
   return entry.occurred_on >= period.from && entry.occurred_on <= period.to
 }
 
-export function summarise(entries: Entry[], question: Question): Summary {
+export function summarise(entries: Entry[], question: Question, now: Date): Summary {
   const hits = entries.filter(
     (entry) => within(entry, question.range) && matches(entry, question.terms),
   )
@@ -174,7 +213,19 @@ export function summarise(entries: Entry[], question: Question): Summary {
   const mins = hits.reduce((total, entry) => total + (entry.duration_minutes ?? 0), 0)
   const last = [...days].sort().pop() ?? null
 
-  return { entries: hits.length, days: days.size, paise, minutes: mins, last }
+  const upcoming = hits
+    .map((entry) => nextOccurrence(entry, now))
+    .filter((at): at is Date => at !== null)
+    .sort((a, b) => a.getTime() - b.getTime())
+
+  return {
+    entries: hits.length,
+    days: days.size,
+    paise,
+    minutes: mins,
+    last,
+    next: upcoming[0] === undefined ? null : dayKey(upcoming[0]),
+  }
 }
 
 /**
@@ -187,6 +238,18 @@ export function phrase(summary: Summary, question: Question, now: Date): string 
 
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
   const parts: string[] = []
+
+  // A date beats a tally. If something is coming up, that is the answer —
+  // whether or not the question remembered to say "when".
+  if (summary.next !== null && (question.measure === 'when' || question.measure === null)) {
+    const at = parseISO(summary.next)
+    const away = differenceInCalendarDays(at, startOfDay(now))
+    const soon = away === 0 ? 'today' : away === 1 ? 'tomorrow' : `in ${away} days`
+    const shown = at.getFullYear() === now.getFullYear() ? 'EEEE d MMMM' : 'EEEE d MMMM yyyy'
+    return `${format(at, shown)} · ${soon}`
+  }
+
+  if (question.measure === 'when') return 'nothing upcoming'
 
   const money = summary.paise > 0 ? rupees(summary.paise) : null
   const time = summary.minutes > 0 ? durationText(summary.minutes) : null

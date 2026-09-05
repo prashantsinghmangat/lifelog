@@ -58,6 +58,7 @@ const SECTIONS: Section[] = [
     title: 'Asking',
     note: 'A leading ? asks instead of logging. The answer appears as you type.',
     examples: [
+      { text: '? when is deepak birthday', does: 'the next date, and how far away' },
       { text: '? gym', does: 'everything about the gym' },
       { text: '? how many days gym', does: 'days rather than entries' },
       { text: '? how much on swiggy last month', does: 'a total for a period' },

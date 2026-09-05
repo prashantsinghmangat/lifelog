@@ -330,6 +330,7 @@ A leading `?` turns the same box into a question, the way a leading `+` forces a
 answer appears in the preview line **as you type** — nothing to submit, no screen to leave.
 
 ```
+? when is deepak birthday              Saturday 13 February 2027 · in 161 days
 ? gym                                  14 entries · 11 days · 12h · last today
 ? how many days gym                    11 days · 12h · last today
 ? how many days deepak kiran store     6 days · ₹1,240 · last yesterday
@@ -341,6 +342,11 @@ Every term must match, so `deepak kiran store` will not answer for a different D
 categories and kinds are all searched. Periods understood: `today`, `yesterday`, `this week`,
 `last week`, `this month`, `last month`, `this year`, `last N days`, `last N months`, and a bare
 month name, which means the most recent one already begun.
+
+**Anything upcoming answers with a date rather than a tally**, whether or not the question
+remembered to say "when". A birthday carries `FREQ=YEARLY`, so one logged on 13 February answers
+with next February once this one has passed — the date on the row would be the wrong answer for
+most of the year.
 
 A question the grammar does not recognise still answers with counts rather than an apology, and
 `?` on its own summarises everything.

@@ -97,7 +97,8 @@ describe('periods', () => {
 })
 
 describe('counting', () => {
-  const of = (text: string) => summarise(LOG, ask(text) ?? { terms: [], range: null, measure: null })
+  const of = (text: string) =>
+    summarise(LOG, ask(text) ?? { terms: [], range: null, measure: null }, NOW)
 
   it('counts distinct days, not entries', () => {
     // Four gym entries, but two of them fall on the same day.
@@ -136,11 +137,84 @@ describe('counting', () => {
   })
 })
 
+describe('when something happens next', () => {
+  const BIRTHDAYS: Entry[] = [
+    // Logged for 13 February, which is seven months in the past right now.
+    entry({
+      occurred_on: '2026-02-13',
+      title: 'deepak birthday',
+      kind: 'event',
+      data: { rrule: 'FREQ=YEARLY' },
+    }),
+    entry({
+      occurred_on: '2026-11-14',
+      title: 'riya birthday',
+      kind: 'event',
+      data: { rrule: 'FREQ=YEARLY' },
+    }),
+    entry({ occurred_on: '2026-09-20', title: 'dentist', kind: 'event' }),
+    entry({ occurred_on: '2026-07-01', title: 'old standup', kind: 'event' }),
+  ]
+
+  const say = (text: string) => {
+    const question = ask(text)
+    if (question === null) return 'not a question'
+    return phrase(summarise(BIRTHDAYS, question, NOW), question, NOW)
+  }
+
+  it('answers "when is X birthday" with a date, not a tally', () => {
+    // The bug: "when" was treated as a search term and matched nothing.
+    const answer = say('? when is deepak birthday')
+    expect(answer).toContain('13 February')
+    expect(answer).not.toContain('entries')
+  })
+
+  it('rolls a past anniversary forward to the next one', () => {
+    // February 2026 has gone, so the answer is February 2027 and says the year.
+    expect(say('? when is deepak birthday')).toContain('2027')
+  })
+
+  it('keeps this year when the date has not passed', () => {
+    const answer = say('? when is riya birthday')
+    expect(answer).toContain('14 November')
+    expect(answer).not.toContain('2027')
+  })
+
+  it('says how far away it is', () => {
+    expect(say('? when is riya birthday')).toMatch(/in \d+ days/)
+  })
+
+  it('leads with the date even when the question forgot to ask "when"', () => {
+    expect(say('? deepak birthday')).toContain('February')
+  })
+
+  it('names the weekday, which is what a birthday is actually planned around', () => {
+    expect(say('? when is riya birthday')).toContain('Saturday')
+  })
+
+  it('does not resurrect a one-off event that has passed', () => {
+    expect(say('? when is old standup')).toBe('nothing upcoming')
+  })
+
+  it('uses a future one-off as it stands', () => {
+    expect(say('? when is dentist')).toContain('20 September')
+  })
+
+  it('picks the soonest when several match', () => {
+    // Both birthdays match "birthday"; November comes before next February.
+    expect(say('? when is birthday')).toContain('November')
+  })
+
+  it('still counts when asked to count', () => {
+    expect(say('? how many times birthday')).toContain('2 times')
+  })
+})
+
 describe('phrasing', () => {
   const say = (text: string) => {
     const question = ask(text)
     if (question === null) return 'not a question'
-    return phrase(summarise(LOG, question), question, NOW)
+    return phrase(summarise(LOG, question, NOW), question, NOW)
   }
 
   it('leads with what was asked for', () => {

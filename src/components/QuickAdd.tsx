@@ -75,7 +75,7 @@ export function QuickAdd({
       ? null
       : corpus === null
         ? '…'
-        : phrase(summariseLog(corpus, question), question, now)
+        : phrase(summariseLog(corpus, question, now), question, now)
 
   /** There is something worth saving, so the send button takes the mic's place. */
   const ready = parsed !== null && !asking
