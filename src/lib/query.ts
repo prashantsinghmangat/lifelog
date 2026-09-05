@@ -1,5 +1,4 @@
 import {
-  addDays,
   differenceInCalendarDays,
   format,
   parseISO,
@@ -287,9 +286,3 @@ export function phrase(summary: Summary, question: Question, now: Date): string 
   return parts.join(' · ')
 }
 
-/** The window a question needs loaded, so a query does not fetch the whole log. */
-export function windowFor(question: Question, now: Date): { from: string; to: string } {
-  if (question.range !== null) return { from: question.range.from, to: question.range.to }
-  // No period named means all of it; a year back covers any realistic answer.
-  return { from: dayKey(subYears(startOfDay(now), 5)), to: dayKey(addDays(startOfDay(now), 365)) }
-}

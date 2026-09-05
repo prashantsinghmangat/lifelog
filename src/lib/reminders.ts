@@ -116,40 +116,6 @@ export async function schedule(entry: Entry, now: Date): Promise<ScheduleResult>
   return 'scheduled'
 }
 
-/**
- * Fires a notification ten seconds out and says what happened, including the
- * plugin's own error text. Exists because a reminder that does not arrive gives
- * no clue whether the parser, the permission or the plugin is at fault, and
- * waiting minutes per attempt to find out is not a diagnosis.
- */
-export async function test(): Promise<string> {
-  // Everything is inside the try, including the import: a module that fails to
-  // load must produce a message rather than a rejected promise nobody reads.
-  try {
-    const found = await plugin()
-    if (!found) return 'Only available in the app, not the browser.'
-
-    const state = await permission()
-    if (state !== 'granted' && !(await requestPermission())) {
-      return 'Notifications are blocked for this app.'
-    }
-
-    await found.api.schedule({
-      notifications: [
-        {
-          id: 999_999,
-          title: 'lifelog test',
-          body: 'Reminders are working.',
-          schedule: { at: new Date(Date.now() + 10_000), allowWhileIdle: true },
-        },
-      ],
-    })
-    return 'Scheduled. It should arrive in ten seconds.'
-  } catch (failure) {
-    return `Failed: ${failure instanceof Error ? failure.message : String(failure)}`
-  }
-}
-
 export async function cancel(entry: Entry): Promise<void> {
   const found = await plugin()
   if (!found) return

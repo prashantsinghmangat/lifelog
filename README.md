@@ -371,8 +371,7 @@ launch, so an event logged on the web still fires on the phone.
 
 Android grants notification permission per install, so a reinstall revokes it; the app asks again
 above the timeline. **Allow "Alarms and reminders"** too (Settings → Apps → lifelog), or Android
-downgrades the alarm to inexact and it can land minutes late. The profile sheet has a test
-reminder that fires in ten seconds and reports its own outcome.
+downgrades the alarm to inexact and it can land minutes late.
 
 **On the web** none of this is possible — no shipped API raises a notification while the app is
 closed — so the calendar takes over instead.
