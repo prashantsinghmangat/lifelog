@@ -94,28 +94,31 @@ are all easy to mistake for validation. They are not. The only measure that matt
 
 > **When something happens, do I instinctively open lifelog to record it?**
 
-**1. A component harness.** `@testing-library/react` and `jsdom` — devDependencies, no bundle
-cost. Not generic coverage: **user journeys where something can silently go wrong**, which is
-precisely the failure mode every recent bug had.
+**1. A component harness.** ~~Done.~~ `@testing-library/react` and `jsdom`, journeys rather than
+coverage. Remaining: the reminder outcome and the delete-undo toast, which live in `App` and need
+it mounted with a mocked session.
 
-- quick add → submit
-- `?` question → answer appears, and does *not* become an entry
-- prefill from the manual → box, edited before saving
-- reminder created → outcome reported
-- edit → save, with the reminder moving too
-- delete → undo → restored
-- failed write → retry
-- dictation → preview → submit
+- ✅ quick add → submit, from Enter and from the button
+- ✅ `?` question → answer appears, and does *not* become an entry
+- ✅ prefill from the manual → box, edited before saving
+- ✅ edit → save, including the time and the kind
+- ⬜ reminder created → outcome reported
+- ⬜ delete → undo → restored, *through the toast*
+- ✅ failed write → retry (at the hook)
+- ⬜ dictation → preview → submit
 
-**2. `useEntries` tests.** The transitions, not the rendering:
+**2. `useEntries` tests.** ~~Done.~~ Eleven, covering the transitions rather than the rendering:
 
 ```
-optimistic insert → server ok      → row kept
-optimistic insert → server fails   → flagged, retry replays it
+optimistic insert → server ok      → row kept, flag cleared
+optimistic insert → server fails   → flagged not removed, retry replays it
 refetch            → server rows merged with unresolved optimistic ones
-delete             → soft delete, never DELETE
+delete             → soft delete, and back if the write fails
 delete → undo      → restored
+off-day failure    → surfaced, since the timeline cannot show it
 ```
+
+The Supabase fake has no `delete` method at all, so a hard delete would throw rather than pass.
 
 **3. iPhone.** Before any substantial feature. Safari *and* standalone, ~375px, keyboard open:
 open → capture → keyboard → save → timeline. Then the entry sheet with the keyboard up, swipe
