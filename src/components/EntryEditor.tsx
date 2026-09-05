@@ -1,11 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Sheet } from './Sheet'
-import { clock, dayLabel, paiseFrom, withDay } from '../lib/format'
+import { atTime, paiseFrom, timeValue } from '../lib/format'
 import type { Patch, Row } from '../hooks/useEntries'
 
 type Props = {
   row: Row
-  now: Date
   onSave: (patch: Patch) => void
   onDelete: () => void
   onAddToCalendar: () => void
@@ -36,9 +35,10 @@ function rupeeText(paise: number | null): string {
  * an Edit button — opening the entry is already the tap that says "I want to
  * change this", so a second one earns nothing.
  */
-export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClose }: Props) {
+export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }: Props) {
   const [title, setTitle] = useState(row.title)
   const [day, setDay] = useState(row.occurred_on)
+  const [time, setTime] = useState(row.occurred_at === null ? '' : timeValue(row.occurred_at))
   const [amount, setAmount] = useState(rupeeText(row.amount_paise))
   const [duration, setDuration] = useState(
     row.duration_minutes === null ? '' : String(row.duration_minutes),
@@ -52,9 +52,12 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
     const trimmed = title.trim()
     if (!trimmed) return
 
-    const patch: Patch = { title: trimmed, occurred_on: day }
-    if (row.occurred_at !== null && day !== row.occurred_on) {
-      patch.occurred_at = withDay(row.occurred_at, day)
+    // Rebuilt from both fields every time, so editing either one is enough and
+    // clearing the time turns a reminder back into an all-day entry.
+    const patch: Patch = {
+      title: trimmed,
+      occurred_on: day,
+      occurred_at: time === '' ? null : atTime(day, time),
     }
     if (showAmount) patch.amount_paise = paiseFrom(amount)
     if (showDuration) {
@@ -64,17 +67,14 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
     onSave(patch)
   }
 
-  const context = [
-    dayLabel(row.occurred_on, now),
-    row.occurred_at === null ? null : clock(row.occurred_at),
-    row.category,
-  ].filter((bit): bit is string => bit !== null && bit !== '')
+  // The date and time are editable below, so repeating them here would be noise.
+  const context = [row.category].filter((bit): bit is string => bit !== null && bit !== '')
 
   return (
     <Sheet label={`Edit ${row.title}`} onClose={onClose}>
       <form onSubmit={save}>
         <p className={`text-xs font-medium ${KIND_TINT[row.kind]}`}>{KIND_NAME[row.kind]}</p>
-        <p className="mt-0.5 text-xs text-faint">{context.join(' · ')}</p>
+        {context.length > 0 && <p className="mt-0.5 text-xs text-faint">{context.join(' · ')}</p>}
 
         <div className="mt-4">
           <label className={LABEL} htmlFor="entry-title">
@@ -89,7 +89,9 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
           />
         </div>
 
-        <div className="mt-3 flex gap-3">
+        {/* Two per row: date and time, then amount or minutes. Four abreast is
+            unusable at 375px. */}
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <div className="min-w-0 flex-1">
             <label className={LABEL} htmlFor="entry-date">
               Date
@@ -101,6 +103,21 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
               onChange={(event) => {
                 if (event.target.value) setDay(event.target.value)
               }}
+              className={FIELD}
+            />
+          </div>
+
+          {/* For a reminder the time is the entry. Leaving it blank makes the
+              entry all-day, which for an event means it alarms at 9am. */}
+          <div className="min-w-0 flex-1">
+            <label className={LABEL} htmlFor="entry-time">
+              Time
+            </label>
+            <input
+              id="entry-time"
+              type="time"
+              value={time}
+              onChange={(event) => setTime(event.target.value)}
               className={FIELD}
             />
           </div>

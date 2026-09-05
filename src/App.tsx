@@ -423,7 +423,6 @@ function Day({ email, theme, onTheme }: DayProps) {
       {editing !== null && (
         <EntryEditor
           row={editing}
-          now={now}
           onSave={(patch) => {
             update(editing, patch)
             // Re-arm against the edited values, or the old time still fires.

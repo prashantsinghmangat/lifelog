@@ -38,12 +38,27 @@ export function dayKey(date: Date): string {
   return format(date, 'yyyy-MM-dd')
 }
 
-/** Keep a timestamp's clock time but move it onto `day`, for when an entry is re-dated. */
-export function withDay(iso: string, day: string): string {
-  const at = parseISO(iso)
-  const moved = parseISO(day)
-  moved.setHours(at.getHours(), at.getMinutes(), 0, 0)
-  return format(moved, "yyyy-MM-dd'T'HH:mm:ssXXX")
+/** ISO timestamp → `HH:mm`, the value a native time input wants. */
+export function timeValue(iso: string): string {
+  return format(parseISO(iso), 'HH:mm')
+}
+
+/**
+ * `yyyy-MM-dd` plus `HH:mm` → an ISO timestamp with offset.
+ *
+ * Both halves are rebuilt together whenever either is edited, rather than
+ * shifting the old timestamp onto a new day: a reminder whose date moved but
+ * whose clock did not is the kind of thing that fires at the wrong moment and
+ * looks like the app forgot.
+ */
+export function atTime(day: string, time: string): string | null {
+  const [hours, minutes] = time.split(':').map(Number)
+  if (hours === undefined || minutes === undefined) return null
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
+
+  const at = parseISO(day)
+  at.setHours(hours, minutes, 0, 0)
+  return format(at, "yyyy-MM-dd'T'HH:mm:ssXXX")
 }
 
 /** Header label: "Today", otherwise "Sat, 30 Aug". */
