@@ -407,9 +407,13 @@ rows and a backup that silently truncates is the worst kind.
 
 | Variable | Value |
 | --- | --- |
-| `SUPABASE_URL` | the project URL, same as the client's |
 | `SUPABASE_SERVICE_ROLE_KEY` | Project Settings → API → `service_role` |
-| `BACKUP_TOKEN` | any long random string you invent |
+| `BACKUP_TOKEN` | a long random string you invent |
+| `SUPABASE_URL` | optional — falls back to `VITE_SUPABASE_URL`, which is already set for the build |
+
+Make `BACKUP_TOKEN` URL-safe. A base64 token containing `+` breaks when passed in a query
+string, because `+` decodes as a space and the comparison then fails for no visible reason. Hex,
+or base64 with `+` and `/` swapped out, avoids the trap.
 
 ⚠️ The **service_role key bypasses RLS entirely**. It belongs only here, in a server-side
 environment variable — never in `.env.local`, never in anything with a `VITE_` prefix, since

@@ -47,12 +47,21 @@ async function everyRow(url: string, key: string): Promise<Row[]> {
 }
 
 export async function runBackup(now: Date): Promise<BackupResult> {
-  const url = process.env['SUPABASE_URL']
+  // The project URL is not a secret — it ships inside the client bundle — so
+  // the client's own variable is an acceptable fallback, and one fewer thing to
+  // configure twice. The service-role key gets no such fallback: a VITE_ prefix
+  // would inline it into the browser bundle, which is exactly the disaster to
+  // avoid.
+  const url = process.env['SUPABASE_URL'] ?? process.env['VITE_SUPABASE_URL']
   const key = process.env['SUPABASE_SERVICE_ROLE_KEY']
 
   // Loudly, not silently: a backup that quietly does nothing is worse than none.
-  if (url === undefined || url === '') throw new Error('SUPABASE_URL is not set')
-  if (key === undefined || key === '') throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set')
+  if (url === undefined || url === '') {
+    throw new Error('Set SUPABASE_URL (or VITE_SUPABASE_URL) in the site environment')
+  }
+  if (key === undefined || key === '') {
+    throw new Error('Set SUPABASE_SERVICE_ROLE_KEY in the site environment, then redeploy')
+  }
 
   const rows = await everyRow(url, key)
   const store = getStore('backups')
