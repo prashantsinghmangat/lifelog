@@ -1,4 +1,5 @@
-import { isNative } from './platform'
+﻿import { isNative } from './platform'
+import type { LocalNotificationsPlugin } from '@capacitor/local-notifications'
 import type { Entry } from '../types'
 
 /**
@@ -14,13 +15,22 @@ import type { Entry } from '../types'
  * browser bundle, and this module stays importable under vitest.
  */
 
-/** An all-day event has no clock time, so it alarms at 9am — as the .ics does. */
+/** An all-day event has no clock time, so it alarms at 9am, as the .ics does. */
 const ALL_DAY_HOUR = 9
 
-async function plugin() {
+/**
+ * Returns the plugin **inside a wrapper**, which is not decoration.
+ *
+ * Returning it bare from an async function rejects every call with
+ * `"LocalNotifications.then()" is not implemented on android`: resolving an
+ * async return value reads `.then` to test whether it is thenable, and
+ * Capacitor's proxy forwards any property access to native as a method call.
+ * So the mere act of returning it invented a native method named `then`.
+ */
+async function plugin(): Promise<{ api: LocalNotificationsPlugin } | null> {
   if (!isNative()) return null
   const { LocalNotifications } = await import('@capacitor/local-notifications')
-  return LocalNotifications
+  return { api: LocalNotifications }
 }
 
 /**
@@ -34,14 +44,14 @@ export type ScheduleResult = 'scheduled' | 'blocked' | 'skipped'
  * Grant state without asking, for launch-time work that has no user gesture.
  *
  * Never rejects. A rejection here left the state unknown, which the UI then
- * rendered as "not granted" — so a plugin that failed to load looked exactly
+ * rendered as "not granted", so a plugin that failed to load looked exactly
  * like a permission the user had refused.
  */
 export async function permission(): Promise<'granted' | 'denied' | 'unavailable'> {
   try {
-    const api = await plugin()
-    if (!api) return 'unavailable'
-    const current = await api.checkPermissions()
+    const found = await plugin()
+    if (!found) return 'unavailable'
+    const current = await found.api.checkPermissions()
     return current.display === 'granted' ? 'granted' : 'denied'
   } catch {
     return 'unavailable'
@@ -50,9 +60,9 @@ export async function permission(): Promise<'granted' | 'denied' | 'unavailable'
 
 /** Asks. Only call this from something the user just did. */
 export async function requestPermission(): Promise<boolean> {
-  const api = await plugin()
-  if (!api) return false
-  const asked = await api.requestPermissions()
+  const found = await plugin()
+  if (!found) return false
+  const asked = await found.api.requestPermissions()
   return asked.display === 'granted'
 }
 
@@ -80,8 +90,8 @@ export function fireAt(entry: Entry): Date | null {
 }
 
 export async function schedule(entry: Entry, now: Date): Promise<ScheduleResult> {
-  const api = await plugin()
-  if (!api) return 'skipped'
+  const found = await plugin()
+  if (!found) return 'skipped'
 
   const at = fireAt(entry)
   if (at === null || at.getTime() <= now.getTime()) return 'skipped'
@@ -91,7 +101,7 @@ export async function schedule(entry: Entry, now: Date): Promise<ScheduleResult>
   const state = await permission()
   if (state !== 'granted' && !(await requestPermission())) return 'blocked'
 
-  await api.schedule({
+  await found.api.schedule({
     notifications: [
       {
         id: notificationId(entry.id),
@@ -116,15 +126,15 @@ export async function test(): Promise<string> {
   // Everything is inside the try, including the import: a module that fails to
   // load must produce a message rather than a rejected promise nobody reads.
   try {
-    const api = await plugin()
-    if (!api) return 'Only available in the app, not the browser.'
+    const found = await plugin()
+    if (!found) return 'Only available in the app, not the browser.'
 
     const state = await permission()
     if (state !== 'granted' && !(await requestPermission())) {
       return 'Notifications are blocked for this app.'
     }
 
-    await api.schedule({
+    await found.api.schedule({
       notifications: [
         {
           id: 999_999,
@@ -141,9 +151,9 @@ export async function test(): Promise<string> {
 }
 
 export async function cancel(entry: Entry): Promise<void> {
-  const api = await plugin()
-  if (!api) return
-  await api.cancel({ notifications: [{ id: notificationId(entry.id) }] })
+  const found = await plugin()
+  if (!found) return
+  await found.api.cancel({ notifications: [{ id: notificationId(entry.id) }] })
 }
 
 /**
@@ -151,8 +161,8 @@ export async function cancel(entry: Entry): Promise<void> {
  * never have a notification on the phone, and a reinstall would lose the lot.
  */
 export async function sync(entries: Entry[], now: Date): Promise<void> {
-  const api = await plugin()
-  if (!api) return
+  const found = await plugin()
+  if (!found) return
 
   const due = entries.filter((entry) => {
     const at = fireAt(entry)
@@ -163,7 +173,7 @@ export async function sync(entries: Entry[], now: Date): Promise<void> {
   // refusal, and Android stops offering it after two of those.
   if ((await permission()) !== 'granted') return
 
-  await api.schedule({
+  await found.api.schedule({
     notifications: due.map((entry) => ({
       id: notificationId(entry.id),
       title: entry.title,
