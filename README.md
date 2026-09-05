@@ -401,8 +401,18 @@ Getting the data back:
 That endpoint returns every row and bypasses RLS, which is why it is guarded by `BACKUP_TOKEN`
 and refuses to run at all when the variable is unset, rather than defaulting to open.
 
-Run it once by hand after deploying, from Netlify → Functions → `backup` → Run, rather than
-waiting a day to discover a missing variable.
+Run it once by hand after deploying, rather than waiting a day to discover a missing variable — a
+scheduled function cannot be invoked over HTTP, so there is a separate trigger:
+
+```
+/.netlify/functions/backup-run?token=…    → {"snapshot":"entries-2026-09-05.json","rows":42,"pruned":0}
+```
+
+It reports failures rather than swallowing them, which is the point: seeing `SUPABASE_SERVICE_ROLE_KEY
+is not set` immediately beats finding no snapshot tomorrow.
+
+Note that environment variables reach a deployed function only on the **next deploy**. Editing
+them and expecting the running function to notice is the usual first mistake.
 
 ## Bundle size
 
