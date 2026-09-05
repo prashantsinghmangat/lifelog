@@ -213,6 +213,14 @@ function takeRelative(input: string, now: Date): Cut<Date> | null {
 /** Words that make an entry an anniversary, whatever year its date falls in. */
 const RECURRING = /\b(bdays?|birthdays?|anniversary|anniversaries)\b/i
 
+/**
+ * Shared with the editor, so correcting a misparsed note into an event applies
+ * the same yearly rule the parser would have.
+ */
+export function recurringTitle(title: string): boolean {
+  return RECURRING.test(title)
+}
+
 const AMOUNT = '(\\d[\\d,]*(?:\\.\\d{1,2})?)'
 
 function takeAmount(input: string, currencyOnly: boolean): Cut<number> | null {

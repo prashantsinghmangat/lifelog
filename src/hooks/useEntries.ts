@@ -23,6 +23,7 @@ export type Patch = Partial<
     | 'duration_minutes'
     | 'category'
     | 'kind'
+    | 'data'
   >
 >
 
