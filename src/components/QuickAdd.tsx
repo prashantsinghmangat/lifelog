@@ -16,6 +16,10 @@ type Props = {
   /** Every entry, for answering questions. Null until asked for. */
   corpus: Entry[] | null
   onNeedCorpus: () => void
+  /** Text dropped in from elsewhere, such as an example tapped in the manual. */
+  prefill: string | null
+  onPrefilled: () => void
+  onHelp: () => void
 }
 
 /** `expense · ₹350 · food · today` — the date token is dropped when it needs its own warning. */
@@ -29,9 +33,28 @@ function summarise(parsed: ParsedEntry, sameDay: boolean, now: Date): string {
   return bits.join(' · ')
 }
 
-export function QuickAdd({ day, now, showExamples, onSubmit, corpus, onNeedCorpus }: Props) {
+export function QuickAdd({
+  day,
+  now,
+  showExamples,
+  onSubmit,
+  corpus,
+  onNeedCorpus,
+  prefill,
+  onPrefilled,
+  onHelp,
+}: Props) {
   const [text, setText] = useState('')
   const dictation = useDictation(setText)
+
+  // Filled rather than submitted, so an example from the manual can be read,
+  // edited and understood before it becomes an entry.
+  useEffect(() => {
+    if (prefill === null) return
+    setText(prefill)
+    onPrefilled()
+    document.getElementById('quick-add')?.focus()
+  }, [prefill, onPrefilled])
 
   // A leading `?` asks rather than logs, the same way a leading `+` overrides
   // the kind. Explicit, because guessing at questions would occasionally
@@ -178,6 +201,16 @@ export function QuickAdd({ day, now, showExamples, onSubmit, corpus, onNeedCorpu
               {example}
             </button>
           ))}
+
+          {/* The chips teach three things; the manual teaches the rest. Someone
+              new never opens a settings sheet to find out how to type. */}
+          <button
+            type="button"
+            onClick={onHelp}
+            className="rounded-full px-3 py-1 text-xs text-muted underline"
+          >
+            all examples
+          </button>
         </div>
       )}
     </form>

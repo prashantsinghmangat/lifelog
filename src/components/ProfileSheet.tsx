@@ -15,6 +15,7 @@ type Props = {
   email: string
   theme: Theme
   onTheme: (theme: Theme) => void
+  onHelp: () => void
   onExport: () => void
   onExportCalendar: () => void
   onSignOut: () => void
@@ -25,6 +26,7 @@ export function ProfileSheet({
   email,
   theme,
   onTheme,
+  onHelp,
   onExport,
   onExportCalendar,
   onSignOut,
@@ -79,6 +81,14 @@ export function ProfileSheet({
     <Sheet label="Profile and settings" onClose={onClose}>
       <p className="truncate text-sm font-medium">{email}</p>
       <p className="text-xs text-faint">Signed in</p>
+
+      <button
+        type="button"
+        onClick={onHelp}
+        className="mt-4 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink"
+      >
+        How to use lifelog
+      </button>
 
       <p className="mt-5 mb-2 text-xs text-muted" id="appearance">
         Appearance

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
+import { HelpSheet } from './components/HelpSheet'
 import { PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
@@ -53,6 +54,8 @@ function Day({ email, theme, onTheme }: DayProps) {
   const [toast, setToast] = useState<ToastState | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [prefill, setPrefill] = useState<string | null>(null)
   const [notify, setNotify] = useState<'granted' | 'denied' | 'unavailable' | null>(null)
   // Every entry, fetched only once a question is actually asked, and dropped
   // whenever the log changes so an answer is never quietly out of date.
@@ -348,6 +351,9 @@ function Day({ email, theme, onTheme }: DayProps) {
             onSubmit={submit}
             corpus={corpus}
             onNeedCorpus={loadCorpus}
+            prefill={prefill}
+            onPrefilled={() => setPrefill(null)}
+            onHelp={() => setHelpOpen(true)}
           />
         </div>
 
@@ -434,6 +440,10 @@ function Day({ email, theme, onTheme }: DayProps) {
           email={email}
           theme={theme}
           onTheme={onTheme}
+          onHelp={() => {
+            setProfileOpen(false)
+            setHelpOpen(true)
+          }}
           onExport={() => void exportJson()}
           onExportCalendar={() => void exportCalendar()}
           onSignOut={() => void supabase.auth.signOut()}
@@ -454,6 +464,16 @@ function Day({ email, theme, onTheme }: DayProps) {
           onDelete={() => deleteRow(editing)}
           onAddToCalendar={() => void addToCalendar([editing], 'lifelog-event.ics')}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {helpOpen && (
+        <HelpSheet
+          onPick={(text) => {
+            setPrefill(text)
+            setHelpOpen(false)
+          }}
+          onClose={() => setHelpOpen(false)}
         />
       )}
 
