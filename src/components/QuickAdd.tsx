@@ -59,6 +59,10 @@ export function QuickAdd({ day, now, showExamples, onSubmit, corpus, onNeedCorpu
 
   function submit(event: FormEvent | KeyboardEvent) {
     event.preventDefault()
+    // A question is not an entry. Hiding the send button was not enough: the
+    // keyboard's own Enter reaches here, and the re-parse below would happily
+    // file "? how many times ping me" away as a note.
+    if (asking) return
     // Re-parsed against the real clock. `now` is held in state and refreshed
     // only on focus, which is fine for a preview but wrong for saving: with the
     // app left open, "in 2 minutes" measured from the last focus can already be
