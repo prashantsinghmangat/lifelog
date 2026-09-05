@@ -70,7 +70,26 @@ in at `cap sync`, so `npm run android` must run before every device test or the 
 code. Editing files under `android/` by hand is almost always wrong — the exception is the
 manifest and Gradle config, which are committed for that reason.
 
-**`src/lib/ics.ts`** is how reminders happen at all: the OS calendar raises the alarm, because no
+**Reminders exist twice, because the two platforms can do different things.**
+`src/lib/reminders.ts` schedules a real notification on the device through
+`@capacitor/local-notifications` — native only, and better than anything the web offers: no
+server, no push, fires with the app closed and the Supabase project paused. On the web there is no
+such option, so `ics.ts` hands the event to the OS calendar instead. `App` offers whichever
+applies: natively the reminder is already set, so pushing "Add to calendar" there would be asking
+for a step the app just took.
+
+**Never return a Capacitor plugin from an `async` function.** Resolving an async return value
+reads `.then` to test whether it is thenable, and the plugin proxy forwards *every* property
+access to native as a method call — so returning it invents a native method named `then` and the
+promise rejects with `"LocalNotifications.then()" is not implemented on android`. This took out
+permission checks, scheduling, cancelling and syncing at once, silently, and cost hours. `plugin()`
+therefore returns `{ api }`; the wrapper is load-bearing.
+
+**A silent reminder is worse than a broken one.** Every path through `reminders.ts` reports an
+outcome (`scheduled` / `blocked` / `skipped`) or a caught message, because three separate bugs here
+were invisible for exactly as long as their promises rejected into nothing.
+
+**`src/lib/ics.ts`** is the web's answer: the OS calendar raises the alarm, because no
 web API can while the app is closed. Pure and `now`-injected like the parser, so it is tested
 rather than hoped at. An all-day alarm is a *relative* trigger (`PT9H` past local midnight), which
 is why nothing stores a timezone — change that to an absolute time and yearly birthdays break in

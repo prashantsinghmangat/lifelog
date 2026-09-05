@@ -326,6 +326,27 @@ application code imports it, and the shell alone imports nothing.
 
 ## Reminders
 
+**In the Android app**, lifelog raises its own notification, scheduled on the device: no server,
+no push, and it fires with the app closed, offline, and the Supabase project asleep.
+
+```
+ping me in 2 minutes        in 5 minutes / after 30 minutes / 10 mins from now
+dentist tomorrow 5pm        at the event
++ Mom birthday 14 nov       9am on the day, every year
+```
+
+The toast confirms with the actual time — *"Reminder set for 12:04 pm"*. Reminders are cancelled
+when an entry is deleted, re-armed when it is edited, and re-armed for everything upcoming on
+launch, so an event logged on the web still fires on the phone.
+
+Android grants notification permission per install, so a reinstall revokes it; the app asks again
+above the timeline. **Allow "Alarms and reminders"** too (Settings → Apps → lifelog), or Android
+downgrades the alarm to inexact and it can land minutes late. The profile sheet has a test
+reminder that fires in ten seconds and reports its own outcome.
+
+**On the web** none of this is possible — no shipped API raises a notification while the app is
+closed — so the calendar takes over instead.
+
 The operating system does the reminding. No web API raises a notification while the app is
 closed — `setTimeout` dies with the tab, and Chrome's Notification Triggers API never shipped — so
 a real reminder would need a server pushing at the right moment. A calendar alarm instead keeps
