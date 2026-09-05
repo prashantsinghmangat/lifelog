@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run android                    # build, then copy the web assets into android/
 npm run android:open               # open the native project in Android Studio
 npm run dev                        # vite dev server on :5173
-npm test                           # vitest run (86 tests, 223 assertions)
+npm test                           # vitest run (199 tests)
 npm run test:watch                 # vitest watch
 npx vitest run -t "yesterday"      # tests whose name matches a substring (2 of 86)
 npx tsc -b                         # typecheck only (add --force to ignore the build cache)
@@ -84,6 +84,13 @@ access to native as a method call — so returning it invents a native method na
 promise rejects with `"LocalNotifications.then()" is not implemented on android`. This took out
 permission checks, scheduling, cancelling and syncing at once, silently, and cost hours. `plugin()`
 therefore returns `{ api }`; the wrapper is load-bearing.
+
+**Component tests cover journeys, not rendering.** `*.test.tsx` files carry
+`// @vitest-environment jsdom` at the top rather than a config file, and assert with plain DOM
+reads instead of `jest-dom`. They exist because every recent bug was in wiring — the send key that
+only dismissed the keyboard, a question filed away as a note — while the pure libraries with far
+more tests produced almost none. A new test here should describe something a user does that could
+silently go wrong, not that a component renders.
 
 **A silent reminder is worse than a broken one.** Every path through `reminders.ts` reports an
 outcome (`scheduled` / `blocked` / `skipped`) or a caught message, because three separate bugs here

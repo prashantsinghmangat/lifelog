@@ -87,21 +87,51 @@ DevTools protocol and a pulled APK each answered in minutes what guessing had no
 
 ---
 
-## Next
+## Next — Wave 4: prove lifelog deserves to exist
 
-**1. Test the wiring.** A component harness (`@testing-library/react`, `jsdom` — two
-devDependencies, no bundle cost) covering the paths that actually break: submitting, questions,
-prefill, the reminder toast. This is where the evidence points.
+Not "insights". The bundle size, the test count, the Android shell, the reminders and the backups
+are all easy to mistake for validation. They are not. The only measure that matters now:
 
-**2. `useEntries` tests.** Refetch merge, retry closures, optimistic rollback, restore. Still the
-least-tested load-bearing file, though not the one visibly failing.
+> **When something happens, do I instinctively open lifelog to record it?**
 
-**3. iOS.** The PWA there has never been opened. The sheet-versus-keyboard case passed once in
-Safari; standalone mode, `dvh` with collapsing toolbars, and swipe against the back gesture are
-unknown. Native iOS additionally needs a Mac and $99/year.
+**1. A component harness.** `@testing-library/react` and `jsdom` — devDependencies, no bundle
+cost. Not generic coverage: **user journeys where something can silently go wrong**, which is
+precisely the failure mode every recent bug had.
 
-**4. Use it for a week.** Still the best available next step, and the one that decides everything
-below.
+- quick add → submit
+- `?` question → answer appears, and does *not* become an entry
+- prefill from the manual → box, edited before saving
+- reminder created → outcome reported
+- edit → save, with the reminder moving too
+- delete → undo → restored
+- failed write → retry
+- dictation → preview → submit
+
+**2. `useEntries` tests.** The transitions, not the rendering:
+
+```
+optimistic insert → server ok      → row kept
+optimistic insert → server fails   → flagged, retry replays it
+refetch            → server rows merged with unresolved optimistic ones
+delete             → soft delete, never DELETE
+delete → undo      → restored
+```
+
+**3. iPhone.** Before any substantial feature. Safari *and* standalone, ~375px, keyboard open:
+open → capture → keyboard → save → timeline. Then the entry sheet with the keyboard up, swipe
+against the iOS edge gesture, `dvh` with collapsing toolbars, the calendar sheet, dark mode, the
+mic's absence, and the `.ics` share sheet.
+
+**Do not fix hypothetical iOS problems before seeing them.**
+
+**4. Seven days of real use.** Not a feature sweep — lifelog as the actual memory system. Every
+expense, work session, event, birthday, stray thought. Record only the friction: what did I want
+to log, what did I type, where did I hesitate, what did I expect, what happened, would I do it
+again.
+
+That evidence decides what comes next. If the answer is *"I use it"*, improve retrieval and
+insight. If it is *"I don't"*, the problem is capture or the habit loop, and no amount of
+intelligence on top will save it.
 
 ---
 
@@ -143,6 +173,10 @@ Each of these has already resisted a plausible reason to break it.
 
 ## Open chores
 
-- **Sign-ups are still enabled** in Supabase. Needed while a friend is testing; turn off after.
+- **Make the single-user invariant explicit**, rather than switching sign-ups off and forgetting.
+  The intended state is: *expected users 1, allowed account mine, account creation disabled.*
+  Sign-ups are enabled at the moment only because a friend is testing; left on, the project keeps
+  an authentication system behaving like a public SaaS for a product that is single-user by
+  design.
 - **Alarms and reminders** permission on the phone, or Android downgrades reminders to inexact.
 - The `.ics` share sheet has only been proved on Android.
