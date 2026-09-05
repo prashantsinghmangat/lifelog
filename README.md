@@ -368,6 +368,42 @@ The alarm on an all-day event is a *relative* trigger nine hours after local mid
 **The calendar receives a copy.** Editing or deleting the entry afterwards does not change it; it
 has to be added again. That is the cost of having no backend.
 
+## Backups
+
+A Netlify scheduled function copies every row nightly to Netlify Blobs — somewhere that is *not*
+Supabase, because a dump written back into Supabase shares the fate of the thing it is backing up.
+The free tier pauses after seven days idle and has no point-in-time recovery, so the manual JSON
+export was the only copy.
+
+Soft-deleted rows are included: a backup that has already applied your deletions cannot undo them.
+Thirty daily snapshots are kept, and the read is paged, because PostgREST caps a response at 1000
+rows and a backup that silently truncates is the worst kind.
+
+**Two environment variables**, in Netlify → Site configuration → Environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `SUPABASE_URL` | the project URL, same as the client's |
+| `SUPABASE_SERVICE_ROLE_KEY` | Project Settings → API → `service_role` |
+| `BACKUP_TOKEN` | any long random string you invent |
+
+⚠️ The **service_role key bypasses RLS entirely**. It belongs only here, in a server-side
+environment variable — never in `.env.local`, never in anything with a `VITE_` prefix, since
+those are inlined into the browser bundle.
+
+Getting the data back:
+
+```
+/.netlify/functions/backups?token=…                          list snapshots
+/.netlify/functions/backups?token=…&key=entries-2026-09-05.json   download one
+```
+
+That endpoint returns every row and bypasses RLS, which is why it is guarded by `BACKUP_TOKEN`
+and refuses to run at all when the variable is unset, rather than defaulting to open.
+
+Run it once by hand after deploying, from Netlify → Functions → `backup` → Run, rather than
+waiting a day to discover a missing variable.
+
 ## Bundle size
 
 Measured with `npm run build`:
