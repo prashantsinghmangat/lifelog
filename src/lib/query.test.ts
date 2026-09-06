@@ -166,6 +166,32 @@ describe('counting', () => {
     expect(of('? deepak kiran store last month').paise).toBe(30000)
   })
 
+  it('counts a money question from the entries that carry money', () => {
+    // The bug: "how much did I spend today" totalled the day's two expenses
+    // correctly and then listed all seven entries beside the number, notes and
+    // time logs included — none of which had put anything into it.
+    const summary = of('? how much did i spend this month')
+    expect(summary.paise).toBe(75000)
+    expect(summary.entries).toBe(3)
+    expect(summary.hits.every((row) => row.amount_paise !== null)).toBe(true)
+    // The gym sessions fall in the period and contribute nothing, so they are
+    // not part of the answer, and 3h 15m has no business sitting beside a total.
+    expect(summary.minutes).toBe(0)
+  })
+
+  it('counts an hours question from the entries that carry time', () => {
+    const summary = of('? hours worked this month')
+    expect(summary.minutes).toBe(135)
+    expect(summary.hits.every((row) => row.duration_minutes !== null)).toBe(true)
+    expect(summary.paise).toBe(0)
+  })
+
+  it('leaves a count of days alone, since that is about every match', () => {
+    // Narrowing here would be wrong: how many days did I go to the gym is a
+    // question about days, whatever each entry happens to carry.
+    expect(of('? how many days gym').entries).toBe(4)
+  })
+
   it('matches the category as well as the title', () => {
     expect(of('? food').entries).toBe(2)
   })

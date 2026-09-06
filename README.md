@@ -354,6 +354,11 @@ a button that goes to that day**, which is nearly always why the question was as
 clears itself on the way, so it cannot hide the day it just opened. A date is printed once per
 day rather than repeated down every row.
 
+**A total and its working are the same set of rows.** Asking how much you spent counts only the
+entries carrying money, so notes and time logs from the same day neither appear beside the number
+nor add a duration next to it. Counting days is left alone — that one is about every match,
+whatever each entry happens to carry.
+
 A screen reader hears one sentence rather than being walked through the table — `phrase()` is
 built from the same parts the card lays out, so the two cannot come to disagree.
 

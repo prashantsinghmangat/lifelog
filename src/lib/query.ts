@@ -252,9 +252,29 @@ function within(entry: Entry, period: Range | null): boolean {
   return entry.occurred_on >= period.from && entry.occurred_on <= period.to
 }
 
+/**
+ * A question about money is a question about the entries carrying money.
+ *
+ * "How much did I spend today" counted the day's two expenses correctly and
+ * then listed all seven entries beside the total, notes and time logs included
+ * — none of which put anything into the number they appeared to explain. A
+ * total and its working have to be the same set of rows.
+ *
+ * Only the measures that read one field narrow: counting days is a question
+ * about every match, whatever each one happens to carry.
+ */
+function counts(entry: Entry, measure: Measure | null): boolean {
+  if (measure === 'money') return entry.amount_paise !== null
+  if (measure === 'hours') return entry.duration_minutes !== null
+  return true
+}
+
 export function summarise(entries: Entry[], question: Question, now: Date): Summary {
   const hits = entries.filter(
-    (entry) => within(entry, question.range) && matches(entry, question.terms),
+    (entry) =>
+      within(entry, question.range) &&
+      matches(entry, question.terms) &&
+      counts(entry, question.measure),
   )
 
   const days = new Set(hits.map((entry) => entry.occurred_on))

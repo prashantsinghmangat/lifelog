@@ -34,8 +34,32 @@ function value(entry: Entry): string | null {
 export function AnswerCard({ answer, onPick }: Props) {
   const [expanded, setExpanded] = useState(false)
 
-  const rows = expanded ? answer.rows : answer.rows.slice(0, SHOWN)
-  const rest = answer.rows.length - rows.length
+  const shown = expanded ? answer.rows : answer.rows.slice(0, SHOWN)
+  const rest = answer.rows.length - shown.length
+
+  const rows = shown.map((row, index) => {
+    // A question about one day repeats that date on every row, which says
+    // nothing. The clock does — when there is one.
+    const label = answer.oneDay
+      ? row.occurred_at === null
+        ? ''
+        : clock(row.occurred_at)
+      : format(parseISO(row.occurred_on), 'EEE d')
+
+    // Two entries on the same day print the date twice, and the second one
+    // carries no information the first did not. Printed once, the column reads
+    // as the days it is listing rather than a repeated label.
+    const above = shown[index - 1]
+    const repeated =
+      !answer.oneDay && above !== undefined && above.occurred_on === row.occurred_on
+
+    return { row, label: repeated ? '' : label }
+  })
+
+  // Untimed entries on a single day leave the column empty on every row, and an
+  // empty column is a 56px indent that makes the card sit oddly against the
+  // timeline below it.
+  const dated = rows.some((entry) => entry.label !== '')
 
   return (
     <div className="mt-1.5 overflow-hidden rounded-lg border border-line bg-sunken">
@@ -59,22 +83,8 @@ export function AnswerCard({ answer, onPick }: Props) {
       {/* Capped rather than unbounded: the box above stays put while you scroll,
           so an answer allowed to grow without limit would take the screen with it. */}
       <div className={expanded ? 'max-h-[50vh] overflow-y-auto' : undefined}>
-        {rows.map((row, index) => {
+        {rows.map(({ row, label }) => {
           const right = value(row)
-          // A question about one day repeats that date on every row, which says
-          // nothing. The clock does.
-          const left = answer.oneDay
-            ? row.occurred_at === null
-              ? ''
-              : clock(row.occurred_at)
-            : format(parseISO(row.occurred_on), 'EEE d')
-
-          // Two entries on the same day print the date twice, and the second one
-          // carries no information the first did not. Printed once, the column
-          // reads as the days it is listing rather than a repeated label.
-          const above = rows[index - 1]
-          const repeated =
-            !answer.oneDay && above !== undefined && above.occurred_on === row.occurred_on
 
           return (
             <button
@@ -83,10 +93,10 @@ export function AnswerCard({ answer, onPick }: Props) {
               onClick={() => onPick(row.occurred_on)}
               className="flex min-h-12 w-full items-center gap-3 border-t border-line px-3.5 py-2 text-left active:bg-raised"
             >
-              <span className="w-14 shrink-0 text-xs text-faint tabular-nums">
+              <span className={`shrink-0 text-xs text-faint tabular-nums ${dated ? 'w-14' : ''}`}>
                 {/* Suppressed for the eye only: every row still says its date. */}
                 <span className="sr-only">{format(parseISO(row.occurred_on), 'd MMMM')}. </span>
-                <span aria-hidden="true">{repeated ? '' : left}</span>
+                <span aria-hidden="true">{label}</span>
               </span>
               <KindMark kind={row.kind} />
               <span className="min-w-0 flex-1 truncate text-sm">

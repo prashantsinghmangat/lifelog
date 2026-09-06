@@ -152,6 +152,21 @@ describe('asking a question', () => {
     expect(box.value).toBe('')
   })
 
+  it('shows what went into a total, not everything that happened that day', async () => {
+    const mixed = [
+      entry({ occurred_on: TODAY, kind: 'expense', title: 'lunch swiggy', amount_paise: 35000 }),
+      entry({ occurred_on: TODAY, kind: 'note', title: 'met rahul' }),
+      entry({ occurred_on: TODAY, kind: 'time', title: 'client call', duration_minutes: 120 }),
+    ]
+    const { box } = setup({ corpus: mixed })
+    await userEvent.type(box, '? how much did i spend today')
+
+    // The total, and the single expense behind it.
+    expect(screen.getAllByText('₹350').length).toBe(2)
+    expect(screen.queryByText('met rahul')).toBeNull()
+    expect(screen.queryByText('client call')).toBeNull()
+  })
+
   it('caps the rows, rather than letting an answer take the screen', async () => {
     const many = Array.from({ length: 9 }, (_, index) =>
       entry({ occurred_on: `2026-08-0${index + 1}`, title: `gym ${index}` }),
