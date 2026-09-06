@@ -11,6 +11,7 @@ import { MonthSheet } from './components/MonthSheet'
 import { ProfileSheet } from './components/ProfileSheet'
 import { QuickAdd } from './components/QuickAdd'
 import { Toast, type ToastState } from './components/Toast'
+import { WeekStrip } from './components/WeekStrip'
 import { useEntries, type Row } from './hooks/useEntries'
 import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
@@ -327,6 +328,12 @@ function Day({ email, theme, onTheme }: DayProps) {
           >
             <PersonIcon size={18} />
           </button>
+        </div>
+
+        {/* Under the header, above the box: navigation, not capture, so it
+            scrolls away with the day rather than sitting over it. */}
+        <div className="mt-1">
+          <WeekStrip day={day} now={now} loadDays={fetchDays} onPick={setDay} />
         </div>
 
         {entries.length > 0 && (

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { addDays, eachDayOfInterval, format, startOfWeek } from 'date-fns'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { dayKey } from './lib/format'
@@ -157,6 +158,29 @@ describe('deleting and taking it back', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
+  })
+})
+
+describe('the week strip', () => {
+  it('reaches any day of this week in one tap', async () => {
+    await open()
+
+    // Whichever day of this week is not today — so the assertion holds whatever
+    // day the suite happens to run on, including Monday and Sunday.
+    const start = startOfWeek(new Date(), { weekStartsOn: 1 })
+    const other = eachDayOfInterval({ start, end: addDays(start, 6) }).find(
+      (date) => dayKey(date) !== dayKey(new Date()),
+    )
+    if (other === undefined) throw new Error('a week has more than one day')
+
+    // Scoped: the sidebar calendar carries the same labels, and is only hidden
+    // by a breakpoint that jsdom does not apply.
+    const strip = screen.getByRole('navigation', { name: 'This week' })
+    await userEvent.click(within(strip).getByLabelText(format(other, 'EEEE d MMMM yyyy')))
+
+    expect(
+      screen.getByLabelText(`${format(other, 'EEE, d MMM')} — open calendar`),
+    ).toBeTruthy()
   })
 })
 

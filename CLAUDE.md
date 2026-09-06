@@ -133,7 +133,13 @@ remove it. Capture is the product: anything that adds a step to logging is a reg
 interaction genuinely differs, one component changes presentation: `Sheet` is a bottom sheet on
 compact and a centred dialog from `sm` up. `MonthGrid` is the calendar; `MonthSheet` is that same
 grid in a `Sheet` for narrow screens, while the wide layout renders `MonthGrid` straight into the
-sidebar where navigation costs no taps at all.
+sidebar where navigation costs no taps at all. `WeekStrip` is `lg:hidden` for that reason — on a
+wide screen it would repeat what the sidebar already shows.
+
+**Every date grid draws the same cell.** `DayCell` owns what selected, today and has-entries look
+like, and `WEEK_STARTS` is the one place the week begins on Monday; `useMarkedDays` is the one
+place dots are loaded. Two grids disagreeing about which day starts the week is a bug you can see
+from across the room, and it is exactly the kind that arrives by copy-paste.
 
 **`Sheet` owns modal correctness** — focus moves in, is trapped, and returns to the trigger on
 close; Escape closes; body scroll locks. Any new modal goes through it rather than reimplementing

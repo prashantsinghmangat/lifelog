@@ -10,14 +10,11 @@ import {
   startOfWeek,
   subMonths,
 } from 'date-fns'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { DayCell, WEEKDAYS, WEEK_STARTS } from './DayCell'
 import { Chevron } from './Icons'
+import { useMarkedDays } from '../hooks/useMarkedDays'
 import { dayKey } from '../lib/format'
-
-// Monday first. Repeated letters are fine — the columns are positional, and the
-// full weekday name is on each cell for screen readers.
-const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-const WEEK_STARTS = { weekStartsOn: 1 } as const
 
 type Props = {
   /** The currently selected day, yyyy-MM-dd. */
@@ -33,29 +30,10 @@ type Props = {
  */
 export function MonthGrid({ day, now, loadDays, onPick }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(parseISO(day)))
-  const [marked, setMarked] = useState<ReadonlySet<string>>(new Set())
 
   const gridStart = startOfWeek(month, WEEK_STARTS)
   const gridEnd = endOfWeek(endOfMonth(month), WEEK_STARTS)
-  // Strings, so the effect below has stable dependencies.
-  const from = dayKey(gridStart)
-  const to = dayKey(gridEnd)
-
-  useEffect(() => {
-    let live = true
-    void loadDays(from, to)
-      .then((days) => {
-        if (live) setMarked(new Set(days))
-      })
-      .catch(() => {
-        // Dots are decoration; a failed lookup must not break navigation.
-        if (live) setMarked(new Set())
-      })
-    return () => {
-      live = false
-    }
-  }, [from, to, loadDays])
-
+  const marked = useMarkedDays(dayKey(gridStart), dayKey(gridEnd), loadDays)
   const today = dayKey(now)
 
   return (
@@ -87,40 +65,17 @@ export function MonthGrid({ day, now, loadDays, onPick }: Props) {
       </div>
 
       <div className="mt-1 grid grid-cols-7">
-        {eachDayOfInterval({ start: gridStart, end: gridEnd }).map((date) => {
-          const key = dayKey(date)
-          const selected = key === day
-          const outside = !isSameMonth(date, month)
-          const has = marked.has(key)
-
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onPick(key)}
-              aria-current={selected ? 'date' : undefined}
-              // The dot is decorative; the label carries the same fact in words.
-              aria-label={`${format(date, 'EEEE d MMMM yyyy')}${has ? ', has entries' : ''}`}
-              className={`flex h-11 flex-col items-center justify-center rounded text-sm ${
-                selected
-                  ? 'bg-ink font-medium text-surface'
-                  : outside
-                    ? 'text-faint'
-                    : key === today
-                      ? 'font-semibold text-ink'
-                      : 'text-muted'
-              }`}
-            >
-              <span aria-hidden="true">{format(date, 'd')}</span>
-              <span
-                aria-hidden="true"
-                className={`mt-1 h-1 w-1 rounded-full ${
-                  !has ? 'bg-transparent' : selected ? 'bg-surface' : 'bg-note'
-                }`}
-              />
-            </button>
-          )
-        })}
+        {eachDayOfInterval({ start: gridStart, end: gridEnd }).map((date) => (
+          <DayCell
+            key={dayKey(date)}
+            date={date}
+            day={day}
+            today={today}
+            marked={marked.has(dayKey(date))}
+            outside={!isSameMonth(date, month)}
+            onPick={onPick}
+          />
+        ))}
       </div>
 
       <button

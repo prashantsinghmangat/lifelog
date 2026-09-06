@@ -541,10 +541,12 @@ and an insert is rejected with `42501 new row violates row-level security policy
 
 ```
 src/
-  lib/        supabase.ts  parser.ts  parser.test.ts  merchants.ts  format.ts
+  lib/        supabase.ts  parser.ts  query.ts  ics.ts  reminders.ts  format.ts
   hooks/      useEntries.ts  useSession.ts  useTheme.ts  useSwipe.ts  useDictation.ts
-  components/ Login.tsx  DayHeader.tsx  MonthGrid.tsx  MonthSheet.tsx
-              ProfileSheet.tsx  QuickAdd.tsx  EntryRow.tsx  EntryEditor.tsx
+              useMarkedDays.ts
+  components/ Login.tsx  DayHeader.tsx  WeekStrip.tsx  DayCell.tsx  MonthGrid.tsx
+              MonthSheet.tsx  ProfileSheet.tsx  QuickAdd.tsx  AnswerCard.tsx
+              EntryRow.tsx  KindMark.tsx  EntryEditor.tsx  HelpSheet.tsx
               Sheet.tsx  Toast.tsx  Icons.tsx
   types.ts  App.tsx  main.tsx
 supabase/migrations/0001_entries.sql
@@ -571,6 +573,10 @@ set, rows are never removed.
   export and sign-out.
 - **Swipe left or right** changes day, alongside the arrows. Ignores gestures that start on a
   field, inside an open sheet, or within 24px of a screen edge, where Android's back gesture lives.
+- **A week strip sits under the day header** on compact and medium. Arrows and swiping move one
+  day at a time, which is fine for yesterday and useless for Tuesday — the calendar sheet was the
+  only way there, at a tap to open and a tap to dismiss. Not rendered on wide screens, where the
+  sidebar already shows the whole month for no taps at all.
 - **Dictation** via the Web Speech API. Unsupported in iOS Safari, where the mic button is hidden.
 
 ## Not built, on purpose
