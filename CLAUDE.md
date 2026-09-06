@@ -148,6 +148,11 @@ an overlay.
 **Undo, not confirmation.** Reversible actions happen immediately and offer `Undo` in the toast
 (`useEntries.restore` clears `deleted_at`). Do not add "are you sure?" to a normal delete.
 
+**A toast has three ways out and two lifetimes.** Close button, sideways swipe, or the timer —
+waiting used to be the only one, which made a six-second message feel like being stuck with it.
+A toast carrying an action lives twice as long as one that only reports, because Undo has to be
+noticed and decided on while "Reminder set for 5:00 pm" only has to be read.
+
 **Accessibility is a build requirement.** Interactive targets are 44px (`h-11`), focus is a single
 global `:focus-visible` outline so no component can forget it, `prefers-reduced-motion` is honoured
 globally, and meaning is never carried by colour alone — the kind icon is `aria-hidden` and an

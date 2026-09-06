@@ -159,6 +159,20 @@ describe('deleting and taking it back', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
     await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
   })
+
+  it('lets the message be closed rather than only waited out', async () => {
+    rowsOnServer = [row]
+    await open()
+
+    await userEvent.click(await screen.findByText('lunch swiggy'))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.getByText('Entry deleted')).toBeTruthy())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByText('Entry deleted')).toBeNull()
+    // Dismissed, not undone: the entry stays deleted.
+    expect(screen.queryByText('lunch swiggy')).toBeNull()
+  })
 })
 
 describe('the week strip', () => {
