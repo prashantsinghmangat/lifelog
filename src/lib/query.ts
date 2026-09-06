@@ -1,4 +1,5 @@
 import {
+  addDays,
   differenceInCalendarDays,
   format,
   parseISO,
@@ -8,7 +9,11 @@ import {
   subYears,
 } from 'date-fns'
 import { dayKey, minutes as durationText, rupees } from './format'
+import { dateIn } from './parser'
 import type { Entry } from '../types'
+
+/** How far either side of a remembered date to look. Memory is not exact. */
+const AROUND = 3
 
 /**
  * Answering questions about the log, without an LLM.
@@ -74,6 +79,7 @@ const NOISE = new Set([
   'how', 'many', 'much', 'often', 'total', 'count', 'number', 'of',
   'day', 'days', 'time', 'times', 'hour', 'hours', 'hrs',
   'when', 'what', 'date', 'next', 'upcoming', 'due', 'coming',
+  'around', 'about', 'near', 'happened', 'happen',
   'did', 'do', 'does', 'have', 'has', 'had', 'was', 'were', 'is', 'are', 'am',
   'i', 'my', 'me', 'we', 'the', 'a', 'an', 'to', 'on', 'at', 'in', 'for', 'from',
   'spend', 'spent', 'spending', 'go', 'gone', 'went', 'visit', 'visited',
@@ -148,6 +154,29 @@ export function periodOf(text: string, now: Date): { range: Range | null; rest: 
 
   if (/\blast\s+year\b/i.test(text)) {
     return strip(/\blast\s+year\b/i, range(subYears(today, 1), today, 'last year'))
+  }
+
+  // "around 20 august", "about last friday" — a window, because memory is
+  // vague about the exact day and a single date usually answers nothing.
+  const near = /\b(?:around|about|near)\s+/i
+  if (near.test(text)) {
+    const found = dateIn(text.replace(near, ' '), now)
+    if (found !== null) {
+      const at = startOfDay(found.at)
+      return {
+        range: range(subDays(at, AROUND), addDays(at, AROUND), `around ${format(at, 'd MMM')}`),
+        rest: found.rest,
+      }
+    }
+  }
+
+  // Any single date the parser understands: last saturday, 14 nov, 14/11,
+  // 3 days ago. Reused rather than reimplemented, so the two never disagree.
+  // Ahead of the bare month below, or "20 august" loses its day to the month.
+  const one = dateIn(text, now)
+  if (one !== null) {
+    const at = startOfDay(one.at)
+    return { range: range(at, at, format(at, 'EEEE d MMM')), rest: one.rest }
   }
 
   // A bare month name means the most recent one that has already started.

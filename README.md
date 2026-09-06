@@ -340,8 +340,10 @@ answer appears in the preview line **as you type** — nothing to submit, no scr
 
 Every term must match, so `deepak kiran store` will not answer for a different Deepak. Titles,
 categories and kinds are all searched. Periods understood: `today`, `yesterday`, `this week`,
-`last week`, `this month`, `last month`, `this year`, `last N days`, `last N months`, and a bare
-month name, which means the most recent one already begun.
+`last week`, `this month`, `last month`, `this year`, `last N days`, `last N months`, a bare
+month name meaning the most recent one already begun, **any single date the parser knows**
+(`last saturday`, `14 nov`, `14/11`, `3 days ago`), and `around <date>`, which widens to a few
+days either side because memory is vague about the exact day.
 
 **Anything upcoming answers with a date rather than a tally**, whether or not the question
 remembered to say "when". A birthday carries `FREQ=YEARLY`, so one logged on 13 February answers

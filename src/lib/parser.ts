@@ -214,6 +214,16 @@ function takeRelative(input: string, now: Date): Cut<Date> | null {
 const RECURRING = /\b(bdays?|birthdays?|anniversary|anniversaries)\b/i
 
 /**
+ * One date token, resolved. Shared with the question grammar so that asking
+ * about `last saturday`, `14 nov` or `3 days ago` reuses the parser's own
+ * handling rather than a second, drifting copy of it.
+ */
+export function dateIn(text: string, now: Date): { at: Date; rest: string } | null {
+  const found = takeDate(text, now)
+  return found === null ? null : { at: found.value, rest: found.rest }
+}
+
+/**
  * Shared with the editor, so correcting a misparsed note into an event applies
  * the same yearly rule the parser would have.
  */

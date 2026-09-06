@@ -63,6 +63,8 @@ const SECTIONS: Section[] = [
       { text: '? how many days gym', does: 'days rather than entries' },
       { text: '? how much on swiggy last month', does: 'a total for a period' },
       { text: '? hours worked this week', does: 'time logged' },
+      { text: '? what did i do last saturday', does: 'a single day' },
+      { text: '? around 20 august', does: 'a few days either side' },
     ],
   },
   {

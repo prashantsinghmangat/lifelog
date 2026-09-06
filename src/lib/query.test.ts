@@ -94,6 +94,48 @@ describe('periods', () => {
   it('is null when no period is named', () => {
     expect(period('gym')).toBeNull()
   })
+
+  it('reads a weekday, resolving backwards like the parser does', () => {
+    // NOW is Saturday 5 September, so "last saturday" is the 5th itself.
+    expect(period('what did i do last saturday')).toMatchObject({
+      from: '2026-09-05',
+      to: '2026-09-05',
+    })
+    expect(period('what did i do friday')).toMatchObject({
+      from: '2026-09-04',
+      to: '2026-09-04',
+    })
+  })
+
+  it('reads a written date', () => {
+    // The parser resolves a bare "14 nov" within the current year, and the
+    // question grammar follows it rather than inventing its own rule.
+    expect(period('dinner 14 nov')).toMatchObject({ from: '2026-11-14', to: '2026-11-14' })
+    expect(period('books 20 august')).toMatchObject({ from: '2026-08-20', to: '2026-08-20' })
+  })
+
+  it('reads "N days ago"', () => {
+    expect(period('what happened 3 days ago')).toMatchObject({
+      from: '2026-09-02',
+      to: '2026-09-02',
+    })
+  })
+
+  it('widens "around" into a window, because memory is not exact', () => {
+    expect(period('what was i working on around 20 august')).toMatchObject({
+      from: '2026-08-17',
+      to: '2026-08-23',
+    })
+  })
+
+  it('removes a date from the text so it cannot become a search term', () => {
+    expect(ask('? what did i do last saturday')?.terms).toEqual([])
+    expect(ask('? swiggy around 20 august')?.terms).toEqual(['swiggy'])
+  })
+
+  it('leaves a bare month as the whole month, not a single day', () => {
+    expect(period('gym august')).toMatchObject({ from: '2026-08-01', to: '2026-08-31' })
+  })
 })
 
 describe('counting', () => {
