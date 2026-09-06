@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseQuestion, periodOf, phrase, summarise } from './query'
+import { answer, parseQuestion, periodOf, phrase, summarise } from './query'
 import type { Entry, Kind } from '../types'
 
 // Saturday, 5 September 2026.
@@ -249,6 +249,57 @@ describe('when something happens next', () => {
 
   it('still counts when asked to count', () => {
     expect(say('? how many times birthday')).toContain('2 times')
+  })
+})
+
+describe('the parts an answer is laid out from', () => {
+  const of = (text: string) => {
+    const question = parseQuestion(text, NOW)
+    if (question === null) throw new Error('not a question')
+    return answer(summarise(LOG, question, NOW), question, NOW)
+  }
+
+  it('names what was asked about, so the number is not floating free', () => {
+    expect(of('? how much on swiggy last month').caption).toBe('swiggy · last month')
+    expect(of('? how many days gym').caption).toBe('gym')
+    // No subject, so the period is the whole of what was asked about.
+    expect(of('? what did i do yesterday').caption).toBe('yesterday')
+  })
+
+  it('leads with the measure and keeps the rest beside it', () => {
+    const said = of('? how many days gym')
+    expect(said.lead).toBe('3 days')
+    expect(said.extras).toEqual(['3h 15m', 'last today'])
+  })
+
+  it('carries every match, so the card decides how many to show', () => {
+    expect(of('? gym').rows).toHaveLength(4)
+    expect(of('? unicorn').rows).toEqual([])
+  })
+
+  it('orders the past most recent first', () => {
+    expect(of('? gym').rows.map((row) => row.occurred_on)).toEqual([
+      '2026-09-05',
+      '2026-09-03',
+      '2026-09-03',
+      '2026-08-28',
+    ])
+  })
+
+  it('flags a single day, which is what makes rows show a clock not a date', () => {
+    expect(of('? what did i do yesterday').oneDay).toBe(true)
+    expect(of('? gym this month').oneDay).toBe(false)
+    expect(of('? gym').oneDay).toBe(false)
+  })
+
+  it('says the same thing as the sentence, because the sentence is built from it', () => {
+    for (const text of ['? how many days gym', '? how much deepak kiran store', '? unicorn']) {
+      const question = parseQuestion(text, NOW)
+      if (question === null) throw new Error('not a question')
+      const summary = summarise(LOG, question, NOW)
+      const said = answer(summary, question, NOW)
+      expect([said.lead, ...said.extras].join(' · ')).toBe(phrase(summary, question, NOW))
+    }
   })
 })
 

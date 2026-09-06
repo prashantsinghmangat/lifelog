@@ -180,6 +180,8 @@ describe('asking, once everything is wired', () => {
     const box = await open()
     await userEvent.type(box, '? how many days gym')
 
-    await waitFor(() => expect(screen.getByText(/1 day/)).toBeTruthy())
+    // The card leads with the count; the live region says the whole sentence.
+    await waitFor(() => expect(screen.getByText('1 day')).toBeTruthy())
+    expect(screen.getByText('1 day · 1h · last today')).toBeTruthy()
   })
 })

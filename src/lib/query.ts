@@ -47,6 +47,27 @@ export type Summary = {
   last: string | null
   /** Soonest upcoming occurrence, which for an event is the whole answer. */
   next: string | null
+  /** The rows the numbers were computed from, so an answer can show its working. */
+  hits: Entry[]
+}
+
+/**
+ * An answer with its parts kept separate, so the screen can lay them out and a
+ * screen reader can still hear one sentence. `phrase` joins these back together
+ * rather than deciding anything of its own, which is what stops the two from
+ * ever disagreeing about what was asked.
+ */
+export type Answer = {
+  /** What the question was about: `food · this week`, or null if it named neither. */
+  caption: string | null
+  /** The one thing asked for, and the only part that is always present. */
+  lead: string
+  /** The other facts that happen to be true. */
+  extras: string[]
+  /** Every match, ordered for display. */
+  rows: Entry[]
+  /** The question named a single day, so rows show a clock rather than a date. */
+  oneDay: boolean
 }
 
 /**
@@ -253,19 +274,46 @@ export function summarise(entries: Entry[], question: Question, now: Date): Summ
     minutes: mins,
     last,
     next: upcoming[0] === undefined ? null : dayKey(upcoming[0]),
+    hits,
   }
 }
 
-/**
- * One line, leading with whatever was asked for and following with the other
- * facts that happen to be true. A question the grammar did not understand still
- * gets a count rather than an apology.
- */
-export function phrase(summary: Summary, question: Question, now: Date): string {
-  if (summary.entries === 0) return 'nothing found'
+/** Most recent first, which is the order a question about the past wants. */
+function byRecency(entries: Entry[]): Entry[] {
+  return [...entries].sort(
+    (a, b) =>
+      b.occurred_on.localeCompare(a.occurred_on) ||
+      (b.occurred_at ?? '').localeCompare(a.occurred_at ?? ''),
+  )
+}
 
-  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
-  const parts: string[] = []
+/** Soonest first, for an answer that is about what is coming rather than gone. */
+function byNext(entries: Entry[], now: Date): Entry[] {
+  return [...entries].sort((a, b) => {
+    const first = nextOccurrence(a, now)
+    const second = nextOccurrence(b, now)
+    if (first === null) return second === null ? 0 : 1
+    if (second === null) return -1
+    return first.getTime() - second.getTime()
+  })
+}
+
+/**
+ * Leads with whatever was asked for and follows with the other facts that happen
+ * to be true. A question the grammar did not understand still gets a count rather
+ * than an apology.
+ */
+export function answer(summary: Summary, question: Question, now: Date): Answer {
+  const named = [
+    question.terms.length > 0 ? question.terms.join(' ') : null,
+    question.range === null ? null : question.range.label,
+  ].filter((bit): bit is string => bit !== null)
+
+  const caption = named.length === 0 ? null : named.join(' · ')
+  const oneDay = question.range !== null && question.range.from === question.range.to
+  const nothing = { caption, extras: [], rows: [], oneDay }
+
+  if (summary.entries === 0) return { ...nothing, lead: 'nothing found' }
 
   // A date beats a tally. If something is coming up, that is the answer —
   // whether or not the question remembered to say "when".
@@ -274,34 +322,47 @@ export function phrase(summary: Summary, question: Question, now: Date): string 
     const away = differenceInCalendarDays(at, startOfDay(now))
     const soon = away === 0 ? 'today' : away === 1 ? 'tomorrow' : `in ${away} days`
     const shown = at.getFullYear() === now.getFullYear() ? 'EEEE d MMMM' : 'EEEE d MMMM yyyy'
-    return `${format(at, shown)} · ${soon}`
+    return {
+      caption,
+      lead: format(at, shown),
+      extras: [soon],
+      rows: byNext(summary.hits, now),
+      oneDay,
+    }
   }
 
-  if (question.measure === 'when') return 'nothing upcoming'
+  // Asked when, and nothing is ahead. The rows still stand: what did happen is
+  // more use than a dead end.
+  if (question.measure === 'when') {
+    return { ...nothing, lead: 'nothing upcoming', rows: byRecency(summary.hits) }
+  }
 
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
   const money = summary.paise > 0 ? rupees(summary.paise) : null
   const time = summary.minutes > 0 ? durationText(summary.minutes) : null
+  const extras: string[] = []
+  let lead: string
 
   switch (question.measure) {
     case 'days':
-      parts.push(plural(summary.days, 'day'))
+      lead = plural(summary.days, 'day')
       break
     case 'times':
-      parts.push(plural(summary.entries, 'time'))
+      lead = plural(summary.entries, 'time')
       break
     case 'money':
-      parts.push(money ?? '₹0')
+      lead = money ?? '₹0'
       break
     case 'hours':
-      parts.push(time ?? '0m')
+      lead = time ?? '0m'
       break
     default:
-      parts.push(plural(summary.entries, 'entry').replace('entrys', 'entries'))
-      parts.push(plural(summary.days, 'day'))
+      lead = plural(summary.entries, 'entry').replace('entrys', 'entries')
+      extras.push(plural(summary.days, 'day'))
   }
 
-  if (question.measure !== 'money' && money !== null) parts.push(money)
-  if (question.measure !== 'hours' && time !== null) parts.push(time)
+  if (question.measure !== 'money' && money !== null) extras.push(money)
+  if (question.measure !== 'hours' && time !== null) extras.push(time)
 
   if (summary.last !== null) {
     const gap = Math.round(
@@ -309,9 +370,19 @@ export function phrase(summary: Summary, question: Question, now: Date): string 
     )
     const when =
       gap <= 0 ? 'today' : gap === 1 ? 'yesterday' : format(parseISO(summary.last), 'd MMM')
-    parts.push(`last ${when}`)
+    extras.push(`last ${when}`)
   }
 
-  return parts.join(' · ')
+  return { caption, lead, extras, rows: byRecency(summary.hits), oneDay }
+}
+
+/**
+ * The same answer as one line, for the live region: a screen reader should hear
+ * a sentence, not a table. Derived rather than written twice, so it can never
+ * say something different from what is on screen.
+ */
+export function phrase(summary: Summary, question: Question, now: Date): string {
+  const said = answer(summary, question, now)
+  return [said.lead, ...said.extras].join(' · ')
 }
 

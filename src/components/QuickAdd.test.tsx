@@ -41,6 +41,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   const onNeedCorpus = vi.fn()
   const onPrefilled = vi.fn()
   const onHelp = vi.fn()
+  const onGoToDay = vi.fn<(day: string) => void>()
 
   const props = {
     day: TODAY,
@@ -52,6 +53,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
     prefill: null,
     onPrefilled,
     onHelp,
+    onGoToDay,
     ...over,
   }
 
@@ -59,7 +61,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   // Plain DOM assertions throughout, rather than pulling in jest-dom for
   // sugar: one less dependency, and `.value` reads no worse than a matcher.
   const box = screen.getByLabelText('What happened?') as HTMLInputElement
-  return { view, box, onSubmit, onNeedCorpus, onPrefilled, onHelp, props }
+  return { view, box, onSubmit, onNeedCorpus, onPrefilled, onHelp, onGoToDay, props }
 }
 
 describe('capturing an entry', () => {
@@ -126,10 +128,40 @@ describe('asking a question', () => {
     entry({ occurred_on: '2026-09-03', title: 'gym again', duration_minutes: 30 }),
   ]
 
-  it('answers in the preview line', async () => {
+  it('leads with the number asked for, and shows the entries behind it', async () => {
     const { box } = setup({ corpus })
     await userEvent.type(box, '? how many days gym')
-    expect(screen.getByText(/2 days/)).toBeTruthy()
+
+    // The card leads with the number on its own; the live region hears the
+    // whole sentence. Both, on purpose, and neither written twice.
+    expect(screen.getByText('2 days')).toBeTruthy()
+    expect(screen.getByText('2 days · 2h 15m · last today')).toBeTruthy()
+
+    // The working, which is most of why the question was worth asking.
+    expect(screen.getByText('gym again')).toBeTruthy()
+    expect(screen.getByText('Thu 3')).toBeTruthy()
+  })
+
+  it('takes you to the day an answer points at, and clears the question', async () => {
+    const { box, onGoToDay } = setup({ corpus })
+    await userEvent.type(box, '? gym')
+    await userEvent.click(screen.getByText('gym again'))
+
+    expect(onGoToDay).toHaveBeenCalledWith('2026-09-03')
+    // Leaving the question in the box would hide the day it just opened.
+    expect(box.value).toBe('')
+  })
+
+  it('caps the rows, rather than letting an answer take the screen', async () => {
+    const many = Array.from({ length: 9 }, (_, index) =>
+      entry({ occurred_on: `2026-08-0${index + 1}`, title: `gym ${index}` }),
+    )
+    const { box } = setup({ corpus: many })
+    await userEvent.type(box, '? gym')
+
+    expect(screen.queryByText('gym 0')).toBeNull()
+    await userEvent.click(screen.getByText(/see all 9/))
+    expect(screen.getByText('gym 0')).toBeTruthy()
   })
 
   it('asks for the log only once a question is actually typed', async () => {

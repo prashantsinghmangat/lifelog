@@ -354,6 +354,7 @@ function Day({ email, theme, onTheme }: DayProps) {
             prefill={prefill}
             onPrefilled={() => setPrefill(null)}
             onHelp={() => setHelpOpen(true)}
+            onGoToDay={setDay}
           />
         </div>
 

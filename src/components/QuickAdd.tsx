@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { AnswerCard } from './AnswerCard'
 import { ArrowUpIcon, MicIcon } from './Icons'
 import { useDictation } from '../hooks/useDictation'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, type ParsedEntry } from '../lib/parser'
-import { parseQuestion, phrase, summarise as summariseLog } from '../lib/query'
+import { answer as answerTo, parseQuestion, phrase, summarise as summariseLog } from '../lib/query'
 import type { Entry } from '../types'
 
 const EXAMPLES = ['350 lunch swiggy', '2h client work', 'dentist tomorrow 5pm']
@@ -20,6 +21,8 @@ type Props = {
   prefill: string | null
   onPrefilled: () => void
   onHelp: () => void
+  /** Jumping to the day an answer points at, which is usually why it was asked. */
+  onGoToDay: (day: string) => void
 }
 
 /** `expense · ₹350 · food · today` — the date token is dropped when it needs its own warning. */
@@ -43,6 +46,7 @@ export function QuickAdd({
   prefill,
   onPrefilled,
   onHelp,
+  onGoToDay,
 }: Props) {
   const [text, setText] = useState('')
   const dictation = useDictation(setText)
@@ -70,12 +74,16 @@ export function QuickAdd({
     if (asking) onNeedCorpus()
   }, [asking, onNeedCorpus])
 
+  const summary = useMemo(
+    () => (question === null || corpus === null ? null : summariseLog(corpus, question, now)),
+    [question, corpus, now],
+  )
   const answer =
-    question === null
-      ? null
-      : corpus === null
-        ? '…'
-        : phrase(summariseLog(corpus, question, now), question, now)
+    question === null || summary === null ? null : answerTo(summary, question, now)
+  // One sentence for the live region: a screen reader should hear the answer,
+  // not be walked through the table that shows it.
+  const spoken =
+    question === null || summary === null ? null : phrase(summary, question, now)
 
   /** There is something worth saving, so the send button takes the mic's place. */
   const ready = parsed !== null && !asking
@@ -170,9 +178,11 @@ export function QuickAdd({
           <span className="text-expense">{dictation.error}</span>
         ) : dictation.listening ? (
           <span className="text-expense">Listening…</span>
-        ) : answer !== null ? (
-          // The answer is the preview. Nothing to submit, nothing to dismiss.
-          <span className="text-ink">{answer}</span>
+        ) : spoken !== null ? (
+          // The card below is the answer. This is the same thing said aloud.
+          <span className="sr-only">{spoken}</span>
+        ) : asking ? (
+          <span className="text-faint">…</span>
         ) : (
           parsed && (
             <span className="text-muted">
@@ -187,6 +197,21 @@ export function QuickAdd({
           )
         )}
       </div>
+
+      {/* Keyed on the text: a new question is a new answer, collapsed again.
+          The 30-second clock tick must not fold up an answer being read. */}
+      {answer !== null && (
+        <AnswerCard
+          key={text}
+          answer={answer}
+          onPick={(picked) => {
+            onGoToDay(picked)
+            // The question has been answered and acted on; leaving it in the box
+            // would hide the day it just took you to.
+            setText('')
+          }}
+        />
+      )}
 
       {showExamples && (
         <div className="mt-3 flex flex-wrap gap-2">

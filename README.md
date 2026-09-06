@@ -327,16 +327,35 @@ application code imports it, and the shell alone imports nothing.
 ## Asking
 
 A leading `?` turns the same box into a question, the way a leading `+` forces an event. The
-answer appears in the preview line **as you type** — nothing to submit, no screen to leave.
+answer appears **as you type** — nothing to submit, no screen to leave.
+
+It appears as a card under the box, not a line of text. The number asked for leads, the other
+facts sit beside it, and the entries behind it follow, because a total without its working
+answers half the question:
 
 ```
-? when is deepak birthday              Saturday 13 February 2027 · in 161 days
-? gym                                  14 entries · 11 days · 12h · last today
-? how many days gym                    11 days · 12h · last today
-? how many days deepak kiran store     6 days · ₹1,240 · last yesterday
-? how much on swiggy last month        ₹3,480 · 9 entries · last 28 Aug
-? hours worked this week               18h 30m · 12 entries
+┌──────────────────────────────────────────────┐
+│ ? how much on food this week                 │
+└──────────────────────────────────────────────┘
+  food · this week
+  ₹2,340                             8 expenses
+                                    31 Aug – 6 Sep
+  ──────────────────────────────────────────────
+  Sat 6   ₹  lunch swiggy                  ₹350
+  Fri 5   ₹  dinner                        ₹620
+  Thu 4   ₹  coffee                        ₹180
+  Wed 3   ₹  lunch                         ₹290
+  ──────────────────────────────────────────────
+              4 more · see all 8
 ```
+
+Four rows, then `see all` expands in place — a question is a glance, not a report. **Every row is
+a button that goes to that day**, which is nearly always why the question was asked; the question
+clears itself on the way, so it cannot hide the day it just opened. A date is printed once per
+day rather than repeated down every row.
+
+A screen reader hears one sentence rather than being walked through the table — `phrase()` is
+built from the same parts the card lays out, so the two cannot come to disagree.
 
 Every term must match, so `deepak kiran store` will not answer for a different Deepak. Titles,
 categories and kinds are all searched. Periods understood: `today`, `yesterday`, `this week`,

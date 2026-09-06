@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run android                    # build, then copy the web assets into android/
 npm run android:open               # open the native project in Android Studio
 npm run dev                        # vite dev server on :5173
-npm test                           # vitest run (199 tests)
+npm test                           # vitest run (261 tests)
 npm run test:watch                 # vitest watch
 npx vitest run -t "yesterday"      # tests whose name matches a substring (2 of 86)
 npx tsc -b                         # typecheck only (add --force to ignore the build cache)
@@ -63,6 +63,14 @@ tab left open overnight keeps parsing `today` as yesterday.
 
 **`src/lib/format.ts`** is the only place money becomes a string, and the only place dates become
 `yyyy-MM-dd`.
+
+**`src/lib/query.ts` answers questions, and returns parts rather than a sentence.** `answer()`
+gives the caption, the lead, the extras and every matching row; `AnswerCard` lays those out and
+`phrase()` joins the same parts into the one line the live region announces. Build the sentence
+independently and it will eventually say something the card does not show. The rows are ordered
+by *next* occurrence for a date answer and by recency for everything else, which is the whole
+reason "when is deepak birthday" leads with next February rather than the row from seven months
+ago.
 
 **`android/` is a generated Capacitor shell around the same `dist/`, not a second codebase.** The
 web app and the Android app are the same React, parser and Supabase calls. Web assets are copied
