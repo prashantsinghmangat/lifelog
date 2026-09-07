@@ -204,6 +204,7 @@ export function QuickAdd({
         <AnswerCard
           key={text}
           answer={answer}
+          now={now}
           onPick={(picked) => {
             onGoToDay(picked)
             // The question has been answered and acted on; leaving it in the box

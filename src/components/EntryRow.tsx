@@ -1,4 +1,5 @@
 import { KIND_NAME, KindMark } from './KindMark'
+import { passed } from '../lib/events'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import type { Row } from '../hooks/useEntries'
 
@@ -19,6 +20,7 @@ function value(row: Row): string | null {
 
 export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
   const right = value(row)
+  const gone = passed(row, now)
   const at = row.occurred_at === null ? null : clock(row.occurred_at)
   const detail = [
     at,
@@ -41,8 +43,17 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
         <KindMark kind={row.kind} />
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm">{row.title}</span>
-          <span className="sr-only">{KIND_NAME[row.kind]}. </span>
+          {/* An event whose moment has gone reads as behind you rather than
+              ahead. Struck rather than hidden: it still happened. */}
+          <span
+            className={`block truncate text-sm ${gone ? 'text-muted line-through' : ''}`}
+          >
+            {row.title}
+          </span>
+          <span className="sr-only">
+            {KIND_NAME[row.kind]}
+            {gone ? ', passed' : ''}.{' '}
+          </span>
           {detail.length > 0 && (
             <span className="mt-0.5 block truncate text-xs text-faint">{detail.join(' · ')}</span>
           )}

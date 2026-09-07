@@ -1,6 +1,7 @@
 import { format, parseISO } from 'date-fns'
 import { useState } from 'react'
 import { KIND_NAME, KindMark } from './KindMark'
+import { passed } from '../lib/events'
 import { clock, minutes, rupees } from '../lib/format'
 import type { Answer } from '../lib/query'
 import type { Entry } from '../types'
@@ -22,6 +23,7 @@ const SHOWN = 4
 
 type Props = {
   answer: Answer
+  now: Date
   onPick: (day: string) => void
 }
 
@@ -31,7 +33,7 @@ function value(entry: Entry): string | null {
   return null
 }
 
-export function AnswerCard({ answer, onPick }: Props) {
+export function AnswerCard({ answer, now, onPick }: Props) {
   const [expanded, setExpanded] = useState(false)
 
   const shown = expanded ? answer.rows : answer.rows.slice(0, SHOWN)
@@ -99,8 +101,15 @@ export function AnswerCard({ answer, onPick }: Props) {
                 <span aria-hidden="true">{label}</span>
               </span>
               <KindMark kind={row.kind} />
-              <span className="min-w-0 flex-1 truncate text-sm">
-                <span className="sr-only">{KIND_NAME[row.kind]}. </span>
+              <span
+                className={`min-w-0 flex-1 truncate text-sm ${
+                  passed(row, now) ? 'text-muted line-through' : ''
+                }`}
+              >
+                <span className="sr-only">
+                  {KIND_NAME[row.kind]}
+                  {passed(row, now) ? ', passed' : ''}.{' '}
+                </span>
                 {row.title}
               </span>
               {right !== null && (

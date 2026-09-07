@@ -175,6 +175,34 @@ describe('deleting and taking it back', () => {
   })
 })
 
+describe('a reminder whose moment has gone', () => {
+  it('reads as behind you rather than still ahead', async () => {
+    const today = dayKey(new Date())
+    const anHourAgo = new Date(Date.now() - 3_600_000)
+    rowsOnServer = [
+      {
+        id: 'past',
+        kind: 'event',
+        occurred_on: today,
+        occurred_at: anHourAgo.toISOString(),
+        title: 'ping me',
+        note: null,
+        amount_paise: null,
+        duration_minutes: null,
+        category: null,
+        data: {},
+        created_at: anHourAgo.toISOString(),
+      },
+    ]
+    await open()
+
+    const title = await screen.findByText('ping me')
+    expect(title.className).toContain('line-through')
+    // Never decoration alone: a screen reader is told in words.
+    expect(screen.getByText(/Event, passed\./)).toBeTruthy()
+  })
+})
+
 describe('the week strip', () => {
   it('reaches any day of this week in one tap', async () => {
     await open()

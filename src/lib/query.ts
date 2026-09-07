@@ -8,6 +8,7 @@ import {
   subMonths,
   subYears,
 } from 'date-fns'
+import { nextOccurrence } from './events'
 import { dayKey, minutes as durationText, rupees } from './format'
 import { dateIn } from './parser'
 import type { Entry } from '../types'
@@ -68,31 +69,6 @@ export type Answer = {
   rows: Entry[]
   /** The question named a single day, so rows show a clock rather than a date. */
   oneDay: boolean
-}
-
-/**
- * When an event happens next.
- *
- * A birthday logged on 13 February is in the past for most of the year, so the
- * date on the row is the wrong answer — `data.rrule` makes it an anniversary,
- * and the useful answer is the next one. Asking "when is Deepak's birthday" in
- * September should say February, not report an entry from seven months ago.
- */
-export function nextOccurrence(entry: Entry, now: Date): Date | null {
-  if (entry.kind !== 'event') return null
-
-  const on = parseISO(entry.occurred_on)
-  const today = startOfDay(now)
-
-  if (entry.data.rrule === 'FREQ=YEARLY') {
-    const thisYear = new Date(today.getFullYear(), on.getMonth(), on.getDate())
-    return thisYear >= today
-      ? thisYear
-      : new Date(today.getFullYear() + 1, on.getMonth(), on.getDate())
-  }
-
-  // A one-off that has passed has no next.
-  return on >= today ? on : null
 }
 
 /** Words that carry no subject: question scaffolding, and the measures themselves. */
