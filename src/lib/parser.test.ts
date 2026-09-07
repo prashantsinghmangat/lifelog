@@ -750,3 +750,71 @@ describe('robustness', () => {
     expect(a?.data).not.toBe(b?.data)
   })
 })
+
+describe('the ways people misspell tomorrow', () => {
+  // A typo here cost a real reminder: "send proposal to amit tommorow" saved as
+  // a note with no date, so nothing was ahead, so nothing was ever scheduled —
+  // and the row looked exactly like one that had worked.
+  for (const word of ['tomorrow', 'tommorow', 'tommorrow', 'tomorow', 'tmrw']) {
+    it(`reads "${word}" as tomorrow, which makes it an event`, () => {
+      const r = p(`send proposal to amit ${word}`)
+      expect(r?.occurredOn).toBe(TOMORROW)
+      expect(r?.kind).toBe('event')
+      expect(r?.title).toBe('send proposal to amit')
+    })
+  }
+
+  it('reads "yesturday" as yesterday, so the expense lands on the right day', () => {
+    const r = p('320 lunch yesturday')
+    expect(r?.occurredOn).toBe(YESTERDAY)
+    expect(r?.amountPaise).toBe(32000)
+  })
+})
+
+describe('a time range, read for its start', () => {
+  it('takes the whole span out rather than half of it', () => {
+    // The bug: the first time was kept and "to 9 am" was swept into the title,
+    // which read as gibberish that had nonetheless saved.
+    const r = p('+ set reminder morning 8 am to 9 am yoga')
+    expect(r?.kind).toBe('event')
+    expect(r?.occurredAt).toBe('2026-09-01T08:00:00+05:30')
+    expect(r?.title).toBe('set reminder morning yoga')
+  })
+
+  it('applies the one meridiem given to both ends', () => {
+    const r = p('yoga 8 to 9 am tomorrow')
+    expect(r?.occurredOn).toBe(TOMORROW)
+    expect(r?.occurredAt).toBe('2026-09-02T08:00:00+05:30')
+    expect(r?.title).toBe('yoga')
+  })
+
+  it('reads a 24-hour span', () => {
+    const r = p('+ standup 10:00 to 11:00')
+    expect(r?.occurredAt).toBe('2026-09-01T10:00:00+05:30')
+    expect(r?.title).toBe('standup')
+  })
+
+  it('accepts until and till as the join', () => {
+    expect(p('+ fast 8 am until 6 pm')?.occurredAt).toBe('2026-09-01T08:00:00+05:30')
+    expect(p('+ fast 8 am till 6 pm')?.occurredAt).toBe('2026-09-01T08:00:00+05:30')
+  })
+
+  it('leaves two bare numbers alone, so 9-6 is still not a time range', () => {
+    // Hyphens are not a join here at all, and a bare "10 to 6" carries no clock
+    // marker — both stay out, as the parser has always had them.
+    expect(p('9-6 worked')?.occurredAt).toBeUndefined()
+    expect(p('10 to 6 worked')?.occurredAt).toBeUndefined()
+  })
+
+  it('does not turn a counted title into a clock', () => {
+    const r = p('2 to 3 apples')
+    expect(r?.occurredAt).toBeUndefined()
+  })
+
+  it('leaves a payment to someone alone', () => {
+    const r = p('20000 to neha')
+    expect(r?.kind).toBe('expense')
+    expect(r?.amountPaise).toBe(2000000)
+    expect(r?.occurredAt).toBeUndefined()
+  })
+})

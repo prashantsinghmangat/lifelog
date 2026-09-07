@@ -222,7 +222,16 @@ Rules worth knowing:
 - Local dates only. `toISOString().slice(0, 10)` returns yesterday for the first five and a half
   hours of every IST day, so everything goes through `format(d, 'yyyy-MM-dd')`.
 
-Time ranges (`9-6`, `10 to 6`) are deliberately not parsed. `9h worked` covers the same need.
+Time ranges are still not a duration — `9-6` and `10 to 6` stay out, and `9h worked` covers that
+need. But a *clocked* span is read for its start, because half-reading one was worse than either
+understanding or refusing it: `8 am to 9 am yoga` sets 8:00 am and a clean title, where it used to
+keep the first time and sweep `to 9 am` into the title. A colon or a meridiem somewhere is what
+separates the two, so `2 to 3 apples` is still a title. There is no end-time column and there is
+not going to be one; the preview shows the single time before anything saves.
+
+`tomorrow` is accepted as `tommorow`, `tommorrow`, `tomorow` and `tmrw`, and `yesterday` as
+`yesturday` — not indulgence: a typo meant no date, so nothing was ahead, so no reminder was ever
+scheduled, and the row looked exactly like one that had worked.
 
 ## The Android app
 

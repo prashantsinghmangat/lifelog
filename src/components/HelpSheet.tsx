@@ -39,6 +39,7 @@ const SECTIONS: Section[] = [
       { text: 'call mum in 2 hours', does: 'relative to right now' },
       { text: 'ping 8:15pm', does: 'later today, so it is a reminder' },
       { text: 'dentist tomorrow 5pm', does: 'notifies tomorrow at 5pm' },
+      { text: 'yoga 8 to 9 am tomorrow', does: 'a range sets the start, 8am' },
       { text: '+ standup', does: '+ forces an event whose time has passed' },
       { text: '+ Mom birthday 14 nov', does: 'repeats yearly, alarms at 9am' },
     ],

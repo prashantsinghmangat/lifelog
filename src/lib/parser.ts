@@ -67,6 +67,18 @@ const MONTH = Object.keys(MONTHS).join('|')
 
 const FILLER = new Set(['spent', 'paid', 'bought', 'for', 'on', 'at', 'worked', 'did'])
 
+/**
+ * The two date words people misspell, spelled the ways they actually type them.
+ *
+ * Not indulgence — a typo here costs a reminder and says nothing. "send proposal
+ * to amit tommorow" parsed as a note: no date, so nothing ahead, so no event and
+ * no alarm, and the row looked exactly like one that had worked. The doubled `m`
+ * and dropped `r` are the common slips, and `tmrw` is how a phone gets typed.
+ */
+const TOMORROW = /\b(?:tom+or+ow|tmrw|tmrow)\b/i
+/** `yesturday` files an expense on the wrong day, which is quieter but still wrong. */
+const YESTERDAY = /\byest[eu]rday\b/i
+
 const DEFAULT_TITLE: Record<Kind, string> = {
   expense: 'Expense',
   time: 'Time log',
@@ -93,8 +105,8 @@ function takeDate(input: string, now: Date): Cut<Date> | null {
 
   const relative =
     cut(input, /\btoday\b/i, () => today) ??
-    cut(input, /\byesterday\b/i, () => subDays(today, 1)) ??
-    cut(input, /\btomorrow\b/i, () => addDays(today, 1)) ??
+    cut(input, YESTERDAY, () => subDays(today, 1)) ??
+    cut(input, TOMORROW, () => addDays(today, 1)) ??
     cut(input, /\b(\d+)\s*(?:days?|d)\s+ago\b/i, (m) => subDays(today, int(m[1])))
   if (relative) return relative
 
@@ -143,24 +155,57 @@ function fullYear(raw: string | undefined, now: Date): number {
   return n < 100 ? 2000 + n : n
 }
 
-function takeTime(input: string): Cut<{ hours: number; minutes: number }> | null {
+type Clock = { hours: number; minutes: number }
+
+function clockFrom(rawHour: string | undefined, rawMinutes: string | undefined, meridiem: string): Clock | null {
+  const hours = int(rawHour)
+  const minutes = rawMinutes === undefined ? 0 : int(rawMinutes)
+  if (minutes > 59) return null
+  if (meridiem === '') return hours > 23 ? null : { hours, minutes }
+  if (hours < 1 || hours > 12) return null
+  return { hours: (hours % 12) + (meridiem === 'p' ? 12 : 0), minutes }
+}
+
+const CLOCK = '(\\d{1,2})(?::(\\d{2}))?(?:\\s*([ap])\\.?\\s?m\\.?)?'
+/** Only the spelled-out joins: `-` stays out, so `9-6` is still not a time range. */
+const SPAN = new RegExp(`\\b${CLOCK}\\s*(?:to|till|until)\\s+${CLOCK}(?![a-z])`, 'i')
+
+/**
+ * `8 am to 9 am`, `8 to 9 am`, `10:00 to 11:00` — a window, read for its start.
+ *
+ * There is no column for an end time and there is deliberately not going to be
+ * one, but half-reading a window was worse than either understanding or refusing
+ * it: `set reminder morning 8 am to 9 am yoga` kept the first time and swept
+ * `to 9 am` into the title, which then read as gibberish that had nonetheless
+ * saved. The whole span comes out in one piece and the start becomes the moment,
+ * which is the part a reminder needs. The preview shows that single time before
+ * anything is saved, so nothing about it is silent.
+ *
+ * Both sides bare is not a clock range — `9-6` is the syntax this parser does
+ * not read, and `2 to 3 apples` is a title. A colon or a meridiem somewhere is
+ * what tells the two apart.
+ */
+function takeRange(input: string): Cut<Clock> | null {
+  return cut(input, SPAN, (m) => {
+    const marked = [m[2], m[3], m[5], m[6]].some((part) => part !== undefined)
+    if (!marked) return null
+    // `8 to 9 am` means both are am: the one meridiem given covers the start.
+    return clockFrom(m[1], m[2], (m[3] ?? m[6] ?? '').toLowerCase())
+  })
+}
+
+function takeTime(input: string): Cut<Clock> | null {
   return (
+    // Ahead of the single-time patterns, or a range loses its end into the title.
+    takeRange(input) ??
     // `5pm`, `5 pm`, `4:00 p.m.`, `9 A.M.` — the dotted forms matter because a
     // phone keyboard autocorrects "pm" to "p.m.", and without them `4:00 p.m.`
     // falls through to the 24-hour branch and becomes 4am. A trailing \b cannot
     // be used: after the final dot there is no word boundary.
-    cut(input, /\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s?m\.?(?![a-z])/i, (m) => {
-      const hour = int(m[1])
-      const minutes = m[2] === undefined ? 0 : int(m[2])
-      if (hour < 1 || hour > 12 || minutes > 59) return null
-      const pm = (m[3] ?? '').toLowerCase() === 'p'
-      return { hours: (hour % 12) + (pm ? 12 : 0), minutes }
-    }) ??
-    cut(input, /\b(\d{1,2}):(\d{2})\b/, (m) => {
-      const hours = int(m[1])
-      const minutes = int(m[2])
-      return hours > 23 || minutes > 59 ? null : { hours, minutes }
-    })
+    cut(input, /\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s?m\.?(?![a-z])/i, (m) =>
+      clockFrom(m[1], m[2], (m[3] ?? '').toLowerCase()),
+    ) ??
+    cut(input, /\b(\d{1,2}):(\d{2})\b/, (m) => clockFrom(m[1], m[2], ''))
   )
 }
 

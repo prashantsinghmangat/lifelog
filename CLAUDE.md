@@ -236,8 +236,10 @@ fonts, one 100ms fade on new rows, nothing else animated.
 No AI or LLM calls, no SMS parsing, no notification listeners, no Capacitor or native Android, no
 recurring event expansion, no push notifications, no offline sync (the service worker precaches
 the app shell only — **never cache API responses**), no charts, no category management UI, no
-search, no tags, no multi-day views. Time ranges (`9-6`, `10 to 6`) are explicitly out of the
-parser; `9h worked` covers the same need.
+search, no tags, no multi-day views. Time ranges are not a duration: `9-6` and `10 to 6` are
+explicitly out of the parser, and `9h worked` covers that need. A *clocked* span (`8 am to 9 am`,
+`10:00 to 11:00`) is read for its start only — half-reading one swept `to 9 am` into the title —
+and a colon or meridiem somewhere is what tells the two apart. There is no end-time column.
 
 Added after the spec froze, on the owner's request: the month calendar sheet (replacing an
 invisible native date input), a **profile sheet** holding theme, export and sign out — which is
