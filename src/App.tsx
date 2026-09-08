@@ -1,5 +1,5 @@
 import { addDays, parseISO, subDays } from 'date-fns'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
@@ -8,6 +8,7 @@ import { PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { MonthSheet } from './components/MonthSheet'
+import { OnThisDay } from './components/OnThisDay'
 import { ProfileSheet } from './components/ProfileSheet'
 import { QuickAdd } from './components/QuickAdd'
 import { Toast, type ToastState } from './components/Toast'
@@ -17,7 +18,9 @@ import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { download, shareOrDownload } from './lib/deliver'
-import { clock, dayKey, dayLabel, minutes, relativeDay, rupees } from './lib/format'
+import { clock, dayKey, dayLabel, minutes, relativeDay, rowValue, rupees } from './lib/format'
+import { onThisDay } from './lib/history'
+import { forget } from './lib/identity'
 import { forCalendar, toIcs } from './lib/ics'
 import { isNative } from './lib/platform'
 import {
@@ -32,23 +35,25 @@ import type { ParsedEntry } from './lib/parser'
 import type { Entry } from './types'
 
 export default function App() {
-  const { session, loading } = useSession()
+  const { identity, loading } = useSession()
   // Resolved before the auth gate, so the login screen honours the choice too.
   const { theme, choose } = useTheme()
 
   if (loading) return <div className="p-4 text-sm text-faint">…</div>
-  if (!session) return <Login />
+  if (identity === null) return <Login />
 
-  return <Day email={session.user.email ?? ''} theme={theme} onTheme={choose} />
+  return <Day email={identity.email} userId={identity.id} theme={theme} onTheme={choose} />
 }
 
 type DayProps = {
   email: string
+  /** Keys this device's copy of the log, so two accounts cannot see each other's. */
+  userId: string
   theme: ReturnType<typeof useTheme>['theme']
   onTheme: ReturnType<typeof useTheme>['choose']
 }
 
-function Day({ email, theme, onTheme }: DayProps) {
+function Day({ email, userId, theme, onTheme }: DayProps) {
   const [now, setNow] = useState(() => new Date())
   const [day, setDay] = useState(() => dayKey(new Date()))
   const [editing, setEditing] = useState<Row | null>(null)
@@ -61,12 +66,19 @@ function Day({ email, theme, onTheme }: DayProps) {
   // Every entry, fetched only once a question is actually asked, and dropped
   // whenever the log changes so an answer is never quietly out of date.
   const [corpus, setCorpus] = useState<Entry[] | null>(null)
+  // Kept from the fetch reminders already make on launch, rather than asked for
+  // again. Held apart from `corpus` on purpose: an answer must never be computed
+  // from a stale log, while a memory of an earlier year cannot go stale from
+  // anything typed today.
+  const [history, setHistory] = useState<Entry[] | null>(null)
   const loading_ = useRef(false)
   const {
     entries,
     failedElsewhere,
     loading,
     error,
+    reachable,
+    owed,
     add,
     update,
     remove,
@@ -74,7 +86,7 @@ function Day({ email, theme, onTheme }: DayProps) {
     retry,
     fetchAll,
     fetchDays,
-  } = useEntries(day)
+  } = useEntries(day, userId)
 
   // A tab left open overnight would keep parsing `today` as yesterday. The
   // interval matters as much as the events: with the app simply left open,
@@ -171,11 +183,19 @@ function Day({ email, theme, onTheme }: DayProps) {
   // the phone, and a reinstall does not lose the lot. No-op away from native.
   useEffect(() => {
     void fetchAll()
-      .then((all) => sync(all, new Date()))
+      .then((all) => {
+        setHistory(all)
+        return sync(all, new Date())
+      })
       .catch(() => {
         // A reminder that could not be re-armed is not worth an error on screen.
       })
   }, [fetchAll])
+
+  const recalled = useMemo(
+    () => (history === null ? [] : onThisDay(history, day)),
+    [history, day],
+  )
 
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
@@ -201,7 +221,7 @@ function Day({ email, theme, onTheme }: DayProps) {
     setToast({
       text: elsewhere
         ? `Saved to ${where}`
-        : `Added ${[row.title, value(row)].filter(Boolean).join(' · ')}`,
+        : `Added ${[row.title, rowValue(row)].filter(Boolean).join(' · ')}`,
       action:
         calendar ??
         (elsewhere ? { label: 'View', run: () => setDay(row.occurred_on) } : undefined),
@@ -336,18 +356,6 @@ function Day({ email, theme, onTheme }: DayProps) {
           <WeekStrip day={day} now={now} loadDays={fetchDays} onPick={setDay} />
         </div>
 
-        {entries.length > 0 && (
-          <p className="mt-1.5 text-xs text-muted">
-            {[
-              spent > 0 ? `${rupees(spent)} spent` : null,
-              logged > 0 ? `${minutes(logged)} logged` : null,
-              `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`,
-            ]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
-        )}
-
         {/* Sticky: on a long day the capture box must never scroll out of
             reach, since capture is the whole product. */}
         <div className="sticky top-0 z-10 mt-4 bg-surface pt-1 pb-2">
@@ -383,7 +391,23 @@ function Day({ email, theme, onTheme }: DayProps) {
           </div>
         )}
 
-        {error !== null && <p className="mt-3 text-xs text-expense">{error}</p>}
+        {/* Offline is a state, not an error: everything still works, so it is
+            said quietly and the raw fetch failure behind it is not shown. What
+            does need saying is how much this device is still holding, because
+            an entry that exists nowhere else is the one thing worth knowing.
+            Driven by whether a request got an answer, never by
+            `navigator.onLine` — on Android that reports a connection the device
+            does not have. */}
+        {!reachable ? (
+          <p className="mt-3 text-xs text-muted">
+            Offline
+            {owed > 0
+              ? ` · ${owed} ${owed === 1 ? 'entry' : 'entries'} saved here, waiting to sync`
+              : ' · reading this device’s copy'}
+          </p>
+        ) : (
+          error !== null && <p className="mt-3 text-xs text-expense">{error}</p>
+        )}
 
         <div className="mt-3 flex-1" aria-busy={loading}>
           {/* Placeholders, not a spinner: the rows land where these sat, so
@@ -405,15 +429,34 @@ function Day({ email, theme, onTheme }: DayProps) {
               row={row}
               now={now}
               onOpen={() => setEditing(row)}
-              onRetry={() => retry(row)}
+              onRetry={retry}
             />
           ))}
+
+          {/* Under the rows, not over them: read as a header it looked like a
+              label for the box you were about to type into, when it is a
+              summary of the day you have just finished reading. The last row's
+              own border is the rule above it. */}
+          {entries.length > 0 && (
+            <p className="mt-2.5 text-xs text-muted">
+              {[
+                spent > 0 ? `${rupees(spent)} spent` : null,
+                logged > 0 ? `${minutes(logged)} logged` : null,
+                `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
 
           {!loading && entries.length === 0 && (
             <p className="text-xs text-faint">
               Nothing on this day. Type above, or swipe sideways to move between days.
             </p>
           )}
+
+          <OnThisDay found={recalled} onPick={setDay} />
+
 
           {failedElsewhere.length > 0 && (
             <div className="mt-6">
@@ -425,7 +468,7 @@ function Day({ email, theme, onTheme }: DayProps) {
                   now={now}
                   offDay
                   onOpen={() => setDay(row.occurred_on)}
-                  onRetry={() => retry(row)}
+                  onRetry={retry}
                 />
               ))}
             </div>
@@ -454,7 +497,13 @@ function Day({ email, theme, onTheme }: DayProps) {
           }}
           onExport={() => void exportJson()}
           onExportCalendar={() => void exportCalendar()}
-          onSignOut={() => void supabase.auth.signOut()}
+          // Forgotten here as well as on the event, because signing out with no
+          // network never reaches Supabase — and an offline sign-out that does
+          // not sign you out is worse than no button at all.
+          onSignOut={() => {
+            forget(localStorage)
+            void supabase.auth.signOut()
+          }}
           onClose={() => setProfileOpen(false)}
         />
       )}
@@ -488,10 +537,4 @@ function Day({ email, theme, onTheme }: DayProps) {
       {toast !== null && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   )
-}
-
-function value(row: Row): string | null {
-  if (row.amount_paise !== null) return rupees(row.amount_paise)
-  if (row.duration_minutes !== null) return minutes(row.duration_minutes)
-  return null
 }

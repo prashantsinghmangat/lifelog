@@ -1,6 +1,6 @@
 import { KIND_NAME, KindMark } from './KindMark'
 import { passed } from '../lib/events'
-import { clock, minutes, relativeDay, rupees } from '../lib/format'
+import { clock, relativeDay, rowValue } from '../lib/format'
 import type { Row } from '../hooks/useEntries'
 
 type Props = {
@@ -12,20 +12,17 @@ type Props = {
   onRetry: () => void
 }
 
-function value(row: Row): string | null {
-  if (row.amount_paise !== null) return rupees(row.amount_paise)
-  if (row.duration_minutes !== null) return minutes(row.duration_minutes)
-  return null
-}
-
 export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
-  const right = value(row)
+  const right = rowValue(row)
   const gone = passed(row, now)
   const at = row.occurred_at === null ? null : clock(row.occurred_at)
   const detail = [
     at,
     row.category,
     offDay ? relativeDay(row.occurred_on, now) : null,
+    // Words, not a colour or an icon: the row is saved on this device and the
+    // server has not seen it, which is worth knowing and is not a problem.
+    row.status === 'queued' ? 'saved here, not synced' : null,
   ].filter((bit): bit is string => bit !== null && bit !== '')
 
   return (

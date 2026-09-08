@@ -127,12 +127,19 @@ function takeDate(input: string, now: Date): Cut<Date> | null {
     )
   if (numeric) return numeric
 
+  // The year is optional and must be four digits beginning 19 or 20. Bare, so
+  // that `12 sep` still means this year — but taken when it is there, because
+  // without it `anniversary 12 sep 2025` filed to *this* September and left the
+  // year behind to be read as ₹2,025. Narrow on purpose: an unrestricted
+  // `\d{4}` would turn the 1200 in `12 sep 1200` into the year 1200 rather than
+  // the amount it plainly is.
+  const YEAR = '(?:\\s+((?:19|20)\\d{2}))?'
   const named =
-    cut(input, new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH})\\b`, 'i'), (m) =>
-      makeDate(now.getFullYear(), MONTHS[(m[2] ?? '').toLowerCase()] ?? -1, int(m[1])),
+    cut(input, new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH})${YEAR}\\b`, 'i'), (m) =>
+      makeDate(fullYear(m[3], now), MONTHS[(m[2] ?? '').toLowerCase()] ?? -1, int(m[1])),
     ) ??
-    cut(input, new RegExp(`\\b(${MONTH})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'i'), (m) =>
-      makeDate(now.getFullYear(), MONTHS[(m[1] ?? '').toLowerCase()] ?? -1, int(m[2])),
+    cut(input, new RegExp(`\\b(${MONTH})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?${YEAR}\\b`, 'i'), (m) =>
+      makeDate(fullYear(m[3], now), MONTHS[(m[1] ?? '').toLowerCase()] ?? -1, int(m[2])),
     )
   if (named) return named
 
@@ -240,6 +247,23 @@ function takeRelative(input: string, now: Date): Cut<Date> | null {
     if (!Number.isFinite(value) || value <= 0) return null
     return new Date(now.getTime() + Math.round(value * perUnit * 60_000))
   }
+
+  // Said rather than counted. `in an hour` is at least as natural as `in 60
+  // minutes`, and it used to fall through to a note — a reminder that silently
+  // was not one. `half` is tried first, or `half an hour` matches the `an hour`
+  // pattern and leaves `half` sitting in the title.
+  const spoken =
+    cut(input, new RegExp(`\\b(?:in|after)\\s+half\\s+(?:an?\\s+)?${HOURS}\\b`, 'i'), () =>
+      ahead('30', 1),
+    ) ??
+    cut(input, new RegExp(`\\bhalf\\s+(?:an?\\s+)?${HOURS}\\s+from\\s+now\\b`, 'i'), () =>
+      ahead('30', 1),
+    ) ??
+    cut(input, new RegExp(`\\b(?:in|after)\\s+an?\\s+${HOURS}\\b`, 'i'), () => ahead('60', 1)) ??
+    cut(input, new RegExp(`\\ban?\\s+${HOURS}\\s+from\\s+now\\b`, 'i'), () => ahead('60', 1)) ??
+    cut(input, new RegExp(`\\b(?:in|after)\\s+an?\\s+${MINUTES}\\b`, 'i'), () => ahead('1', 1)) ??
+    cut(input, new RegExp(`\\ban?\\s+${MINUTES}\\s+from\\s+now\\b`, 'i'), () => ahead('1', 1))
+  if (spoken) return spoken
 
   return (
     cut(input, new RegExp(`\\b(?:in|after)\\s+(\\d+(?:\\.\\d+)?)\\s*${HOURS}\\b`, 'i'), (m) =>

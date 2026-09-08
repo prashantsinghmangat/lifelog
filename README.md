@@ -186,7 +186,7 @@ that is what actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 199 tests
+npm test           # vitest run — 365 tests
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -555,12 +555,13 @@ and an insert is rejected with `42501 new row violates row-level security policy
 
 ```
 src/
-  lib/        supabase.ts  parser.ts  query.ts  ics.ts  reminders.ts  format.ts
+  lib/        supabase.ts  store.ts  identity.ts  parser.ts  query.ts  history.ts
+              ics.ts  reminders.ts  format.ts
   hooks/      useEntries.ts  useSession.ts  useTheme.ts  useSwipe.ts  useDictation.ts
-              useMarkedDays.ts
+              useMarkedDays.ts  useOnline.ts
   components/ Login.tsx  DayHeader.tsx  WeekStrip.tsx  DayCell.tsx  MonthGrid.tsx
               MonthSheet.tsx  ProfileSheet.tsx  QuickAdd.tsx  AnswerCard.tsx
-              EntryRow.tsx  KindMark.tsx  EntryEditor.tsx  HelpSheet.tsx
+              OnThisDay.tsx  EntryRow.tsx  KindMark.tsx  EntryEditor.tsx  HelpSheet.tsx
               Sheet.tsx  Toast.tsx  Icons.tsx
   types.ts  App.tsx  main.tsx
 supabase/migrations/0001_entries.sql
@@ -592,9 +593,24 @@ set, rows are never removed.
   only way there, at a tap to open and a tap to dismiss. Not rendered on wide screens, where the
   sidebar already shows the whole month for no taps at all.
 - **Dictation** via the Web Speech API. Unsupported in iOS Safari, where the mic button is hidden.
+- **"On this day"** shows the same calendar date in earlier years, below the day's own entries.
+  The nearest thing here to a multi-day view, which the spec ruled out. It is allowed because it
+  adds no page, no control, no setting and no query: it filters the log already fetched at launch
+  to re-arm reminders, and renders nothing at all on a day with nothing behind it. A year is one
+  button, because the only thing wanted from a memory that size is to go and read the rest of it.
+
+- **It works with no network.** The log lives on the device and syncs when it can, because none of
+  what this app does needs a server: parsing an entry, showing a day, totalling it, answering a
+  question and raising a reminder are all local. Writes are durable immediately, so an entry
+  logged on a train survives the app being closed; each dirty row syncs as one idempotent upsert,
+  so order does not matter and a row edited five times offline is one write. Reads fall back to
+  the device's copy, which is what keeps questions, memories, the export and the calendar dots
+  answering. Last-write-wins per row across devices, with no merge.
 
 ## Not built, on purpose
 
 No AI or LLM calls, no SMS parsing, no notification listeners, no Capacitor or native Android,
-no recurring event expansion, no push notifications, no offline sync, no charts, no category
-management UI, no search, no tags, no multi-day views, no settings screen.
+no recurring event expansion, no push notifications, no charts, no category management UI, no
+search, no tags, no settings screen. No multi-day view beyond the "on this day" strip above.
+The service worker still precaches the app shell only and never caches API responses — offline
+reads come from the app's own log, not from an invisible cache of stale JSON.

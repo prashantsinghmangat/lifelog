@@ -135,11 +135,14 @@ describe('asking a question', () => {
     // The card leads with the number on its own; the live region hears the
     // whole sentence. Both, on purpose, and neither written twice.
     expect(screen.getByText('2 days')).toBeTruthy()
-    expect(screen.getByText('2 days · 2h 15m · last today')).toBeTruthy()
+    expect(screen.getByText('2 days · 2h 15m · first 3 Sep · last today')).toBeTruthy()
 
     // The working, which is most of why the question was worth asking.
     expect(screen.getByText('gym again')).toBeTruthy()
-    expect(screen.getByText('Thu 3')).toBeTruthy()
+
+    // Once, above both of that day's rows. Printed per row it was the loudest
+    // thing on the card and still had to be reassembled by eye.
+    expect(screen.getAllByText('Thu 3 Sep')).toHaveLength(1)
   })
 
   it('takes you to the day an answer points at, and clears the question', async () => {

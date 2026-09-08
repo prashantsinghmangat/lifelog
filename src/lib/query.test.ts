@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { answer, parseQuestion, periodOf, phrase, summarise } from './query'
+import { answer, extraText, parseQuestion, periodOf, phrase, summarise } from './query'
 import type { Entry, Kind } from '../types'
 
 // Saturday, 5 September 2026.
@@ -295,7 +295,41 @@ describe('the parts an answer is laid out from', () => {
   it('leads with the measure and keeps the rest beside it', () => {
     const said = of('? how many days gym')
     expect(said.lead).toBe('3 days')
-    expect(said.extras).toEqual(['3h 15m', 'last today'])
+    expect(said.extras).toEqual([
+      { label: null, value: '3h 15m' },
+      { label: 'first', value: '28 Aug' },
+      { label: 'last', value: 'today' },
+    ])
+  })
+
+  it('gives a total its shape: how many went into it, and the average', () => {
+    // ₹2,340 across two entries is a very different week from ₹2,340 across
+    // twenty, and the total alone cannot tell them apart.
+    const said = of('? how much deepak kiran store')
+    expect(said.lead).toBe('₹700')
+    expect(said.extras).toContainEqual({ label: null, value: '3 entries' })
+    expect(said.extras).toContainEqual({ label: 'avg', value: '₹233.33' })
+  })
+
+  it('says the span a total covers, not just where it ended', () => {
+    const said = of('? how much deepak kiran store')
+    expect(said.extras).toContainEqual({ label: 'first', value: '15 Aug' })
+    expect(said.extras).toContainEqual({ label: 'last', value: 'yesterday' })
+  })
+
+  it('leaves out an average and a span that only repeat a single row', () => {
+    const said = of('? how much swiggy this month')
+    expect(said.lead).toBe('₹350')
+    expect(said.extras.map((extra) => extra.label)).not.toContain('avg')
+    // One matching day, so "first" would be "last" said twice.
+    expect(said.extras.map((extra) => extra.label)).not.toContain('first')
+  })
+
+  it('groups rows by day only where they are actually in day order', () => {
+    // Ordered by `occurred_on`, so each date can head the rows beneath it.
+    expect(of('? gym').grouped).toBe(true)
+    // One day: the caption already names it.
+    expect(of('? what did i do yesterday').grouped).toBe(false)
   })
 
   it('carries every match, so the card decides how many to show', () => {
@@ -324,7 +358,9 @@ describe('the parts an answer is laid out from', () => {
       if (question === null) throw new Error('not a question')
       const summary = summarise(LOG, question, NOW)
       const said = answer(summary, question, NOW)
-      expect([said.lead, ...said.extras].join(' · ')).toBe(phrase(summary, question, NOW))
+      expect([said.lead, ...said.extras.map(extraText)].join(' · ')).toBe(
+        phrase(summary, question, NOW),
+      )
     }
   })
 })

@@ -1,4 +1,5 @@
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
+import type { Entry } from '../types'
 
 /** The only place paise become a string. 34750 → "₹347.50", 35000 → "₹350". */
 export function rupees(paise: number): string {
@@ -61,13 +62,54 @@ export function atTime(day: string, time: string): string | null {
   return format(at, "yyyy-MM-dd'T'HH:mm:ssXXX")
 }
 
-/** Header label: "Today", otherwise "Sat, 30 Aug". */
+/**
+ * Header label: "Today", otherwise "Sat, 30 Aug" — with the year when it is not
+ * the current one.
+ *
+ * The year is not decoration here. Browsing back to a previous September, the
+ * header read "Fri, 12 Sep" and there was nothing anywhere on the screen to say
+ * which year you were looking at.
+ */
 export function dayLabel(day: string, now: Date): string {
   const date = parseISO(day)
-  return differenceInCalendarDays(date, now) === 0 ? 'Today' : format(date, 'EEE, d MMM')
+  if (differenceInCalendarDays(date, now) === 0) return 'Today'
+  return format(date, date.getFullYear() === now.getFullYear() ? 'EEE, d MMM' : 'EEE, d MMM yyyy')
 }
 
-/** Inline label for preview text: "today", "yesterday", "tomorrow", "14 Nov". */
+/**
+ * A date as a heading over the rows that fall on it: "Sun 23 Aug".
+ *
+ * The year appears only when it is not the current one, since an answer that
+ * reaches back a year has to say so and one that does not would only be
+ * repeating itself.
+ */
+export function dayHeading(day: string, now: Date): string {
+  const date = parseISO(day)
+  const shown = date.getFullYear() === now.getFullYear() ? 'EEE d MMM' : 'EEE d MMM yyyy'
+  return format(date, shown)
+}
+
+/**
+ * The one number a row carries on its right: money when it has any, otherwise
+ * duration. Shared so the timeline, an answer and a toast cannot drift apart
+ * about which of the two a row leads with.
+ */
+export function rowValue(row: Pick<Entry, 'amount_paise' | 'duration_minutes'>): string | null {
+  if (row.amount_paise !== null) return rupees(row.amount_paise)
+  if (row.duration_minutes !== null) return minutes(row.duration_minutes)
+  return null
+}
+
+/**
+ * Inline label for preview text: "today", "yesterday", "tomorrow", "14 Nov" —
+ * and "12 Sep 2025" for another year.
+ *
+ * This is the text in "→ saving to X" and "Saved to X", which is the app's only
+ * warning that an entry is about to land somewhere other than the day on
+ * screen. Without the year that warning was wrong by twelve months and looked
+ * right: `12 sep 2025` previewed as "saving to 12 Sep", identical to what a
+ * date in this September would show.
+ */
 export function relativeDay(day: string, now: Date): string {
   const date = parseISO(day)
   switch (differenceInCalendarDays(date, now)) {
@@ -78,6 +120,6 @@ export function relativeDay(day: string, now: Date): string {
     case 1:
       return 'tomorrow'
     default:
-      return format(date, 'd MMM')
+      return format(date, date.getFullYear() === now.getFullYear() ? 'd MMM' : 'd MMM yyyy')
   }
 }

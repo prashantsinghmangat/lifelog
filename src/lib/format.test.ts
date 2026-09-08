@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { atTime, dayKey, minutes, paiseFrom, rupees, timeValue } from './format'
+import {
+  atTime,
+  dayKey,
+  dayLabel,
+  minutes,
+  paiseFrom,
+  relativeDay,
+  rupees,
+  timeValue,
+} from './format'
 
 describe('rupees', () => {
   it('shows paise only when there are any', () => {
@@ -79,5 +88,33 @@ describe('dayKey', () => {
   it('uses the local date, not UTC', () => {
     // Late evening in IST is already the next day in UTC; the local date wins.
     expect(dayKey(new Date(2026, 8, 5, 23, 30))).toBe('2026-09-05')
+  })
+})
+
+describe('naming a day', () => {
+  const NOW = new Date(2026, 8, 8, 10, 0, 0)
+
+  it('says Today for today, and a weekday and date otherwise', () => {
+    expect(dayLabel('2026-09-08', NOW)).toBe('Today')
+    expect(dayLabel('2026-09-12', NOW)).toBe('Sat, 12 Sep')
+  })
+
+  it('names the year when it is not this one', () => {
+    // Browsing back a year, the header read "Fri, 12 Sep" and nothing on screen
+    // said which September it was.
+    expect(dayLabel('2025-09-12', NOW)).toBe('Fri, 12 Sep 2025')
+  })
+
+  it('keeps the near days as words', () => {
+    expect(relativeDay('2026-09-08', NOW)).toBe('today')
+    expect(relativeDay('2026-09-07', NOW)).toBe('yesterday')
+    expect(relativeDay('2026-09-09', NOW)).toBe('tomorrow')
+    expect(relativeDay('2026-09-12', NOW)).toBe('12 Sep')
+  })
+
+  it('names the year in "saving to X", the only warning of a distant backfill', () => {
+    // Without it, `12 sep 2025` previewed as "saving to 12 Sep" — the same
+    // thing a date in this September shows, and wrong by twelve months.
+    expect(relativeDay('2025-09-12', NOW)).toBe('12 Sep 2025')
   })
 })

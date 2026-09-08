@@ -282,6 +282,36 @@ describe('events', () => {
   })
 })
 
+describe('a year on a written date', () => {
+  it('takes the year when it is given', () => {
+    // Without this the year was ignored *and* left behind: "anniversary 12 sep
+    // 2025" filed to this September and read the 2025 as ₹2,025.
+    expect(p('500 anniversary dinner 12 sep 2025')?.occurredOn).toBe('2025-09-12')
+    expect(p('500 anniversary dinner 12 sep 2025')?.title).toBe('anniversary dinner')
+  })
+
+  it('takes it in either word order', () => {
+    expect(p('sep 12 2025 anniversary')?.occurredOn).toBe('2025-09-12')
+    expect(p('12 september 2025 anniversary')?.occurredOn).toBe('2025-09-12')
+  })
+
+  it('still means this year when no year is written', () => {
+    expect(p('500 dinner 12 sep')?.occurredOn).toBe('2026-09-12')
+  })
+
+  it('does not mistake an amount for a year', () => {
+    // A year has to begin 19 or 20. An unrestricted four digits would read the
+    // 1200 here as the year 1200 rather than the number it plainly is.
+    const r = p('2h call 12 sep 1200')
+    expect(r?.occurredOn).toBe('2026-09-12')
+    expect(r?.title).toContain('1200')
+  })
+
+  it('reads a slash date with a year, which already worked', () => {
+    expect(p('500 anniversary dinner 12/9/2025')?.occurredOn).toBe('2025-09-12')
+  })
+})
+
 describe('dates', () => {
   it('parses a trailing "yesterday"', () => {
     const r = p('320 lunch yesterday')
@@ -592,6 +622,43 @@ describe('relative reminders', () => {
   it('does not treat a zero offset as a reminder', () => {
     const r = p('in 0 minutes nothing')
     expect(r?.occurredAt).toBeUndefined()
+  })
+
+  it('reads "in an hour", which is how people actually say it', () => {
+    // This used to fall through to a note: a reminder that silently was not
+    // one, which is the worst outcome this parser can produce.
+    const r = p('ping me in an hour')
+    expect(r?.kind).toBe('event')
+    expect(r?.occurredAt?.startsWith('2026-09-01T11:00:00')).toBe(true)
+    expect(r?.title).toBe('ping me')
+  })
+
+  it('reads "in half an hour", and "half hour" without the article', () => {
+    expect(p('ping me in half an hour')?.occurredAt?.startsWith('2026-09-01T10:30:00')).toBe(true)
+    expect(p('ping me in half hour')?.occurredAt?.startsWith('2026-09-01T10:30:00')).toBe(true)
+  })
+
+  it('tries "half an hour" before "an hour", or half lands in the title', () => {
+    const r = p('ping me in half an hour')
+    expect(r?.title).toBe('ping me')
+  })
+
+  it('reads "in a minute" and "an hour from now"', () => {
+    expect(p('ping me in a minute')?.occurredAt?.startsWith('2026-09-01T10:01:00')).toBe(true)
+
+    const later = p('an hour from now standup')
+    expect(later?.occurredAt?.startsWith('2026-09-01T11:00:00')).toBe(true)
+    expect(later?.title).toBe('standup')
+  })
+
+  it('does not read an article followed by an ordinary word as a time', () => {
+    // The unit letters are single characters — `h` and `m` — so without a word
+    // boundary after them these would all become reminders.
+    for (const text of ['in a house', 'after a hard day', 'meeting in a moment']) {
+      const r = p(text)
+      expect(r?.kind).toBe('note')
+      expect(r?.occurredAt).toBeUndefined()
+    }
   })
 })
 

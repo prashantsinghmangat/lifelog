@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { addDays, eachDayOfInterval, format, startOfWeek } from 'date-fns'
+import { addDays, eachDayOfInterval, format, startOfWeek, subYears } from 'date-fns'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { dayKey } from './lib/format'
@@ -20,6 +20,8 @@ type Result = { data?: unknown; error?: { message: string } | null }
 
 let rowsOnServer: unknown[] = []
 let scheduleResult: ScheduleResult = 'scheduled'
+/** Every request rejects, which is what no network actually looks like. */
+let unreachable = false
 
 function builder() {
   let writing = false
@@ -27,16 +29,21 @@ function builder() {
   for (const name of ['select', 'eq', 'is', 'gte', 'lte', 'order']) {
     self[name] = () => self
   }
-  for (const name of ['insert', 'update']) {
+  // One idempotent upsert per row is the only write the app makes now.
+  for (const name of ['upsert']) {
     self[name] = () => {
       writing = true
       return self
     }
   }
-  self['then'] = (resolve: (value: Result) => unknown) =>
-    Promise.resolve(
+  self['then'] = (resolve: (value: Result) => unknown, reject?: (reason: unknown) => unknown) => {
+    if (unreachable) {
+      return Promise.reject(new TypeError('Failed to fetch')).then(resolve, reject)
+    }
+    return Promise.resolve(
       writing ? { error: null } : { data: rowsOnServer, error: null },
     ).then(resolve)
+  }
   return self
 }
 
@@ -45,7 +52,12 @@ vi.mock('./lib/supabase', () => ({
 }))
 
 vi.mock('./hooks/useSession', () => ({
-  useSession: () => ({ session: { user: { email: 'you@example.com' } }, loading: false }),
+  // An identity, not a session: the app runs for whoever this device belongs
+  // to, which is not the same as whether Supabase can prove it right now.
+  useSession: () => ({
+    identity: { id: 'user-1', email: 'you@example.com' },
+    loading: false,
+  }),
 }))
 
 vi.mock('./lib/reminders', () => ({
@@ -66,7 +78,14 @@ let ids = 0
 beforeEach(() => {
   rowsOnServer = []
   scheduleResult = 'scheduled'
+  unreachable = false
   ids = 0
+  // The log persists between mounts now, so without this each test inherits the
+  // previous one's entries.
+  localStorage.clear()
+  // jsdom always reports true; the offline tests below override it, and every
+  // other test needs it back.
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => true })
   vi.stubGlobal('crypto', { ...globalThis.crypto, randomUUID: () => `local-${++ids}` })
   // jsdom implements neither, and useTheme reads matchMedia on mount.
   vi.stubGlobal('matchMedia', (query: string) => ({
@@ -223,6 +242,105 @@ describe('the week strip', () => {
     expect(
       screen.getByLabelText(`${format(other, 'EEE, d MMM')} — open calendar`),
     ).toBeTruthy()
+  })
+})
+
+describe('with no network', () => {
+  function offline() {
+    unreachable = true
+    Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false })
+  }
+
+  it('sets a reminder with nothing to reach', async () => {
+    offline()
+    const box = await open()
+    await userEvent.type(box, 'ping me tomorrow 5pm{Enter}')
+
+    // The OS holds the alarm, so this never needed a server or a connection —
+    // and the confirmation has to say so, or nobody trusts it fired.
+    await waitFor(() => expect(screen.getByText(/Reminder set for/)).toBeTruthy())
+  })
+
+  it('says the entry is saved here rather than showing a failure', async () => {
+    offline()
+    const box = await open()
+    await userEvent.type(box, '350 lunch swiggy{Enter}')
+
+    await waitFor(() => expect(screen.getByText(/waiting to sync/)).toBeTruthy())
+    // Saved and waiting, not broken: no Retry chip, and no raw fetch error.
+    expect(screen.getByText(/saved here, not synced/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+    expect(screen.queryByText(/Failed to fetch/)).toBeNull()
+  })
+
+  it('totals the day from what this device holds', async () => {
+    offline()
+    const box = await open()
+    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await userEvent.type(box, '2h client work{Enter}')
+
+    // Arithmetic over local rows. None of it was ever a server's job.
+    await waitFor(() => expect(screen.getByText(/₹350 spent · 2h logged/)).toBeTruthy())
+  })
+
+  it('answers a question about the log with no network', async () => {
+    offline()
+    const box = await open()
+    await userEvent.type(box, '2h client work{Enter}')
+    await waitFor(() => expect(screen.getByText('client work')).toBeTruthy())
+
+    await userEvent.type(box, '? hours client work')
+
+    // The sentence the live region announces, which only exists if the corpus
+    // was answered from this device.
+    await waitFor(() => expect(screen.getByText('2h · 1 entry · last today')).toBeTruthy())
+  })
+})
+
+describe('looking back at the same day', () => {
+  // Four years, not one: it is the same month and day whatever today is,
+  // including 29 February, where a single year back is a different date.
+  const then = subYears(new Date(), 4)
+
+  const row = {
+    id: 'old',
+    kind: 'expense',
+    occurred_on: dayKey(then),
+    occurred_at: null,
+    title: 'headphones',
+    note: null,
+    amount_paise: 240000,
+    duration_minutes: null,
+    category: null,
+    data: {},
+    created_at: '2022-09-07T09:00:00+05:30',
+  }
+
+  it('recalls an earlier year under the day, without being asked', async () => {
+    rowsOnServer = [row]
+    await open()
+
+    await waitFor(() => expect(screen.getByText('On this day')).toBeTruthy())
+    expect(screen.getByText(format(then, 'd MMMM yyyy'))).toBeTruthy()
+    expect(screen.getByText('headphones')).toBeTruthy()
+  })
+
+  it('takes one tap to go and read that day', async () => {
+    rowsOnServer = [row]
+    await open()
+
+    await userEvent.click(await screen.findByText(format(then, 'd MMMM yyyy')))
+    // The header names the year, because otherwise nothing on the screen says
+    // which September you have just landed in.
+    expect(
+      screen.getByLabelText(`${format(then, 'EEE, d MMM yyyy')} — open calendar`),
+    ).toBeTruthy()
+  })
+
+  it('shows nothing at all when there is nothing to recall', async () => {
+    rowsOnServer = []
+    await open()
+    expect(screen.queryByText('On this day')).toBeNull()
   })
 })
 

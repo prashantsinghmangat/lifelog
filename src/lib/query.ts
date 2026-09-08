@@ -44,12 +44,28 @@ export type Summary = {
   days: number
   paise: number
   minutes: number
+  /** Earliest matching day, which is what makes a total a span rather than a number. */
+  first: string | null
   /** Most recent matching day, which is usually the thing worth knowing. */
   last: string | null
   /** Soonest upcoming occurrence, which for an event is the whole answer. */
   next: string | null
   /** The rows the numbers were computed from, so an answer can show its working. */
   hits: Entry[]
+}
+
+/**
+ * One of the facts beside the lead.
+ *
+ * Labelled, because `₹293` beside a total is ambiguous and `avg ₹293` reads as
+ * an abbreviation rather than a heading. A null label is for the facts that name
+ * themselves — `tomorrow`, `8 entries` — where a label would be noise.
+ */
+export type Extra = { label: string | null; value: string }
+
+/** An extra as one piece of text, for the sentence a screen reader hears. */
+export function extraText(extra: Extra): string {
+  return extra.label === null ? extra.value : `${extra.label} ${extra.value}`
 }
 
 /**
@@ -64,11 +80,22 @@ export type Answer = {
   /** The one thing asked for, and the only part that is always present. */
   lead: string
   /** The other facts that happen to be true. */
-  extras: string[]
+  extras: Extra[]
   /** Every match, ordered for display. */
   rows: Entry[]
   /** The question named a single day, so rows show a clock rather than a date. */
   oneDay: boolean
+  /**
+   * Rows are in day order, so the card can lift each date into a heading
+   * instead of repeating it down a column.
+   *
+   * Not derived from `oneDay` in the card, because an answer about what is
+   * *coming* is ordered by next occurrence rather than by `occurred_on` — a
+   * yearly birthday logged in 2010 sorts first while its date sorts last. Group
+   * that and the same heading can appear twice, which reads as a bug. Those
+   * answers carry their date on the row instead.
+   */
+  grouped: boolean
 }
 
 /** Words that carry no subject: question scaffolding, and the measures themselves. */
@@ -256,7 +283,9 @@ export function summarise(entries: Entry[], question: Question, now: Date): Summ
   const days = new Set(hits.map((entry) => entry.occurred_on))
   const paise = hits.reduce((total, entry) => total + (entry.amount_paise ?? 0), 0)
   const mins = hits.reduce((total, entry) => total + (entry.duration_minutes ?? 0), 0)
-  const last = [...days].sort().pop() ?? null
+  const ordered = [...days].sort()
+  const last = ordered[ordered.length - 1] ?? null
+  const first = ordered[0] ?? null
 
   const upcoming = hits
     .map((entry) => nextOccurrence(entry, now))
@@ -268,6 +297,7 @@ export function summarise(entries: Entry[], question: Question, now: Date): Summ
     days: days.size,
     paise,
     minutes: mins,
+    first,
     last,
     next: upcoming[0] === undefined ? null : dayKey(upcoming[0]),
     hits,
@@ -307,7 +337,7 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
 
   const caption = named.length === 0 ? null : named.join(' · ')
   const oneDay = question.range !== null && question.range.from === question.range.to
-  const nothing = { caption, extras: [], rows: [], oneDay }
+  const nothing = { caption, extras: [], rows: [], oneDay, grouped: false }
 
   if (summary.entries === 0) return { ...nothing, lead: 'nothing found' }
 
@@ -321,23 +351,35 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
     return {
       caption,
       lead: format(at, shown),
-      extras: [soon],
+      extras: [{ label: null, value: soon }],
       rows: byNext(summary.hits, now),
       oneDay,
+      // Ordered by next occurrence, not by date — see `grouped`.
+      grouped: false,
     }
   }
 
   // Asked when, and nothing is ahead. The rows still stand: what did happen is
   // more use than a dead end.
   if (question.measure === 'when') {
-    return { ...nothing, lead: 'nothing upcoming', rows: byRecency(summary.hits) }
+    return {
+      ...nothing,
+      lead: 'nothing upcoming',
+      rows: byRecency(summary.hits),
+      grouped: !oneDay,
+    }
   }
 
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
+  const entryCount = `${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}`
   const money = summary.paise > 0 ? rupees(summary.paise) : null
   const time = summary.minutes > 0 ? durationText(summary.minutes) : null
-  const extras: string[] = []
+  const extras: Extra[] = []
   let lead: string
+
+  // An average over a single row is that row, so it explains nothing the row
+  // does not already say.
+  const many = summary.entries > 1
 
   switch (question.measure) {
     case 'days':
@@ -348,17 +390,43 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
       break
     case 'money':
       lead = money ?? '₹0'
+      // A total on its own hides its shape: ₹2,340 is a very different week
+      // across two entries than across twenty.
+      extras.push({ label: null, value: entryCount })
+      if (many) {
+        extras.push({
+          label: 'avg',
+          value: rupees(Math.round(summary.paise / summary.entries)),
+        })
+      }
       break
     case 'hours':
       lead = time ?? '0m'
+      extras.push({ label: null, value: entryCount })
+      if (many) {
+        extras.push({
+          label: 'avg',
+          value: durationText(Math.round(summary.minutes / summary.entries)),
+        })
+      }
       break
     default:
-      lead = plural(summary.entries, 'entry').replace('entrys', 'entries')
-      extras.push(plural(summary.days, 'day'))
+      lead = entryCount
+      extras.push({ label: null, value: plural(summary.days, 'day') })
   }
 
-  if (question.measure !== 'money' && money !== null) extras.push(money)
-  if (question.measure !== 'hours' && time !== null) extras.push(time)
+  if (question.measure !== 'money' && money !== null) {
+    extras.push({ label: null, value: money })
+  }
+  if (question.measure !== 'hours' && time !== null) {
+    extras.push({ label: null, value: time })
+  }
+
+  // The span the number covers. Only when the matches actually straddle more
+  // than one day: otherwise "first" and "last" are the same date said twice.
+  if (summary.first !== null && summary.first !== summary.last) {
+    extras.push({ label: 'first', value: format(parseISO(summary.first), 'd MMM') })
+  }
 
   if (summary.last !== null) {
     const gap = Math.round(
@@ -366,10 +434,10 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
     )
     const when =
       gap <= 0 ? 'today' : gap === 1 ? 'yesterday' : format(parseISO(summary.last), 'd MMM')
-    extras.push(`last ${when}`)
+    extras.push({ label: 'last', value: when })
   }
 
-  return { caption, lead, extras, rows: byRecency(summary.hits), oneDay }
+  return { caption, lead, extras, rows: byRecency(summary.hits), oneDay, grouped: !oneDay }
 }
 
 /**
@@ -379,6 +447,6 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
  */
 export function phrase(summary: Summary, question: Question, now: Date): string {
   const said = answer(summary, question, now)
-  return [said.lead, ...said.extras].join(' · ')
+  return [said.lead, ...said.extras.map(extraText)].join(' · ')
 }
 
