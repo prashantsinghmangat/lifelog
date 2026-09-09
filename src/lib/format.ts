@@ -90,6 +90,26 @@ export function dayHeading(day: string, now: Date): string {
 }
 
 /**
+ * The days an answer actually covers: "1 — 7 Sep", "28 Aug — 3 Sep".
+ *
+ * The month is printed once when both ends share it, because "1 Sep — 7 Sep"
+ * spends half the line repeating itself. Years appear only when one of them is
+ * not the current year, for the same reason the day header names one.
+ */
+export function daySpan(from: string, to: string, now: Date): string {
+  const start = parseISO(from)
+  const end = parseISO(to)
+
+  if (start.getFullYear() !== now.getFullYear() || end.getFullYear() !== now.getFullYear()) {
+    return `${format(start, 'd MMM yyyy')} — ${format(end, 'd MMM yyyy')}`
+  }
+  if (start.getMonth() === end.getMonth()) {
+    return `${format(start, 'd')} — ${format(end, 'd MMM')}`
+  }
+  return `${format(start, 'd MMM')} — ${format(end, 'd MMM')}`
+}
+
+/**
  * The one number a row carries on its right: money when it has any, otherwise
  * duration. Shared so the timeline, an answer and a toast cannot drift apart
  * about which of the two a row leads with.

@@ -1,4 +1,5 @@
-﻿import { isNative } from './platform'
+﻿import { done } from './events'
+import { isNative } from './platform'
 import type { LocalNotificationsPlugin } from '@capacitor/local-notifications'
 import type { Entry } from '../types'
 
@@ -79,9 +80,17 @@ export function notificationId(uuid: string): number {
   return (Math.abs(hash) % 2_147_483_646) + 1
 }
 
-/** When an entry should fire, or null if it should not. */
+/**
+ * When an entry should fire, or null if it should not.
+ *
+ * Ticked off means silent. Every scheduling path runs through here, so marking
+ * something done is enough to stop the alarm — otherwise "call mom" would ring
+ * at five o'clock to remind you of something you did at three, which is worse
+ * than no reminder because it teaches you to ignore them.
+ */
 export function fireAt(entry: Entry): Date | null {
   if (entry.kind !== 'event') return null
+  if (done(entry)) return null
   if (entry.occurred_at !== null) return new Date(entry.occurred_at)
 
   const [year, month, day] = entry.occurred_on.split('-').map(Number)

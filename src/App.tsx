@@ -4,7 +4,7 @@ import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
 import { HelpSheet } from './components/HelpSheet'
-import { PersonIcon } from './components/Icons'
+import { Chevron, PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { MonthSheet } from './components/MonthSheet'
@@ -18,6 +18,7 @@ import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { download, shareOrDownload } from './lib/deliver'
+import { passed } from './lib/events'
 import { clock, dayKey, dayLabel, minutes, relativeDay, rowValue, rupees } from './lib/format'
 import { onThisDay } from './lib/history'
 import { forget } from './lib/identity'
@@ -61,6 +62,8 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  // Whether the day's already-passed reminders have been unfolded.
+  const [showEarlier, setShowEarlier] = useState(false)
   const [prefill, setPrefill] = useState<string | null>(null)
   const [notify, setNotify] = useState<'granted' | 'denied' | 'unavailable' | null>(null)
   // Every entry, fetched only once a question is actually asked, and dropped
@@ -127,6 +130,9 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
     document.title = `${dayLabel(day, now)} · lifelog`
   }, [day, now])
 
+  // Every day opens folded: unfolding one is about that day, not a preference.
+  useEffect(() => setShowEarlier(false), [day])
+
   const sheetOpen = calendarOpen || profileOpen || editing !== null
 
   // Desktop navigation without reaching for the mouse. Deliberately inert while
@@ -152,6 +158,16 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
 
   const spent = entries.reduce((total, row) => total + (row.amount_paise ?? 0), 0)
   const logged = entries.reduce((total, row) => total + (row.duration_minutes ?? 0), 0)
+
+  // How many reminders at the head of the day have already been and gone.
+  // Counted rather than filtered, so the rows keep their order.
+  let over = 0
+  for (const row of entries) {
+    if (!passed(row, now)) break
+    over += 1
+  }
+  const folded = showEarlier || over < 2 ? 0 : over
+  const shownEntries = folded === 0 ? entries : entries.slice(folded)
 
   /** Hands the entry to the OS calendar, which is what actually raises the alarm. */
   async function addToCalendar(rows: Row[], name: string) {
@@ -423,7 +439,31 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
             </div>
           )}
 
-          {entries.map((row) => (
+          {/* The day opened on what was already over: struck-through reminders
+              keep full size and position, so the loudest thing at the top was
+              frequently the part that no longer matters. Folded into one line,
+              the day opens on what is still live.
+
+              Only a *leading run* of them, so nothing is reordered — a passed
+              reminder later in the day stays where it happened. And only from
+              two upwards: hiding a single row behind a tap costs a row and
+              saves none. `passed` is true of events alone, so nothing carrying
+              money or time is ever inside the fold. */}
+          {folded > 0 && (
+            <button
+              type="button"
+              aria-expanded={showEarlier}
+              onClick={() => setShowEarlier(true)}
+              className="flex h-11 w-full items-center gap-3 border-b border-line text-left text-xs text-muted active:text-ink"
+            >
+              <span aria-hidden="true" className="flex w-5 shrink-0 justify-center text-faint">
+                <Chevron dir="down" />
+              </span>
+              {folded} already passed
+            </button>
+          )}
+
+          {shownEntries.map((row) => (
             <EntryRow
               key={row.id}
               row={row}
@@ -449,10 +489,10 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
             </p>
           )}
 
+          {/* The examples above already say the day is empty and show what to
+              type. This adds only the thing they cannot: how to get elsewhere. */}
           {!loading && entries.length === 0 && (
-            <p className="text-xs text-faint">
-              Nothing on this day. Type above, or swipe sideways to move between days.
-            </p>
+            <p className="px-1 text-xs text-faint">Swipe sideways to move between days.</p>
           )}
 
           <OnThisDay found={recalled} onPick={setDay} />

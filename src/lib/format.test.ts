@@ -3,6 +3,7 @@ import {
   atTime,
   dayKey,
   dayLabel,
+  daySpan,
   minutes,
   paiseFrom,
   relativeDay,
@@ -116,5 +117,22 @@ describe('naming a day', () => {
     // Without it, `12 sep 2025` previewed as "saving to 12 Sep" — the same
     // thing a date in this September shows, and wrong by twelve months.
     expect(relativeDay('2025-09-12', NOW)).toBe('12 Sep 2025')
+  })
+})
+
+describe('the span an answer covers', () => {
+  const NOW = new Date(2026, 8, 8, 10, 0, 0)
+
+  it('prints the month once when both ends share it', () => {
+    // "1 Sep — 7 Sep" spends half the line repeating itself.
+    expect(daySpan('2026-09-01', '2026-09-07', NOW)).toBe('1 — 7 Sep')
+  })
+
+  it('prints both months when they differ', () => {
+    expect(daySpan('2026-08-28', '2026-09-03', NOW)).toBe('28 Aug — 3 Sep')
+  })
+
+  it('names the years when either falls outside this one', () => {
+    expect(daySpan('2025-12-30', '2026-01-02', NOW)).toBe('30 Dec 2025 — 2 Jan 2026')
   })
 })

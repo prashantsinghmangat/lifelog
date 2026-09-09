@@ -308,7 +308,9 @@ describe('the parts an answer is laid out from', () => {
     const said = of('? how much deepak kiran store')
     expect(said.lead).toBe('₹700')
     expect(said.extras).toContainEqual({ label: null, value: '3 entries' })
-    expect(said.extras).toContainEqual({ label: 'avg', value: '₹233.33' })
+    // Whole rupees: ₹700 over three is ₹233.33, and two decimal places of
+    // precision on an inherently rough figure reads as noise, not accuracy.
+    expect(said.extras).toContainEqual({ label: 'avg', value: '₹233' })
   })
 
   it('says the span a total covers, not just where it ended', () => {
@@ -323,6 +325,49 @@ describe('the parts an answer is laid out from', () => {
     expect(said.extras.map((extra) => extra.label)).not.toContain('avg')
     // One matching day, so "first" would be "last" said twice.
     expect(said.extras.map((extra) => extra.label)).not.toContain('first')
+  })
+
+  it('never answers a question about the past with something upcoming', () => {
+    // "what happened around 6 September" led with "Tuesday 8 September" — an
+    // upcoming reminder that merely fell inside the window. An upcoming date
+    // is only the answer to a question about something in particular.
+    const ahead: Entry[] = [
+      ...LOG,
+      entry({ occurred_on: '2026-09-06', kind: 'event', title: 'dentist', occurred_at: '2026-09-06T17:00:00+05:30' }),
+    ]
+    const question = parseQuestion('? what happened around 4 september', NOW)
+    if (question === null) throw new Error('not a question')
+    const said = answer(summarise(ahead, question, NOW), question, NOW)
+
+    expect(said.lead).not.toContain('September')
+    expect(said.grouped).toBe(true)
+  })
+
+  it('leads a "what happened" question with the days, not a tally', () => {
+    // The question is about *when*. A count is not an answer to it, and the
+    // span comes from the rows that exist rather than the window asked about.
+    const said = of('? what happened around 2 september')
+    expect(said.lead).toBe('1 — 5 Sep')
+    expect(said.extras[0]).toEqual({ label: null, value: '6 entries over 5 days' })
+  })
+
+  it('does not repeat the span it just led with', () => {
+    const labels = of('? what happened around 2 september').extras.map((extra) => extra.label)
+    expect(labels).not.toContain('first')
+    expect(labels).not.toContain('last')
+  })
+
+  it('still leads with the tally once the question names a subject', () => {
+    // "gym this month" is asking how much gym, so the number is the answer.
+    expect(of('? gym this month').lead).toBe('3 entries')
+  })
+
+  it('still leads with the measure when one was asked for', () => {
+    expect(of('? how much did i spend this month').lead).toBe('₹750')
+  })
+
+  it('keeps the tally for a single day, where a span would say one date twice', () => {
+    expect(of('? what did i do yesterday').lead).toBe('1 entry')
   })
 
   it('groups rows by day only where they are actually in day order', () => {

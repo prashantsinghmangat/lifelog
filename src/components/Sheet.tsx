@@ -20,8 +20,11 @@ export function Sheet({ label, onClose, children }: Props) {
 
   useEffect(() => {
     returnTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const first = panel.current?.querySelector<HTMLElement>(FOCUSABLE)
-    ;(first ?? panel.current)?.focus()
+    // The dialog itself, not its first control. Focusing the first button drew
+    // the focus ring on `Expense` every time the editor opened, which reads as
+    // "this entry is an expense" when it is usually not — and focusing the
+    // first *field* would throw the keyboard up before anyone asked for it.
+    panel.current?.focus()
 
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -73,7 +76,7 @@ export function Sheet({ label, onClose, children }: Props) {
         aria-label={label}
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
-        className="sheet-in max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl bg-raised p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl outline-none sm:max-w-sm sm:rounded-xl sm:pb-4"
+        className="sheet-in max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl bg-raised p-4 pb-[max(1.75rem,env(safe-area-inset-bottom))] shadow-xl outline-none sm:max-w-sm sm:rounded-xl sm:pb-4"
       >
         {children}
       </div>

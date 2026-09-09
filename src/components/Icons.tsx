@@ -23,10 +23,24 @@ function Svg({ size = 20, className, children }: Props & { children: ReactNode }
   )
 }
 
-export function Chevron({ dir, ...rest }: Props & { dir: 'left' | 'right' }) {
+const CHEVRON = {
+  left: 'M15 6l-6 6 6 6',
+  right: 'M9 6l6 6-6 6',
+  down: 'M6 9l6 6 6-6',
+} as const
+
+export function Chevron({ dir, ...rest }: Props & { dir: keyof typeof CHEVRON }) {
   return (
     <Svg {...rest}>
-      <path d={dir === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
+      <path d={CHEVRON[dir]} />
+    </Svg>
+  )
+}
+
+export function CheckIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M20 6L9 17l-5-5" />
     </Svg>
   )
 }

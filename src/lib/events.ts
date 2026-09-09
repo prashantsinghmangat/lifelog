@@ -48,3 +48,23 @@ export function passed(entry: Entry, now: Date): boolean {
   if (entry.occurred_at !== null) return parseISO(entry.occurred_at) < now
   return entry.occurred_on < dayKey(now)
 }
+
+/**
+ * Ticked off by hand.
+ *
+ * `passed` covers the reminder whose moment has simply gone by, which needs no
+ * tap — but a note saying "send the revised scope" is done when you decide it
+ * is, and nothing about the clock can know that. So this is the one piece of
+ * state in the app the user sets rather than the parser or the clock.
+ *
+ * It lives in `data` rather than a column because nothing sums it, which is the
+ * rule the schema already states — and so it costs no migration.
+ */
+export function done(entry: Entry): boolean {
+  return entry.data.done === true
+}
+
+/** Struck through in the timeline: either the moment went by, or you said so. */
+export function behindYou(entry: Entry, now: Date): boolean {
+  return done(entry) || passed(entry, now)
+}

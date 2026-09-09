@@ -1,4 +1,5 @@
 import { addDays, addMinutes, parseISO } from 'date-fns'
+import { done } from './events'
 import { dayKey } from './format'
 import type { Entry } from '../types'
 
@@ -102,8 +103,14 @@ function event(entry: Entry, now: Date): string[] {
  */
 export function forCalendar(entries: Entry[], now: Date): Entry[] {
   const today = dayKey(now)
+  // Done ones are left out for the same reason they no longer alarm: handing
+  // the OS calendar a reminder you have already dealt with just moves the
+  // pointless notification somewhere else.
   return entries.filter(
-    (entry) => entry.kind === 'event' && (isYearly(entry) || entry.occurred_on >= today),
+    (entry) =>
+      entry.kind === 'event' &&
+      !done(entry) &&
+      (isYearly(entry) || entry.occurred_on >= today),
   )
 }
 

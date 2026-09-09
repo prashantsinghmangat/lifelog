@@ -281,8 +281,10 @@ describe('logging with no network', () => {
       result.current.add(parsed)
     })
 
-    await waitFor(() => expect(result.current.owed).toBe(1))
-    expect(result.current.entries[0]?.status).toBe('queued')
+    // Wait on the status, not on `owed`: `owed` is 1 the instant the row is
+    // written, while the attempt that decides queued-versus-failed has not run.
+    await waitFor(() => expect(result.current.entries[0]?.status).toBe('queued'))
+    expect(result.current.owed).toBe(1)
     expect(result.current.reachable).toBe(false)
   })
 

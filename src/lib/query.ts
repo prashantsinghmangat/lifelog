@@ -9,7 +9,7 @@ import {
   subYears,
 } from 'date-fns'
 import { nextOccurrence } from './events'
-import { dayKey, minutes as durationText, rupees } from './format'
+import { dayKey, daySpan, minutes as durationText, rupees } from './format'
 import { dateIn } from './parser'
 import type { Entry } from '../types'
 
@@ -343,7 +343,17 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
 
   // A date beats a tally. If something is coming up, that is the answer —
   // whether or not the question remembered to say "when".
-  if (summary.next !== null && (question.measure === 'when' || question.measure === null)) {
+  //
+  // But only about *something*. Without a subject, "what happened around 6
+  // September" was answered with "Tuesday 8 September" and a list ordered by
+  // next occurrence: a question explicitly about the past, answered with an
+  // upcoming reminder that merely fell inside the window. Naming a subject is
+  // what makes an upcoming date the answer; `when` asked outright still is.
+  const dateLeads =
+    summary.next !== null &&
+    (question.measure === 'when' || (question.measure === null && question.terms.length > 0))
+
+  if (dateLeads && summary.next !== null) {
     const at = parseISO(summary.next)
     const away = differenceInCalendarDays(at, startOfDay(now))
     const soon = away === 0 ? 'today' : away === 1 ? 'tomorrow' : `in ${away} days`
@@ -381,6 +391,23 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
   // does not already say.
   const many = summary.entries > 1
 
+  /**
+   * The answer is "which days", so the span leads instead of a tally.
+   *
+   * Only with no subject *and* no measure: both of those turn the question into
+   * one about a quantity, and the quantity has to lead. The span is taken from
+   * the rows rather than from the period asked about — "around 4 September" is
+   * a seven-day window, but the days that actually hold something are what
+   * happened.
+   */
+  const spanning =
+    question.measure === null &&
+    question.terms.length === 0 &&
+    !oneDay &&
+    summary.first !== null &&
+    summary.last !== null &&
+    summary.first !== summary.last
+
   switch (question.measure) {
     case 'days':
       lead = plural(summary.days, 'day')
@@ -394,9 +421,13 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
       // across two entries than across twenty.
       extras.push({ label: null, value: entryCount })
       if (many) {
+        // Whole rupees. Money is stored as paise and printed with paise
+        // whenever they are non-zero, which is right for an amount somebody
+        // typed and wrong for a derived one: `avg ₹684.29` offers two decimal
+        // places of precision on a figure that is inherently rough.
         extras.push({
           label: 'avg',
-          value: rupees(Math.round(summary.paise / summary.entries)),
+          value: rupees(Math.round(summary.paise / summary.entries / 100) * 100),
         })
       }
       break
@@ -411,8 +442,18 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
       }
       break
     default:
-      lead = entryCount
-      extras.push({ label: null, value: plural(summary.days, 'day') })
+      // "What happened around 20 August" is a question about *when*, and a
+      // count is not an answer to it. With no subject and no measure asked
+      // for, the days that actually hold something are the answer, and the
+      // count becomes one of the facts about them. A subject changes that:
+      // "gym this month" is asking how much gym, so the tally leads again.
+      if (spanning) {
+        lead = daySpan(summary.first ?? '', summary.last ?? '', now)
+        extras.push({ label: null, value: `${entryCount} over ${plural(summary.days, 'day')}` })
+      } else {
+        lead = entryCount
+        extras.push({ label: null, value: plural(summary.days, 'day') })
+      }
   }
 
   if (question.measure !== 'money' && money !== null) {
@@ -423,12 +464,13 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
   }
 
   // The span the number covers. Only when the matches actually straddle more
-  // than one day: otherwise "first" and "last" are the same date said twice.
-  if (summary.first !== null && summary.first !== summary.last) {
+  // than one day: otherwise "first" and "last" are the same date said twice —
+  // and never when the lead is already that span.
+  if (!spanning && summary.first !== null && summary.first !== summary.last) {
     extras.push({ label: 'first', value: format(parseISO(summary.first), 'd MMM') })
   }
 
-  if (summary.last !== null) {
+  if (!spanning && summary.last !== null) {
     const gap = Math.round(
       (startOfDay(now).getTime() - parseISO(summary.last).getTime()) / 86_400_000,
     )

@@ -1,5 +1,5 @@
 import { KIND_NAME, KindMark } from './KindMark'
-import { passed } from '../lib/events'
+import { behindYou } from '../lib/events'
 import { clock, relativeDay, rowValue } from '../lib/format'
 import type { Row } from '../hooks/useEntries'
 
@@ -14,7 +14,7 @@ type Props = {
 
 export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
   const right = rowValue(row)
-  const gone = passed(row, now)
+  const gone = behindYou(row, now)
   const at = row.occurred_at === null ? null : clock(row.occurred_at)
   const detail = [
     at,
@@ -40,24 +40,31 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
         <KindMark kind={row.kind} />
 
         <span className="min-w-0 flex-1">
-          {/* An event whose moment has gone reads as behind you rather than
-              ahead. Struck rather than hidden: it still happened. */}
+          {/* Behind you — the moment went by, or you ticked it off. Struck
+              rather than hidden: it still happened.
+
+              Two lines, not one. A truncated title told you that an entry
+              existed and not what it was, and the longest titles are the notes,
+              where the words are the whole content. */}
           <span
-            className={`block truncate text-sm ${gone ? 'text-muted line-through' : ''}`}
+            className={`block line-clamp-2 text-sm ${gone ? 'text-muted line-through' : ''}`}
           >
             {row.title}
           </span>
           <span className="sr-only">
             {KIND_NAME[row.kind]}
-            {gone ? ', passed' : ''}.{' '}
+            {gone ? ', done' : ''}.{' '}
           </span>
           {detail.length > 0 && (
             <span className="mt-0.5 block truncate text-xs text-faint">{detail.join(' · ')}</span>
           )}
         </span>
 
+        {/* Metadata, not the headline. At medium weight in full-strength ink a
+            number competed with the title on every row, including the many
+            rows where it is incidental — what the entry *is* comes first. */}
         {right !== null && (
-          <span className="shrink-0 text-sm font-medium tabular-nums">{right}</span>
+          <span className="shrink-0 text-sm text-muted tabular-nums">{right}</span>
         )}
       </button>
 

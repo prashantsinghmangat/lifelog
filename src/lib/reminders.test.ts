@@ -66,3 +66,26 @@ describe('fireAt', () => {
     }
   })
 })
+
+describe('a reminder that has been ticked off', () => {
+  it('does not fire', () => {
+    // Otherwise "call mom" rings at five to remind you of something you did at
+    // three, which is worse than no reminder: it teaches you to ignore them.
+    const row = entry({
+      id: 'ticked',
+      occurred_on: '2026-09-20',
+      occurred_at: '2026-09-20T17:00:00+05:30',
+      data: { done: true },
+    })
+    expect(fireAt(row)).toBeNull()
+  })
+
+  it('still fires while it is not', () => {
+    const row = entry({
+      id: 'live',
+      occurred_on: '2026-09-20',
+      occurred_at: '2026-09-20T17:00:00+05:30',
+    })
+    expect(fireAt(row)).not.toBeNull()
+  })
+})

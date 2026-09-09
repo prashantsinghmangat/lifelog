@@ -46,6 +46,45 @@ function setup(over: Partial<Row> = {}) {
   return { onSave, onDelete, onAddToCalendar, onClose, save }
 }
 
+describe('ticking an entry off', () => {
+  it('marks a note done, which the clock could never work out', async () => {
+    const onSave = vi.fn()
+    render(
+      <EntryEditor
+        row={row({ kind: 'note', title: 'send the revised scope' })}
+        onSave={onSave}
+        onDelete={vi.fn()}
+        onAddToCalendar={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /Mark done/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave.mock.calls[0]?.[0]?.data).toMatchObject({ done: true })
+  })
+
+  it('takes the mark off again', async () => {
+    const onSave = vi.fn()
+    render(
+      <EntryEditor
+        row={row({ kind: 'note', title: 'send the revised scope', data: { done: true } })}
+        onSave={onSave}
+        onDelete={vi.fn()}
+        onAddToCalendar={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    // Already done, so the control offers the way back rather than repeating itself.
+    await userEvent.click(screen.getByRole('button', { name: /Done/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(onSave.mock.calls[0]?.[0]?.data).not.toHaveProperty('done')
+  })
+})
+
 describe('editing an entry', () => {
   it('opens with the stored values, already editable', () => {
     setup()

@@ -1,7 +1,7 @@
 import { format, parseISO } from 'date-fns'
 import { useState } from 'react'
 import { KIND_NAME, KindMark } from './KindMark'
-import { passed } from '../lib/events'
+import { behindYou } from '../lib/events'
 import { clock, dayHeading, rowValue } from '../lib/format'
 import { extraText, type Answer } from '../lib/query'
 
@@ -17,6 +17,14 @@ import { extraText, type Answer } from '../lib/query'
  * column. A flat list made "Aug 20" the loudest thing on four separate rows
  * while the days the answer actually covered had to be reassembled by eye; as
  * headings they are the structure instead of the noise.
+ *
+ * **No box.** This was a bordered, recessed card, and once the day headings
+ * took over the grouping the card was drawing a boundary nothing needed: dates
+ * separate the information and whitespace groups it. What sets the answer apart
+ * from the timeline now is a pair of heavier rules and the size of the number —
+ * the same job the card was doing, with less ink. The closing rule is
+ * load-bearing: without it the last row of the answer and the first row of the
+ * day read as the same list.
  *
  * Rows are buttons: the day an answer points at is almost always the next place
  * you want to be, and getting there any other way costs a calendar and a guess.
@@ -38,35 +46,30 @@ export function AnswerCard({ answer, now, onPick }: Props) {
   const rest = answer.rows.length - shown.length
 
   return (
-    <div className="mt-1.5 overflow-hidden rounded-lg border border-line bg-sunken">
-      <div className="flex items-baseline justify-between gap-3 px-3.5 pt-3 pb-2.5">
-        <div className="min-w-0">
-          {answer.caption !== null && (
-            <p className="truncate text-xs text-faint">{answer.caption}</p>
-          )}
-          <p className="mt-0.5 text-2xl font-semibold tracking-tight tabular-nums">{answer.lead}</p>
-        </div>
+    <div className="mt-2 border-y border-edge py-3">
+      {answer.caption !== null && <p className="truncate text-xs text-faint">{answer.caption}</p>}
+      <p className="mt-0.5 text-3xl font-semibold tracking-tight tabular-nums">{answer.lead}</p>
 
-        {answer.extras.length > 0 && (
-          <div className="shrink-0 space-y-0.5 text-right text-xs text-muted">
-            {answer.extras.map((extra) => (
-              <p key={extraText(extra)}>
-                {/* The label sits back so the column reads as values with
-                    their names attached, not as a sentence per line. */}
-                {extra.label !== null && <span className="text-faint">{extra.label} </span>}
-                <span className="tabular-nums">{extra.value}</span>
-              </p>
-            ))}
-          </div>
-        )}
-      </div>
+      {answer.extras.length > 0 && (
+        <p className="mt-1 text-xs text-muted">
+          {answer.extras.map((extra, index) => (
+            <span key={extraText(extra)}>
+              {index > 0 && <span className="text-faint"> · </span>}
+              {/* The label sits back, so the line reads as values with their
+                  names attached rather than as a sentence. */}
+              {extra.label !== null && <span className="text-faint">{extra.label} </span>}
+              <span className="tabular-nums">{extra.value}</span>
+            </span>
+          ))}
+        </p>
+      )}
 
       {/* Capped rather than unbounded: the box above stays put while you scroll,
           so an answer allowed to grow without limit would take the screen with it. */}
-      <div className={expanded ? 'max-h-[50vh] overflow-y-auto' : undefined}>
+      <div className={`mt-2 ${expanded ? 'max-h-[50vh] overflow-y-auto' : ''}`}>
         {shown.map((row, index) => {
           const right = rowValue(row)
-          const gone = passed(row, now)
+          const gone = behindYou(row, now)
 
           // Printed once per run of rows sharing a day. Only where the rows are
           // in day order — an answer about what is coming is ordered by next
@@ -88,7 +91,9 @@ export function AnswerCard({ answer, now, onPick }: Props) {
               {heads && (
                 <p
                   aria-hidden="true"
-                  className="border-t border-line px-3.5 pt-2.5 pb-1 text-xs font-medium tracking-wide text-faint uppercase"
+                  className={`pb-1.5 text-xs font-medium tracking-wide text-faint uppercase ${
+                    index === 0 ? '' : 'pt-3.5'
+                  }`}
                 >
                   {dayHeading(row.occurred_on, now)}
                 </p>
@@ -97,9 +102,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
               <button
                 type="button"
                 onClick={() => onPick(row.occurred_on)}
-                className={`flex min-h-12 w-full items-center gap-3 px-3.5 py-2 text-left active:bg-raised ${
-                  heads ? '' : 'border-t border-line'
-                }`}
+                className="flex min-h-12 w-full items-center gap-3 border-b border-line py-2 text-left active:bg-raised"
               >
                 <KindMark kind={row.kind} />
 
@@ -108,9 +111,11 @@ export function AnswerCard({ answer, now, onPick }: Props) {
                       carries its own date whatever the grouping decided. */}
                   <span className="sr-only">
                     {format(parseISO(row.occurred_on), 'd MMMM')}, {KIND_NAME[row.kind]}
-                    {gone ? ', passed' : ''}.{' '}
+                    {gone ? ', done' : ''}.{' '}
                   </span>
-                  <span className={`block truncate text-sm ${gone ? 'text-muted line-through' : ''}`}>
+                  <span
+                    className={`block line-clamp-2 text-sm ${gone ? 'text-muted line-through' : ''}`}
+                  >
                     {row.title}
                   </span>
                   {detail.length > 0 && (
@@ -120,8 +125,9 @@ export function AnswerCard({ answer, now, onPick }: Props) {
                   )}
                 </span>
 
+                {/* Metadata, not the headline: the title is what the row is. */}
                 {right !== null && (
-                  <span className="shrink-0 text-sm font-medium tabular-nums">{right}</span>
+                  <span className="shrink-0 text-sm text-muted tabular-nums">{right}</span>
                 )}
               </button>
             </div>
@@ -133,7 +139,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="flex h-11 w-full items-center justify-center border-t border-line text-xs text-muted active:bg-raised"
+          className="flex h-11 w-full items-center text-xs text-muted active:text-ink"
         >
           {rest} more · see all {answer.rows.length}
         </button>

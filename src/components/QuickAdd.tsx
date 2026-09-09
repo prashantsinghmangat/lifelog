@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { AnswerCard } from './AnswerCard'
 import { ArrowUpIcon, MicIcon } from './Icons'
+import { KindMark } from './KindMark'
 import { useDictation } from '../hooks/useDictation'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, type ParsedEntry } from '../lib/parser'
 import { answer as answerTo, parseQuestion, phrase, summarise as summariseLog } from '../lib/query'
-import type { Entry } from '../types'
+import type { Entry, Kind } from '../types'
 
-const EXAMPLES = ['350 lunch swiggy', '2h client work', 'dentist tomorrow 5pm']
+/**
+ * What to type, and what it turns into.
+ *
+ * The transformation is the whole trick and the one thing an empty log cannot
+ * show, so a day with nothing on it demonstrates it rather than describing it:
+ * three rows that are at once the syntax and its result, drawn like the entries
+ * they would become. Tapping one fills the box, so the next move is editing
+ * something real instead of starting from a blank field.
+ */
+const EXAMPLES: { typed: string; becomes: string; kind: Kind }[] = [
+  { typed: '350 lunch swiggy', becomes: 'an expense · ₹350 · food', kind: 'expense' },
+  { typed: '2h client work', becomes: '2 hours logged', kind: 'time' },
+  { typed: 'dentist tomorrow 5pm', becomes: 'a reminder that will ring', kind: 'event' },
+]
 
 type Props = {
   day: string
@@ -106,7 +120,16 @@ export function QuickAdd({
 
   return (
     <form onSubmit={submit}>
-      <div className="relative">
+      {/* One control, two rows: what you typed, then how it parsed.
+          The parse line used to sit outside and below, reserving its height
+          whether or not it had anything to say — about 90px of dead space
+          above the first entry on every populated day. It cannot simply
+          collapse, because it is a live region and a line that changes height
+          makes the whole timeline jump on every keystroke. Inside the field the
+          height is fixed by the control itself, so nothing below it ever
+          moves, and the preview reads as part of what you are typing rather
+          than as an orphaned caption. */}
+      <div className="rounded-lg border border-edge bg-surface focus-within:border-ink">
         <input
           id="quick-add"
           type="text"
@@ -138,64 +161,75 @@ export function QuickAdd({
             // is not worth losing to a stray Escape.
             if (event.key === 'Escape') event.currentTarget.blur()
           }}
-          className={`w-full rounded-lg border border-edge bg-surface px-3.5 py-3 text-base text-ink outline-none focus:border-ink ${
-            ready || dictation.supported ? 'pr-12' : ''
-          }`}
+          className="w-full bg-transparent px-3.5 pt-3 pb-2 text-base text-ink outline-none"
         />
 
-        {/* One slot: the mic while the box is empty, send once there is
-            something to save. A send affordance has to be visible — on a phone
-            the keyboard's action key was the only way in, and it did nothing. */}
-        {ready ? (
-          <button
-            type="submit"
-            aria-label="Save entry"
-            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-ink"
+        <div className="flex items-center gap-2 border-t border-line px-3.5 py-1.5">
+          {/* Announced politely: the parse changes as you type, and a screen
+              reader should hear the result without losing your place in the
+              field. `min-h-5` holds the row open when there is nothing to say,
+              which is what keeps the control one fixed height. */}
+          <div
+            id="quick-add-preview"
+            role="status"
+            aria-live="polite"
+            className="min-h-5 min-w-0 flex-1 truncate text-xs"
           >
-            <ArrowUpIcon size={20} />
-          </button>
-        ) : (
-          dictation.supported && (
-            <button
-              type="button"
-              aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
-              aria-pressed={dictation.listening}
-              onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
-              className={`absolute inset-y-0 right-0 flex w-12 items-center justify-center ${
-                dictation.listening ? 'text-expense' : 'text-faint'
-              }`}
-            >
-              <MicIcon size={18} />
-            </button>
-          )
-        )}
-      </div>
+            {dictation.error !== null ? (
+              <span className="text-expense">{dictation.error}</span>
+            ) : dictation.listening ? (
+              <span className="text-expense">Listening…</span>
+            ) : spoken !== null ? (
+              // The card below is the answer. This is the same thing said aloud.
+              <span className="sr-only">{spoken}</span>
+            ) : asking ? (
+              <span className="text-faint">…</span>
+            ) : parsed ? (
+              <span className="text-muted">
+                {summarise(parsed, sameDay, now)}
+                {!sameDay && (
+                  <span className="font-medium text-event">
+                    {' → saving to '}
+                    {relativeDay(parsed.occurredOn, now)}
+                  </span>
+                )}
+              </span>
+            ) : (
+              // The placeholder above already says what the box is for, so this
+              // row earns its space by teaching the one thing that is not
+              // guessable and lives nowhere else on screen.
+              <span className="text-faint">Start with ? to ask</span>
+            )}
+          </div>
 
-      {/* Announced politely: the parse changes as you type, and a screen reader
-          should hear the result without losing your place in the field. */}
-      <div id="quick-add-preview" role="status" aria-live="polite" className="mt-1.5 min-h-5 px-1 text-xs">
-        {dictation.error !== null ? (
-          <span className="text-expense">{dictation.error}</span>
-        ) : dictation.listening ? (
-          <span className="text-expense">Listening…</span>
-        ) : spoken !== null ? (
-          // The card below is the answer. This is the same thing said aloud.
-          <span className="sr-only">{spoken}</span>
-        ) : asking ? (
-          <span className="text-faint">…</span>
-        ) : (
-          parsed && (
-            <span className="text-muted">
-              {summarise(parsed, sameDay, now)}
-              {!sameDay && (
-                <span className="font-medium text-event">
-                  {' → saving to '}
-                  {relativeDay(parsed.occurredOn, now)}
-                </span>
-              )}
-            </span>
-          )
-        )}
+          {/* One slot: the mic while the box is empty, send once there is
+              something to save. A send affordance has to be visible — on a
+              phone the keyboard's action key was the only way in, and it did
+              nothing. */}
+          {ready ? (
+            <button
+              type="submit"
+              aria-label="Save entry"
+              className="-my-1.5 flex h-11 w-8 shrink-0 items-center justify-center text-ink"
+            >
+              <ArrowUpIcon size={20} />
+            </button>
+          ) : (
+            dictation.supported && (
+              <button
+                type="button"
+                aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
+                aria-pressed={dictation.listening}
+                onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+                className={`-my-1.5 flex h-11 w-8 shrink-0 items-center justify-center ${
+                  dictation.listening ? 'text-expense' : 'text-faint'
+                }`}
+              >
+                <MicIcon size={18} />
+              </button>
+            )
+          )}
+        </div>
       </div>
 
       {/* Keyed on the text: a new question is a new answer, collapsed again.
@@ -215,25 +249,39 @@ export function QuickAdd({
       )}
 
       {showExamples && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {EXAMPLES.map((example) => (
-            <button
-              key={example}
-              type="button"
-              // Fills the input instead of submitting, so the syntax is learned by editing.
-              onClick={() => setText(example)}
-              className="rounded-full border border-line px-3 py-1 text-xs text-muted active:bg-raised"
-            >
-              {example}
-            </button>
-          ))}
+        <div className="mt-4">
+          <p className="px-1 text-xs text-faint">Nothing here yet — try one of these.</p>
 
-          {/* The chips teach three things; the manual teaches the rest. Someone
+          <div className="mt-1">
+            {EXAMPLES.map((example) => (
+              <button
+                key={example.typed}
+                type="button"
+                // Fills the input instead of submitting, so the syntax is learned by editing.
+                onClick={() => setText(example.typed)}
+                className="flex min-h-12 w-full items-center gap-3 border-b border-line py-2 text-left active:bg-raised"
+              >
+                {/* Faded, because these are not entries — they are what an entry
+                    would look like if you typed the line beside them. */}
+                <span className="opacity-60">
+                  <KindMark kind={example.kind} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-muted">{example.typed}</span>
+                  <span className="mt-0.5 block truncate text-xs text-faint">
+                    becomes {example.becomes}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Three examples teach the shape; the manual teaches the rest. Someone
               new never opens a settings sheet to find out how to type. */}
           <button
             type="button"
             onClick={onHelp}
-            className="rounded-full px-3 py-1 text-xs text-muted underline"
+            className="mt-1 flex h-11 items-center px-1 text-xs text-muted underline"
           >
             all examples
           </button>

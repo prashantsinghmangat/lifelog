@@ -217,8 +217,9 @@ describe('a reminder whose moment has gone', () => {
 
     const title = await screen.findByText('ping me')
     expect(title.className).toContain('line-through')
-    // Never decoration alone: a screen reader is told in words.
-    expect(screen.getByText(/Event, passed\./)).toBeTruthy()
+    // Never decoration alone: a screen reader is told in words. One word covers
+    // both ways a row gets struck — the moment went by, or it was ticked off.
+    expect(screen.getByText(/Event, done\./)).toBeTruthy()
   })
 })
 
@@ -242,6 +243,52 @@ describe('the week strip', () => {
     expect(
       screen.getByLabelText(`${format(other, 'EEE, d MMM')} — open calendar`),
     ).toBeTruthy()
+  })
+})
+
+describe('the part of the day that is already over', () => {
+  const reminder = (id: string, minutesAgo: number) => {
+    const at = new Date(Date.now() - minutesAgo * 60_000)
+    return {
+      id,
+      kind: 'event',
+      occurred_on: dayKey(new Date()),
+      occurred_at: at.toISOString(),
+      title: `passed ${id}`,
+      note: null,
+      amount_paise: null,
+      duration_minutes: null,
+      category: null,
+      data: {},
+      created_at: at.toISOString(),
+    }
+  }
+
+  it('folds a run of passed reminders so the day opens on what is still live', async () => {
+    rowsOnServer = [reminder('a', 300), reminder('b', 240), reminder('c', 180)]
+    await open()
+
+    await waitFor(() => expect(screen.getByText('3 already passed')).toBeTruthy())
+    // Folded, not dropped: the count still describes the whole day.
+    expect(screen.queryByText('passed a')).toBeNull()
+    expect(screen.getByText(/3 entries/)).toBeTruthy()
+  })
+
+  it('unfolds them in place', async () => {
+    rowsOnServer = [reminder('a', 300), reminder('b', 240)]
+    await open()
+
+    await userEvent.click(await screen.findByText('2 already passed'))
+    expect(screen.getByText('passed a')).toBeTruthy()
+    expect(screen.getByText('passed b')).toBeTruthy()
+  })
+
+  it('leaves a single passed reminder alone, since folding one saves nothing', async () => {
+    rowsOnServer = [reminder('a', 300)]
+    await open()
+
+    await waitFor(() => expect(screen.getByText('passed a')).toBeTruthy())
+    expect(screen.queryByText(/already passed/)).toBeNull()
   })
 })
 

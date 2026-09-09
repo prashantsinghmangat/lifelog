@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from 'react'
+import { CheckIcon } from './Icons'
 import { Sheet } from './Sheet'
+import { done as isDone } from '../lib/events'
 import { atTime, paiseFrom, timeValue } from '../lib/format'
 import { recurringTitle } from '../lib/parser'
 import type { Patch, Row } from '../hooks/useEntries'
@@ -47,6 +49,7 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
   const [duration, setDuration] = useState(
     row.duration_minutes === null ? '' : String(row.duration_minutes),
   )
+  const [finished, setFinished] = useState(isDone(row))
 
   // Driven by the chosen kind, not the stored one, so switching to an expense
   // reveals the amount field there and then.
@@ -55,7 +58,9 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
 
   function save(event: FormEvent) {
     event.preventDefault()
-    const trimmed = title.trim()
+    // The row renders the title as flowing text over two lines, so a newline
+    // typed in the editor would show as a gap rather than a break.
+    const trimmed = title.trim().replace(/\s+/g, ' ')
     if (!trimmed) return
 
     // Rebuilt from both fields every time, so editing either one is enough and
@@ -72,10 +77,13 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
     // Demoting it away from an event drops the rule, since only events recur.
     const yearly = kind === 'event' && recurringTitle(trimmed)
     const had = row.data.rrule === 'FREQ=YEARLY'
-    if (yearly !== had) {
+
+    if (yearly !== had || finished !== isDone(row)) {
       const data = { ...row.data }
       if (yearly) data.rrule = 'FREQ=YEARLY'
       else delete data.rrule
+      if (finished) data.done = true
+      else delete data.done
       patch.data = data
     }
     if (showAmount) patch.amount_paise = paiseFrom(amount)
@@ -116,12 +124,15 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
           <label className={LABEL} htmlFor="entry-title">
             Title
           </label>
-          <input
+          {/* A textarea, not a one-line input. The longest titles are notes,
+              and editing one through a 40-character window meant scrolling
+              sideways to read your own sentence. */}
+          <textarea
             id="entry-title"
-            type="text"
+            rows={3}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className={FIELD}
+            className={`${FIELD} min-h-24 resize-y leading-relaxed`}
           />
         </div>
 
@@ -191,6 +202,21 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
           )}
         </div>
 
+        {/* The one piece of state here that no clock can work out. A reminder
+            whose time has gone strikes itself through; a note saying "send the
+            revised scope" is done when you decide it is. */}
+        <button
+          type="button"
+          aria-pressed={finished}
+          onClick={() => setFinished(!finished)}
+          className={`mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-medium ${
+            finished ? 'border-ink bg-sunken text-ink' : 'border-edge text-muted'
+          }`}
+        >
+          <CheckIcon size={16} className={finished ? '' : 'opacity-40'} />
+          {finished ? 'Done' : 'Mark done'}
+        </button>
+
         {/* Only events have anything to remind about. */}
         {row.kind === 'event' && (
           <button
@@ -202,7 +228,11 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
           </button>
         )}
 
-        <div className="mt-4 flex items-center gap-2">
+        {/* Pinned. The fields scroll behind it, so Save is reachable without
+            hunting for it — and on a phone the keyboard used to sit straight
+            over this row. Full-bleed against the sheet's own padding, with a
+            rule so the content does not appear to run underneath. */}
+        <div className="sticky bottom-0 -mx-4 mt-4 flex items-center gap-2 border-t border-line bg-raised px-4 pt-3 pb-1">
           <button
             type="submit"
             className="h-11 flex-1 rounded-lg bg-ink text-sm font-medium text-surface"

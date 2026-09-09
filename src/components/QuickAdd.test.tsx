@@ -121,6 +121,32 @@ describe('capturing an entry', () => {
   })
 })
 
+describe('a day with nothing on it', () => {
+  it('shows what an entry becomes, rather than describing the syntax', async () => {
+    setup({ showExamples: true })
+
+    // The transformation is the trick, and an empty log is the one place it
+    // cannot be seen — so the empty day demonstrates it.
+    expect(screen.getByText('350 lunch swiggy')).toBeTruthy()
+    expect(screen.getByText(/becomes an expense · ₹350 · food/)).toBeTruthy()
+    expect(screen.getByText(/becomes a reminder that will ring/)).toBeTruthy()
+  })
+
+  it('fills the box from an example instead of saving it', async () => {
+    const { box, onSubmit } = setup({ showExamples: true })
+    await userEvent.click(screen.getByText('2h client work'))
+
+    // Filled, not submitted: the syntax is learned by editing something real.
+    expect(box.value).toBe('2h client work')
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('says nothing about examples once the day has entries', async () => {
+    setup({ showExamples: false })
+    expect(screen.queryByText(/becomes an expense/)).toBeNull()
+  })
+})
+
 describe('asking a question', () => {
   const corpus = [
     entry({ occurred_on: '2026-09-05', title: 'gym', duration_minutes: 60 }),

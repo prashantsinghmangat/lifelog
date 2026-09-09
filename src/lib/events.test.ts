@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextOccurrence, passed } from './events'
+import { behindYou, done, nextOccurrence, passed } from './events'
 import type { Entry, Kind } from '../types'
 
 // Saturday, 5 September 2026, half past two in the afternoon.
@@ -81,5 +81,30 @@ describe('when an event happens next', () => {
 
   it('has no next for something that is not an event', () => {
     expect(nextOccurrence(entry({ occurred_on: '2026-12-01', kind: 'expense' }), NOW)).toBeNull()
+  })
+})
+
+describe('ticking something off by hand', () => {
+  it('is false until it is set', () => {
+    expect(done(entry({ occurred_on: '2026-09-05' }))).toBe(false)
+  })
+
+  it('applies to any kind, not just a reminder', () => {
+    // `passed` is about a clock. A note saying "send the revised scope" is done
+    // when you decide it is, and nothing about the time of day can know that.
+    const note = entry({ occurred_on: '2026-09-05', kind: 'note', data: { done: true } })
+    expect(passed(note, NOW)).toBe(false)
+    expect(done(note)).toBe(true)
+    expect(behindYou(note, NOW)).toBe(true)
+  })
+
+  it('strikes a row either way — the moment went by, or you said so', () => {
+    const gone = entry({ occurred_on: '2026-09-05', occurred_at: at('2026-09-05', '09:00:00') })
+    const ticked = entry({ occurred_on: '2026-09-30', data: { done: true } })
+    const neither = entry({ occurred_on: '2026-09-30' })
+
+    expect(behindYou(gone, NOW)).toBe(true)
+    expect(behindYou(ticked, NOW)).toBe(true)
+    expect(behindYou(neither, NOW)).toBe(false)
   })
 })
