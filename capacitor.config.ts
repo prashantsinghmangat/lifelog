@@ -20,6 +20,19 @@ const config: CapacitorConfig = {
   appId: 'com.prashant.lifelog',
   appName: 'lifelog',
   webDir: 'dist',
+  plugins: {
+    LocalNotifications: {
+      // Android draws a small icon as a tinted silhouette, so this is the
+      // colourless copy of the mark. Left unset, Capacitor falls back to a
+      // generic bell and every reminder arrives looking like it came from
+      // nothing in particular.
+      smallIcon: 'ic_stat_lifelog',
+      // The tint applied to that silhouette, and the accent beside the text.
+      // `event` purple: a reminder is an event, and this is the one place the
+      // kind colours reach outside the app.
+      iconColor: '#6D3FD4',
+    },
+  },
   ...(devUrl !== undefined && devUrl !== ''
     ? { server: { url: devUrl, cleartext: true } }
     : {}),

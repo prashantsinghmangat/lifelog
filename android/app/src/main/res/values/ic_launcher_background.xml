@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- The mark's own tile colour, and the app's `ink`. The foreground layer
+         is light, so a white background here would leave the spine and bars
+         invisible on every launcher that crops to a circle. -->
+    <color name="ic_launcher_background">#111827</color>
 </resources>

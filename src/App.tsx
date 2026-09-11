@@ -3,8 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
+import { AheadSheet } from './components/AheadSheet'
 import { HelpSheet } from './components/HelpSheet'
-import { Chevron, PersonIcon } from './components/Icons'
+import { BellIcon, Chevron, PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { MonthSheet } from './components/MonthSheet'
@@ -14,21 +15,25 @@ import { QuickAdd } from './components/QuickAdd'
 import { Toast, type ToastState } from './components/Toast'
 import { WeekStrip } from './components/WeekStrip'
 import { useEntries, type Row } from './hooks/useEntries'
+import { useNudges } from './hooks/useNudges'
 import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
+import { ahead } from './lib/ahead'
 import { download, shareOrDownload } from './lib/deliver'
 import { passed } from './lib/events'
 import { clock, dayKey, dayLabel, minutes, relativeDay, rowValue, rupees } from './lib/format'
-import { onThisDay } from './lib/history'
+import { byClock, onThisDay } from './lib/history'
 import { forget } from './lib/identity'
 import { forCalendar, toIcs } from './lib/ics'
+import { occurrencesOn } from './lib/occurrences'
 import { isNative } from './lib/platform'
 import {
   cancel as cancelReminder,
   permission as reminderPermission,
   requestPermission,
   schedule as scheduleReminder,
+  scheduleNudges,
   sync,
 } from './lib/reminders'
 import { supabase } from './lib/supabase'
@@ -55,6 +60,7 @@ type DayProps = {
 }
 
 function Day({ email, userId, theme, onTheme }: DayProps) {
+  const { nudges, choose: chooseNudges } = useNudges()
   const [now, setNow] = useState(() => new Date())
   const [day, setDay] = useState(() => dayKey(new Date()))
   const [editing, setEditing] = useState<Row | null>(null)
@@ -62,6 +68,7 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [aheadOpen, setAheadOpen] = useState(false)
   // Whether the day's already-passed reminders have been unfolded.
   const [showEarlier, setShowEarlier] = useState(false)
   const [prefill, setPrefill] = useState<string | null>(null)
@@ -77,6 +84,7 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
   const loading_ = useRef(false)
   const {
     entries,
+    all,
     failedElsewhere,
     loading,
     error,
@@ -133,7 +141,7 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
   // Every day opens folded: unfolding one is about that day, not a preference.
   useEffect(() => setShowEarlier(false), [day])
 
-  const sheetOpen = calendarOpen || profileOpen || editing !== null
+  const sheetOpen = calendarOpen || profileOpen || aheadOpen || editing !== null
 
   // Desktop navigation without reaching for the mouse. Deliberately inert while
   // typing or while a sheet is open, where these keys already mean something.
@@ -156,18 +164,30 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
     return () => window.removeEventListener('keydown', onKey)
   }, [goNext, goPrevious, sheetOpen])
 
+  // A repeat is stored once and drawn on every day it lands on. Without this a
+  // standup ringing Monday to Friday appeared on Monday alone, and the other
+  // four days read as empty while the phone was armed to go off — a working
+  // repeat that looked broken from inside the app.
+  const shown = useMemo(
+    () => [...entries, ...occurrencesOn(all, day)].sort(byClock),
+    [entries, all, day],
+  )
+
+  // Totalled from the stored rows only. A derived occurrence is the same entry
+  // seen from another day, so counting it would say a repeating entry cost five
+  // times what it did.
   const spent = entries.reduce((total, row) => total + (row.amount_paise ?? 0), 0)
   const logged = entries.reduce((total, row) => total + (row.duration_minutes ?? 0), 0)
 
   // How many reminders at the head of the day have already been and gone.
   // Counted rather than filtered, so the rows keep their order.
   let over = 0
-  for (const row of entries) {
+  for (const row of shown) {
     if (!passed(row, now)) break
     over += 1
   }
   const folded = showEarlier || over < 2 ? 0 : over
-  const shownEntries = folded === 0 ? entries : entries.slice(folded)
+  const shownEntries = folded === 0 ? shown : shown.slice(folded)
 
   /** Hands the entry to the OS calendar, which is what actually raises the alarm. */
   async function addToCalendar(rows: Row[], name: string) {
@@ -195,6 +215,14 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
     setNotify((await requestPermission()) ? 'granted' : 'denied')
   }
 
+  // Re-armed on every launch as well as on a change, because a reinstall drops
+  // the OS alarms while `localStorage` keeps saying the prompts are on.
+  useEffect(() => {
+    void scheduleNudges(nudges).catch(() => {
+      // A prompt that could not be armed is not worth an error on screen.
+    })
+  }, [nudges])
+
   // Re-arms reminders on launch, so an event logged on the web still fires on
   // the phone, and a reinstall does not lose the lot. No-op away from native.
   useEffect(() => {
@@ -212,6 +240,19 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
     () => (history === null ? [] : onThisDay(history, day)),
     [history, day],
   )
+
+  /**
+   * What the phone is going to raise, read from this device's log rather than
+   * from the launch fetch the memories use. The distinction matters in one
+   * direction only: a memory of an earlier year cannot be made stale by
+   * anything typed today, but what is *coming* very much can — set up a standup
+   * and the bell went on listing what was true when the app opened, which is
+   * the one question it exists to answer. Costs no query either way.
+   *
+   * Cheap enough to recompute on the clock tick, which is what keeps "today"
+   * and "tomorrow" honest as the evening wears on.
+   */
+  const upcoming = useMemo(() => ahead(all, now), [all, now])
 
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
@@ -356,6 +397,22 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
               onOpenCalendar={() => setCalendarOpen(true)}
             />
           </div>
+          {/* Only when there is something to show: a bell that is always
+              empty is a control that teaches you to ignore it. */}
+          {upcoming.length > 0 && (
+            <button
+              type="button"
+              aria-label={`What is coming — ${upcoming.length} ${
+                upcoming.length === 1 ? 'reminder' : 'reminders'
+              }`}
+              onClick={() => setAheadOpen(true)}
+              className="-mr-1 flex h-11 shrink-0 items-center gap-1 px-1 text-faint active:text-ink"
+            >
+              <BellIcon size={18} />
+              <span className="text-xs tabular-nums">{upcoming.length}</span>
+            </button>
+          )}
+
           <button
             type="button"
             aria-label="Profile and settings"
@@ -378,7 +435,7 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
           <QuickAdd
             day={day}
             now={now}
-            showExamples={!loading && entries.length === 0}
+            showExamples={!loading && shown.length === 0}
             onSubmit={submit}
             corpus={corpus}
             onNeedCorpus={loadCorpus}
@@ -428,7 +485,7 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
         <div className="mt-3 flex-1" aria-busy={loading}>
           {/* Placeholders, not a spinner: the rows land where these sat, so
               nothing jumps when the fetch resolves. */}
-          {loading && entries.length === 0 && (
+          {loading && shown.length === 0 && (
             <div aria-hidden="true">
               {[0, 1, 2].map((index) => (
                 <div key={index} className="flex items-center gap-3 border-b border-line py-4">
@@ -477,12 +534,12 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
               label for the box you were about to type into, when it is a
               summary of the day you have just finished reading. The last row's
               own border is the rule above it. */}
-          {entries.length > 0 && (
+          {shown.length > 0 && (
             <p className="mt-2.5 text-xs text-muted">
               {[
                 spent > 0 ? `${rupees(spent)} spent` : null,
                 logged > 0 ? `${minutes(logged)} logged` : null,
-                `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`,
+                `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}`,
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -491,7 +548,7 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
 
           {/* The examples above already say the day is empty and show what to
               type. This adds only the thing they cannot: how to get elsewhere. */}
-          {!loading && entries.length === 0 && (
+          {!loading && shown.length === 0 && (
             <p className="px-1 text-xs text-faint">Swipe sideways to move between days.</p>
           )}
 
@@ -536,6 +593,8 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
             setHelpOpen(true)
           }}
           onExport={() => void exportJson()}
+          nudges={nudges}
+          onNudges={chooseNudges}
           onExportCalendar={() => void exportCalendar()}
           // Forgotten here as well as on the event, because signing out with no
           // network never reaches Supabase — and an offline sign-out that does
@@ -561,6 +620,18 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
           onDelete={() => deleteRow(editing)}
           onAddToCalendar={() => void addToCalendar([editing], 'lifelog-event.ics')}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {aheadOpen && (
+        <AheadSheet
+          upcoming={upcoming}
+          now={now}
+          onPick={(picked) => {
+            setDay(picked)
+            setAheadOpen(false)
+          }}
+          onClose={() => setAheadOpen(false)}
         />
       )}
 

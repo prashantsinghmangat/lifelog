@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fireAt, notificationId } from './reminders'
+import { alarms, fireAt, notificationId } from './reminders'
 import type { Entry } from '../types'
 
 function entry(over: Partial<Entry> & { id: string }): Entry {
@@ -87,5 +87,83 @@ describe('a reminder that has been ticked off', () => {
       occurred_at: '2026-09-20T17:00:00+05:30',
     })
     expect(fireAt(row)).not.toBeNull()
+  })
+})
+
+describe('the ids the daily prompts own', () => {
+  it('are never produced for a row', () => {
+    // The two prompts hold ids 1 and 2. If a row could hash onto one, logging
+    // an entry would silently replace a prompt, or the prompt would replace it.
+    const ids = new Set<number>()
+    for (let n = 0; n < 20_000; n += 1) {
+      ids.add(notificationId(`00000000-0000-4000-8000-${String(n).padStart(12, '0')}`))
+    }
+    expect([...ids].every((id) => id >= 8)).toBe(true)
+  })
+
+  it('still hashes the same uuid to the same id', () => {
+    // Or a reminder could never be cancelled again.
+    expect(notificationId('abc')).toBe(notificationId('abc'))
+    expect(notificationId('abc')).not.toBe(notificationId('abd'))
+  })
+})
+
+describe('when a weekly repeat has not begun yet', () => {
+  // Thursday 10 September 2026, twenty past ten at night.
+  const NOW = new Date(2026, 8, 10, 22, 20, 0)
+  const weekdays = { rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' }
+  const ten = (day: string) => `${day}T10:00:00+05:30`
+
+  /** The weekdays armed as a standing cron, as `Date.getDay()` numbers. */
+  const crons = (armed: ReturnType<typeof alarms>) =>
+    armed.filter((a) => a.on !== undefined).map((a) => (a.on?.weekday ?? 0) - 1)
+
+  const oneOffs = (armed: ReturnType<typeof alarms>) =>
+    armed.filter((a) => a.at !== undefined).map((a) => a.at?.toDateString())
+
+  it('holds back only the weekdays whose cron would fire before the start', () => {
+    // Set up on Thursday to start on Monday the 14th. A bare weekday cron
+    // fires on the next matching day, so Friday's would have gone off on the
+    // 11th — three days before the standup begins.
+    const row = entry({
+      id: 'r1',
+      occurred_on: '2026-09-14',
+      occurred_at: ten('2026-09-14'),
+      data: weekdays,
+    })
+    const armed = alarms(row, NOW)
+
+    expect(armed).toHaveLength(5)
+    expect(crons(armed).sort()).toEqual([1, 2, 3, 4])
+    expect(oneOffs(armed)).toEqual(['Fri Sep 18 2026'])
+  })
+
+  it('leaves the ordinary case as five standing crons', () => {
+    // Typed today, landing on tomorrow: nothing would fire early, so nothing
+    // is held back. Turning these into one-offs would stop the repeat after a
+    // week for anyone who did not reopen the app.
+    const row = entry({
+      id: 'r2',
+      occurred_on: '2026-09-11',
+      occurred_at: ten('2026-09-11'),
+      data: weekdays,
+    })
+    const armed = alarms(row, NOW)
+
+    expect(crons(armed).sort()).toEqual([1, 2, 3, 4, 5])
+    expect(oneOffs(armed)).toEqual([])
+  })
+
+  it('keeps the same ids either way, so a later launch can swap them over', () => {
+    const early = entry({ id: 'r3', occurred_on: '2026-09-21', data: weekdays })
+    const begun = entry({ id: 'r3', occurred_on: '2026-09-01', data: weekdays })
+    expect(alarms(early, NOW).map((a) => a.id)).toEqual(alarms(begun, NOW).map((a) => a.id))
+  })
+
+  it('starts a whole future week as one-offs, since every cron would be early', () => {
+    const row = entry({ id: 'r4', occurred_on: '2026-09-21', data: weekdays })
+    const armed = alarms(row, NOW)
+    expect(crons(armed)).toEqual([])
+    expect(oneOffs(armed)).toHaveLength(5)
   })
 })

@@ -23,6 +23,13 @@ const EXAMPLES: { typed: string; becomes: string; kind: Kind }[] = [
   { typed: 'dentist tomorrow 5pm', becomes: 'a reminder that will ring', kind: 'event' },
 ]
 
+type Mode = 'log' | 'ask'
+
+/** The text as the question grammar wants it: exactly one leading `?`. */
+function asQuestion(text: string): string {
+  return `? ${text.replace(/^\s*\?+\s*/, '')}`
+}
+
 type Props = {
   day: string
   now: Date
@@ -74,16 +81,51 @@ export function QuickAdd({
     document.getElementById('quick-add')?.focus()
   }, [prefill, onPrefilled])
 
-  // A leading `?` asks rather than logs, the same way a leading `+` overrides
-  // the kind. Explicit, because guessing at questions would occasionally
-  // swallow an entry someone meant to keep.
-  const question = useMemo(() => parseQuestion(text, now), [text, now])
+  const [mode, setMode] = useState<Mode>('log')
 
-  // `day`, not today: an undated entry belongs to the day being viewed.
-  const parsed = useMemo(() => (question ? null : parse(text, now, day)), [question, text, now, day])
-  const sameDay = parsed === null || parsed.occurredOn === day
+  // Every day starts in Log. Arriving somewhere — including by tapping a row in
+  // an answer — is about reading that day, and logging is the primary act.
+  useEffect(() => setMode('log'), [day])
+
+  const trimmed = text.trim()
+
+  /**
+   * Asking is a mode *and* a prefix.
+   *
+   * The toggle is how the behaviour is discovered — nobody should have to be
+   * told that a leading `?` turns the box into a question. But `?` still works
+   * from Log mode, because it costs nothing to keep, it is faster than reaching
+   * for a control, and removing it would break the one habit the log's owner
+   * already has.
+   */
+  const question = useMemo(() => {
+    if (trimmed === '') return null
+    if (mode !== 'ask' && !trimmed.startsWith('?')) return null
+    return parseQuestion(asQuestion(text), now)
+  }, [mode, text, trimmed, now])
 
   const asking = question !== null
+
+  // `day`, not today: an undated entry belongs to the day being viewed.
+  const parsed = useMemo(
+    () => (asking || mode === 'ask' ? null : parse(text, now, day)),
+    [asking, mode, text, now, day],
+  )
+  const sameDay = parsed === null || parsed.occurredOn === day
+
+  /**
+   * What this text would have logged, worked out only while asking.
+   *
+   * This is the one failure the toggle introduces that the prefix could not:
+   * type `350 lunch swiggy` with Ask selected and the honest answer is "nothing
+   * found", which is a dead end in front of something the app plainly
+   * understands. So the dead end offers the obvious alternative — held behind a
+   * button, never acted on by itself.
+   */
+  const wouldLog = useMemo(
+    () => (mode === 'ask' && trimmed !== '' ? parse(text, new Date(now), day) : null),
+    [mode, trimmed, text, now, day],
+  )
   useEffect(() => {
     if (asking) onNeedCorpus()
   }, [asking, onNeedCorpus])
@@ -141,8 +183,8 @@ export function QuickAdd({
           // "send", not "done": on Android the Done action only dismisses the
           // keyboard, which left no way at all to save an entry on a phone.
           enterKeyHint="send"
-          placeholder="What happened?"
-          aria-label="What happened?"
+          placeholder={mode === 'ask' ? 'What do you want to know?' : 'What happened?'}
+          aria-label={mode === 'ask' ? 'What do you want to know?' : 'What happened?'}
           onChange={(event) => {
             setText(event.target.value)
             // A stale dictation error otherwise sits over the parse preview.
@@ -153,27 +195,61 @@ export function QuickAdd({
             // is not something every Android keyboard agrees about.
             if (event.key === 'Enter') {
               event.preventDefault()
-              submit(event)
+              // The answer is already on screen — it updates as you type — so
+              // there is nothing to send. Dropping the keyboard is the useful
+              // thing Enter can do, because the keyboard is covering it.
+              if (asking) event.currentTarget.blur()
+              else submit(event)
               return
             }
             // The box is autofocused, so without a way out every keyboard
             // shortcut is unreachable. Blur, never clear: a half-typed entry
             // is not worth losing to a stray Escape.
-            if (event.key === 'Escape') event.currentTarget.blur()
+            if (event.key === 'Escape') {
+              if (mode === 'ask') {
+                setMode('log')
+                setText('')
+              } else {
+                event.currentTarget.blur()
+              }
+            }
           }}
           className="w-full bg-transparent px-3.5 pt-3 pb-2 text-base text-ink outline-none"
         />
 
-        <div className="flex items-center gap-2 border-t border-line px-3.5 py-1.5">
+        {/* The second row of the control: what the box does, then how it read
+            what you typed, then the way to send it. The mode lives here rather
+            than under the control because this row has to exist anyway — it is
+            what keeps the height fixed — and an empty strip inside a bordered
+            box reads as a rendering fault. 44px targets, so the row is 44px. */}
+        <div className="flex items-center border-t border-line px-2">
+          <div role="group" aria-label="What the box does" className="flex shrink-0 items-center">
+            {(['log', 'ask'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={mode === option}
+                onClick={() => {
+                  setMode(option)
+                  document.getElementById('quick-add')?.focus()
+                }}
+                className={`flex h-11 items-center px-1.5 text-xs ${
+                  mode === option ? 'font-medium text-ink' : 'text-faint'
+                }`}
+              >
+                {option === 'log' ? 'Log' : 'Ask'}
+              </button>
+            ))}
+          </div>
+
           {/* Announced politely: the parse changes as you type, and a screen
               reader should hear the result without losing your place in the
-              field. `min-h-5` holds the row open when there is nothing to say,
-              which is what keeps the control one fixed height. */}
+              field. */}
           <div
             id="quick-add-preview"
             role="status"
             aria-live="polite"
-            className="min-h-5 min-w-0 flex-1 truncate text-xs"
+            className="min-w-0 flex-1 truncate px-1.5 text-xs"
           >
             {dictation.error !== null ? (
               <span className="text-expense">{dictation.error}</span>
@@ -194,12 +270,7 @@ export function QuickAdd({
                   </span>
                 )}
               </span>
-            ) : (
-              // The placeholder above already says what the box is for, so this
-              // row earns its space by teaching the one thing that is not
-              // guessable and lives nowhere else on screen.
-              <span className="text-faint">Start with ? to ask</span>
-            )}
+            ) : null}
           </div>
 
           {/* One slot: the mic while the box is empty, send once there is
@@ -210,7 +281,7 @@ export function QuickAdd({
             <button
               type="submit"
               aria-label="Save entry"
-              className="-my-1.5 flex h-11 w-8 shrink-0 items-center justify-center text-ink"
+              className="flex h-11 w-9 shrink-0 items-center justify-center text-ink"
             >
               <ArrowUpIcon size={20} />
             </button>
@@ -221,7 +292,7 @@ export function QuickAdd({
                 aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
                 aria-pressed={dictation.listening}
                 onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
-                className={`-my-1.5 flex h-11 w-8 shrink-0 items-center justify-center ${
+                className={`flex h-11 w-9 shrink-0 items-center justify-center ${
                   dictation.listening ? 'text-expense' : 'text-faint'
                 }`}
               >
@@ -246,6 +317,28 @@ export function QuickAdd({
             setText('')
           }}
         />
+      )}
+
+      {/* A question that found nothing, over text the parser plainly understands.
+          One tap rather than "switch mode and type it again". */}
+      {answer !== null && summary !== null && summary.entries === 0 && wouldLog !== null && (
+        <button
+          type="button"
+          onClick={() => {
+            onSubmit(wouldLog)
+            setText('')
+            setMode('log')
+          }}
+          className="mt-2 flex h-11 w-full items-center gap-2 rounded-lg border border-edge px-3 text-xs active:bg-raised"
+        >
+          <ArrowUpIcon size={14} className="shrink-0 text-muted" />
+          <span className="shrink-0 text-muted">Log instead</span>
+          {/* The same words the preview would have used, so what the button is
+              about to record is on the button. */}
+          <span className="min-w-0 truncate text-faint">
+            {summarise(wouldLog, wouldLog.occurredOn === day, now)}
+          </span>
+        </button>
       )}
 
       {showExamples && (

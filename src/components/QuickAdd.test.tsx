@@ -121,6 +121,73 @@ describe('capturing an entry', () => {
   })
 })
 
+describe('choosing between logging and asking', () => {
+  const corpus = [
+    entry({ occurred_on: TODAY, kind: 'expense', title: 'lunch swiggy', amount_paise: 35000, duration_minutes: null }),
+  ]
+
+  it('asks without a question mark once Ask is chosen', async () => {
+    const { box } = setup({ corpus })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, 'how much did i spend today')
+
+    // No syntax involved: the mode is what turns the box into a question.
+    expect(screen.getByText('₹350 · 1 entry · last today')).toBeTruthy()
+  })
+
+  it('says what the box will do', async () => {
+    const { box } = setup()
+    expect(box.placeholder).toBe('What happened?')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    expect(box.placeholder).toBe('What do you want to know?')
+  })
+
+  it('keeps the question mark working from Log, so an old habit still lands', async () => {
+    const { box, onSubmit } = setup({ corpus })
+    await userEvent.type(box, '? how much did i spend today')
+
+    expect(screen.getByText('₹350 · 1 entry · last today')).toBeTruthy()
+    await userEvent.type(box, '{Enter}')
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('never files a question away as an entry', async () => {
+    const { box, onSubmit } = setup({ corpus })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, 'what did i do today{Enter}')
+
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('offers to log something typed into Ask by mistake', async () => {
+    // The one failure the mode introduces that the prefix could not: a dead end
+    // in front of text the app plainly understands.
+    const { box, onSubmit } = setup({ corpus: [] })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, '350 lunch swiggy')
+
+    // The button carries the parse, so it says what it is about to record.
+    const offer = await screen.findByRole('button', { name: /Log instead.*expense · ₹350 · food/ })
+    await userEvent.click(offer)
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ kind: 'expense', amountPaise: 35000 })
+    // And it puts the box back where it started.
+    expect(box.value).toBe('')
+    expect(box.placeholder).toBe('What happened?')
+  })
+
+  it('leaves Ask on Escape rather than only dropping the keyboard', async () => {
+    const { box } = setup({ corpus })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, 'how much{Escape}')
+
+    expect(box.value).toBe('')
+    expect(box.placeholder).toBe('What happened?')
+  })
+})
+
 describe('a day with nothing on it', () => {
   it('shows what an entry becomes, rather than describing the syntax', async () => {
     setup({ showExamples: true })

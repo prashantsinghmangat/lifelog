@@ -502,6 +502,11 @@ export function useEntries(day: string, userId: string) {
 
   return {
     entries,
+    // The whole local log, for the callers that are not about one day. The bell
+    // is the reason: read from the launch fetch instead, it could not show a
+    // reminder typed since — which is precisely the thing you just asked it
+    // about. Costs no query, because this device already holds the log.
+    all: rows,
     failedElsewhere,
     loading,
     error,

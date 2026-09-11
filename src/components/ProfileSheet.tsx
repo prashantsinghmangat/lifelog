@@ -15,6 +15,8 @@ type Props = {
   email: string
   theme: Theme
   onTheme: (theme: Theme) => void
+  nudges: boolean
+  onNudges: (on: boolean) => void
   onHelp: () => void
   onExport: () => void
   onExportCalendar: () => void
@@ -26,6 +28,8 @@ export function ProfileSheet({
   email,
   theme,
   onTheme,
+  nudges,
+  onNudges,
   onHelp,
   onExport,
   onExportCalendar,
@@ -133,6 +137,31 @@ export function ProfileSheet({
 
           {reminders === 'unavailable' && (
             <p className="text-sm text-muted">Reminders are not available here.</p>
+          )}
+
+          {/* Two prompts a day, raised by the phone with nothing on a server
+              involved. A log nobody is reminded to keep is a log that stops
+              after a fortnight — but a daily notification is also the fastest
+              way to get an app muted, so it says exactly when it will arrive
+              and can be switched off in one tap. */}
+          {reminders === 'granted' && (
+            <button
+              type="button"
+              aria-pressed={nudges}
+              onClick={() => onNudges(!nudges)}
+              className="mt-3 flex h-11 w-full items-center justify-between gap-3 rounded-lg border border-edge px-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block text-sm text-ink">Daily prompts</span>
+                <span className="block text-xs text-faint">9am and 9pm</span>
+              </span>
+              <span
+                aria-hidden="true"
+                className={`shrink-0 text-xs font-medium ${nudges ? 'text-time' : 'text-faint'}`}
+              >
+                {nudges ? 'On' : 'Off'}
+              </span>
+            </button>
           )}
         </>
       )}

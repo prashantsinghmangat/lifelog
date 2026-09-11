@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { behindYou, done, nextOccurrence, passed } from './events'
+import {
+  behindYou,
+  done,
+  nextOccurrence,
+  passed,
+  recurring,
+  repeatLabel,
+  weeklyDays,
+} from './events'
 import type { Entry, Kind } from '../types'
 
 // Saturday, 5 September 2026, half past two in the afternoon.
@@ -106,5 +114,90 @@ describe('ticking something off by hand', () => {
     expect(behindYou(gone, NOW)).toBe(true)
     expect(behindYou(ticked, NOW)).toBe(true)
     expect(behindYou(neither, NOW)).toBe(false)
+  })
+})
+
+describe('a weekly rule', () => {
+  const weekdays = { rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' }
+
+  it('reads its days out of the rule', () => {
+    expect(weeklyDays(entry({ occurred_on: '2026-09-14', data: weekdays }))).toEqual([1, 2, 3, 4, 5])
+    expect(weeklyDays(entry({ occurred_on: '2026-09-14' }))).toBeNull()
+    expect(weeklyDays(entry({ occurred_on: '2026-09-14', data: { rrule: 'FREQ=YEARLY' } }))).toBeNull()
+  })
+
+  it('counts as recurring', () => {
+    expect(recurring(entry({ occurred_on: '2026-09-14', data: weekdays }))).toBe(true)
+  })
+
+  it('is never behind you, however old its date', () => {
+    // NOW is Saturday 5 September. A standup dated last January still rings on
+    // Monday, so striking it through would be a lie.
+    const row = entry({
+      occurred_on: '2026-01-05',
+      occurred_at: at('2026-01-05', '10:00:00'),
+      data: weekdays,
+    })
+    expect(passed(row, NOW)).toBe(false)
+    expect(behindYou(row, NOW)).toBe(false)
+  })
+
+  it('answers with the soonest listed weekday', () => {
+    // Saturday, so the next weekday is Monday the 7th.
+    const row = entry({ occurred_on: '2026-01-05', occurred_at: at('2026-01-05', '10:00:00'), data: weekdays })
+    expect(nextOccurrence(row, NOW)?.getDate()).toBe(7)
+  })
+
+  it('does not start before the day it is set up for', () => {
+    // Set up on Saturday the 5th to begin on Monday the 14th. Scanning from
+    // today alone answered Monday the 7th — a week early, and the phone rang
+    // to match while the row plainly said the 14th.
+    const row = entry({
+      occurred_on: '2026-09-14',
+      occurred_at: at('2026-09-14', '10:00:00'),
+      data: weekdays,
+    })
+    expect(nextOccurrence(row, NOW)?.toDateString()).toBe('Mon Sep 14 2026')
+  })
+
+  it('picks the first listed weekday on or after a future start', () => {
+    // Starting Saturday the 12th, which is not a weekday: Monday the 14th.
+    const row = entry({ occurred_on: '2026-09-12', data: weekdays })
+    expect(nextOccurrence(row, NOW)?.toDateString()).toBe('Mon Sep 14 2026')
+  })
+
+  it('counts today while its time has not gone by', () => {
+    const monday = new Date(2026, 8, 7, 8, 0, 0)
+    const row = entry({ occurred_on: '2026-01-05', occurred_at: at('2026-01-05', '10:00:00'), data: weekdays })
+    // Eight in the morning: today's ten o'clock standup is still ahead.
+    expect(nextOccurrence(row, monday)?.getDate()).toBe(7)
+
+    const afterwards = new Date(2026, 8, 7, 11, 0, 0)
+    expect(nextOccurrence(row, afterwards)?.getDate()).toBe(8)
+  })
+})
+
+describe('saying a repeat in words', () => {
+  // The row is the only evidence a repeat worked, since nothing expands it.
+  it('calls Monday to Friday weekdays', () => {
+    const row = entry({ occurred_on: '2026-09-14', data: { rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' } })
+    expect(repeatLabel(row)).toBe('weekdays')
+  })
+
+  it('lists the days of any other weekly rule, in week order', () => {
+    const row = entry({ occurred_on: '2026-09-14', data: { rrule: 'FREQ=WEEKLY;BYDAY=WE,MO' } })
+    expect(repeatLabel(row)).toBe('every Mon, Wed')
+  })
+
+  it('names a yearly rule and says nothing about a one-off', () => {
+    expect(repeatLabel(entry({ occurred_on: '2026-11-14', data: { rrule: 'FREQ=YEARLY' } }))).toBe(
+      'every year',
+    )
+    expect(repeatLabel(entry({ occurred_on: '2026-11-14' }))).toBeNull()
+  })
+
+  it('does not call a single weekday "weekdays"', () => {
+    const row = entry({ occurred_on: '2026-09-14', data: { rrule: 'FREQ=WEEKLY;BYDAY=MO' } })
+    expect(repeatLabel(row)).toBe('every Mon')
   })
 })

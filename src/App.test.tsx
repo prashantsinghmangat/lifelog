@@ -68,6 +68,7 @@ vi.mock('./lib/reminders', () => ({
   ),
   cancel: vi.fn(async () => undefined),
   sync: vi.fn(async () => undefined),
+  scheduleNudges: vi.fn(async () => 'scheduled'),
   permission: vi.fn(async () => 'granted'),
   requestPermission: vi.fn(async () => true),
 }))
@@ -134,6 +135,18 @@ describe('logging a reminder', () => {
     const box = await open()
     await userEvent.type(box, '320 lunch yesterday{Enter}')
     await waitFor(() => expect(screen.getByText(/Saved to yesterday/)).toBeTruthy())
+  })
+
+  it('counts a reminder in the bell as soon as it is typed', async () => {
+    // The bell used to read the fetch made at launch, so a standup set up a
+    // moment ago was missing from the one list whose whole job is to say what
+    // is coming.
+    const box = await open()
+    await userEvent.type(box, 'standup 10am weekdays{Enter}')
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /What is coming/ })).toBeTruthy(),
+    )
   })
 })
 

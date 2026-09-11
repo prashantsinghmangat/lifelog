@@ -885,3 +885,92 @@ describe('a time range, read for its start', () => {
     expect(r?.occurredAt).toBeUndefined()
   })
 })
+
+describe('a reminder that comes round again', () => {
+  // Saturday 12 September 2026, nine in the morning.
+  const SAT = new Date(2026, 8, 12, 9, 0, 0)
+  const on = (text: string) => parse(text, SAT)
+
+  it('reads "weekdays" as a rule, not a date', () => {
+    const r = on('standup 10am weekdays')
+    expect(r?.kind).toBe('event')
+    expect(r?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')
+    expect(r?.title).toBe('standup')
+  })
+
+  it('lands the row on the next matching weekday', () => {
+    // Typed on a Saturday, so the standup it refers to is Monday's.
+    expect(on('standup 10am weekdays')?.occurredOn).toBe('2026-09-14')
+    expect(on('standup 10am weekdays')?.occurredAt?.startsWith('2026-09-14T10:00')).toBe(true)
+  })
+
+  it('takes the keyword anywhere in the line', () => {
+    expect(on('standup weekdays 10am')?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')
+  })
+
+  it('reads a single day from "every monday"', () => {
+    const r = on('gym 7am every monday')
+    expect(r?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=MO')
+    expect(r?.title).toBe('gym')
+    // Read before the date, or the weekday matcher files this on *last* Monday
+    // and leaves "every" in the title.
+    expect(r?.occurredOn).toBe('2026-09-14')
+  })
+
+  it('accepts "every weekday" without a time, where "weekdays" alone would not', () => {
+    expect(on('standup every weekday')?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')
+  })
+
+  it('does not turn prose about weekdays into a reminder', () => {
+    // The word is ordinary English. Unanchored it made "weekdays are busy" ring
+    // five times a week under the title "are busy".
+    for (const text of ['weekdays are busy', 'i hate weekdays', 'meetings are on weekdays']) {
+      const r = on(text)
+      expect(r?.kind).toBe('note')
+      expect(r?.data.rrule).toBeUndefined()
+      expect(r?.title).toBe(text)
+    }
+  })
+
+  it('skips today once its time has gone', () => {
+    // Eight in the evening on a Thursday: `standup 10am weekdays` means
+    // Friday's standup, not one that finished ten hours ago. The row used to
+    // sit on today while `nextOccurrence` answered with tomorrow.
+    const thursdayEvening = new Date(2026, 8, 10, 20, 7, 0)
+    expect(parse('standup 10am weekdays', thursdayEvening)?.occurredOn).toBe('2026-09-11')
+
+    // The same line in the morning still means today.
+    const thursdayMorning = new Date(2026, 8, 10, 8, 0, 0)
+    expect(parse('standup 10am weekdays', thursdayMorning)?.occurredOn).toBe('2026-09-10')
+  })
+
+  it('starts from the day being viewed, like every other entry', () => {
+    // Arrow forward to Monday the 21st and set up a standup: it begins that
+    // week, not this one. Counted from today regardless, a repeat was the one
+    // entry `defaultDay` did not apply to — it landed on the 14th, and the
+    // phone rang a week before the row said anything was happening.
+    const thursday = new Date(2026, 8, 10, 22, 20, 0)
+    expect(parse('standup 10am weekdays', thursday, '2026-09-21')?.occurredOn).toBe('2026-09-21')
+
+    // A date typed in the line still wins over the day being viewed.
+    expect(parse('standup 14 sep 10am weekdays', thursday, '2026-09-21')?.occurredOn).toBe(
+      '2026-09-14',
+    )
+  })
+
+  it('rolls forward to a listed weekday when the viewed day is not one', () => {
+    // Viewing Saturday the 19th: the first standup is Monday the 21st.
+    const thursday = new Date(2026, 8, 10, 22, 20, 0)
+    expect(parse('standup 10am weekdays', thursday, '2026-09-19')?.occurredOn).toBe('2026-09-21')
+  })
+
+  it('leaves a one-off reminder alone', () => {
+    const r = on('dentist tomorrow 5pm')
+    expect(r?.data.rrule).toBeUndefined()
+    expect(r?.occurredOn).toBe('2026-09-13')
+  })
+
+  it('still reads a birthday as yearly', () => {
+    expect(on('riya birthday 14 nov')?.data.rrule).toBe('FREQ=YEARLY')
+  })
+})

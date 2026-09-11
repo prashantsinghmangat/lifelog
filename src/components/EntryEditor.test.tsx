@@ -181,6 +181,55 @@ describe('correcting the kind', () => {
     await save()
     expect(onSave.mock.calls[0]?.[0].data).toBeUndefined()
   })
+
+  // The yearly rule is a reading of the title, so it is recomputed on save. A
+  // weekly one is an instruction that appears nowhere in the title, and
+  // recomputing it the same way deleted it — five alarms gone, with the row
+  // still on screen looking exactly as it did.
+  const weekdays = { rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' }
+
+  it('keeps a weekly rule the title cannot vouch for', async () => {
+    const { onSave, save } = setup({ kind: 'event', title: 'standup', data: weekdays })
+    await userEvent.clear(screen.getByLabelText('Title'))
+    await userEvent.type(screen.getByLabelText('Title'), 'standup call')
+    await save()
+
+    // A patch that omits `data` leaves the stored one, so assert the rule the
+    // row ends up with rather than the shape of the patch — a conditional
+    // assertion here would pass by never running.
+    const patch = onSave.mock.calls[0]?.[0]
+    const after = patch?.data ?? weekdays
+    expect(after.rrule).toBe(weekdays.rrule)
+    expect(patch?.title).toBe('standup call')
+  })
+
+  it('drops a weekly rule when the entry stops being an event', async () => {
+    const { onSave, save } = setup({ kind: 'event', title: 'standup', data: weekdays })
+    await userEvent.click(screen.getByRole('button', { name: 'Note' }))
+    await save()
+    expect(onSave.mock.calls[0]?.[0].data).not.toHaveProperty('rrule')
+  })
+})
+
+describe('something that repeats', () => {
+  const weekdays = { rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' }
+
+  it('says so, because no field on the sheet does', () => {
+    setup({ kind: 'event', title: 'standup', data: weekdays })
+    expect(screen.getByText(/weekdays/)).not.toBeNull()
+  })
+
+  // `done` lives on the row, so ticking off today's standup would silence every
+  // Monday after it. The same reasoning already keeps `passed` false for these.
+  it('cannot be ticked off, since done would silence it for ever', () => {
+    setup({ kind: 'event', title: 'standup', data: weekdays })
+    expect(screen.queryByRole('button', { name: /Mark done/ })).toBeNull()
+  })
+
+  it('still lets a one-off event be ticked off', () => {
+    setup({ kind: 'event', title: 'dentist' })
+    expect(screen.queryByRole('button', { name: /Mark done/ })).not.toBeNull()
+  })
 })
 
 describe('the other actions', () => {

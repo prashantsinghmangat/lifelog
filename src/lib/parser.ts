@@ -279,6 +279,72 @@ function takeRelative(input: string, now: Date): Cut<Date> | null {
   )
 }
 
+const BYDAY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
+
+/**
+ * A weekly repeat, as a set of weekdays.
+ *
+ * `standup 10am weekdays` is one row that rings five times a week, not five
+ * rows — so what is read here is a *rule*, and the row's own date becomes the
+ * next occurrence rather than the only one.
+ *
+ * **Read before the date.** `every monday` would otherwise lose its weekday to
+ * the plain weekday matcher, filing the entry on *last* Monday and leaving
+ * `every` in the title. `weekdays` is safe from that matcher either way — no
+ * weekday name survives a `\b` inside it — but `every monday` is not.
+ */
+function takeRepeat(input: string): Cut<number[]> | null {
+  /**
+   * Bare `weekdays` counts only when the line also carries a clock time.
+   *
+   * It is an ordinary English word, and on its own it turned "weekdays are
+   * busy" — plainly a note — into a reminder ringing five times a week titled
+   * "are busy". A repeat modifies an appointment, and an appointment has a
+   * time; prose does not. `every weekday` covers the rare timeless case, since
+   * `every` says outright that a repeat is meant.
+   */
+  const bare =
+    takeTime(input) === null
+      ? null
+      : cut(input, /\bweekdays\b/i, () => [1, 2, 3, 4, 5])
+
+  return (
+    bare ??
+    cut(input, /\bevery\s+weekdays?\b/i, () => [1, 2, 3, 4, 5]) ??
+    cut(input, new RegExp(`\\bevery\\s+(${WEEKDAY})s?\\b`, 'i'), (m) => {
+      const day = WEEKDAYS[(m[1] ?? '').toLowerCase()]
+      return day === undefined ? null : [day]
+    })
+  )
+}
+
+/** `[1,2,3,4,5]` becomes `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR`. */
+function weeklyRule(days: number[]): string {
+  const codes = [...new Set(days)].sort().map((day) => BYDAY[day] ?? 'MO')
+  return `FREQ=WEEKLY;BYDAY=${codes.join(',')}`
+}
+
+/**
+ * The soonest of these weekdays, today included only while its time is ahead.
+ *
+ * The clock matters: `standup 10am weekdays` typed at eight in the evening on a
+ * Thursday means Friday's standup, not one that was over ten hours ago. Without
+ * this the row sat on today while `nextOccurrence` answered with tomorrow, and
+ * the two disagreed about the same entry.
+ */
+function soonestOf(days: number[], from: Date, clock: Clock | null, now: Date): Date {
+  for (let ahead = 0; ahead < 8; ahead += 1) {
+    const candidate = addDays(from, ahead)
+    if (!days.includes(candidate.getDay())) continue
+    if (ahead > 0) return candidate
+
+    const due = new Date(candidate)
+    due.setHours(clock?.hours ?? 9, clock?.minutes ?? 0, 0, 0)
+    if (due >= now) return candidate
+  }
+  return from
+}
+
 /** Words that make an entry an anniversary, whatever year its date falls in. */
 const RECURRING = /\b(bdays?|birthdays?|anniversary|anniversaries)\b/i
 
@@ -345,6 +411,15 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     matched = true
   }
 
+  // Before the date: see `takeRepeat`. A repeat also *implies* a date, so what
+  // it leaves behind is the next occurrence rather than nothing at all.
+  const repeat = takeRepeat(rest)
+  if (repeat) {
+    rest = repeat.rest
+    matched = true
+    kind ??= 'event'
+  }
+
   const date = takeDate(rest, now)
   if (date) {
     rest = date.rest
@@ -357,16 +432,30 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     matched = true
   }
 
-  const fallback = defaultDay === undefined ? startOfDay(now) : startOfDay(parseISO(defaultDay))
-  // A relative offset can roll past midnight, so it decides the day too.
-  const occurredOn =
-    date?.value ?? (relative ? startOfDay(relative.value) : fallback)
-
+  // Read before the day is resolved, because a weekly repeat needs the clock to
+  // know whether today still counts.
   const time = takeTime(rest)
   if (time) {
     rest = time.rest
     matched = true
   }
+
+  const fallback = defaultDay === undefined ? startOfDay(now) : startOfDay(parseISO(defaultDay))
+  // A relative offset can roll past midnight, so it decides the day too. A
+  // weekly repeat lands on its next matching weekday, so `standup 10am
+  // weekdays` typed on a Saturday sits on Monday rather than today.
+  //
+  // Counted from `fallback`, not from today: the day being viewed is where an
+  // entry lands when no date is typed, and a repeat is no exception. Measuring
+  // from today put a standup set up while looking at Monday the 14th onto
+  // Friday the 11th, which is the one rule `defaultDay` exists to state.
+  const occurredOn =
+    date?.value ??
+    (relative
+      ? startOfDay(relative.value)
+      : repeat
+        ? soonestOf(repeat.value, fallback, time?.value ?? null, now)
+        : fallback)
 
   const duration = takeDuration(rest)
   if (duration) {
@@ -432,7 +521,10 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     }
   }
 
-  if (resolved === 'event' && recurring) entry.data.rrule = 'FREQ=YEARLY'
+  // A weekly rule wins over the yearly one: "standup weekdays" is not an
+  // anniversary even if somebody calls it a birthday standup.
+  if (repeat) entry.data.rrule = weeklyRule(repeat.value)
+  else if (resolved === 'event' && recurring) entry.data.rrule = 'FREQ=YEARLY'
 
   return entry
 }

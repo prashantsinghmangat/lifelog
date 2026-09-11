@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run android                    # build, then copy the web assets into android/
 npm run android:open               # open the native project in Android Studio
 npm run dev                        # vite dev server on :5173
-npm test                           # vitest run (365 tests)
+npm test                           # vitest run (446 tests)
 npm run test:watch                 # vitest watch
-npx vitest run -t "yesterday"      # tests whose name matches a substring (4 of 365)
+npx vitest run -t "yesterday"      # tests whose name matches a substring (4 of 446)
 npx tsc -b                         # typecheck only (add --force to ignore the build cache)
 npm run build                      # tsc -b && vite build
 npm run preview                    # serve dist — the only way to exercise the service worker locally
@@ -48,6 +48,11 @@ look unrelated to the change.
 `defaultDay` is the day the entry lands on when no date token is typed. `QuickAdd` passes the
 day being viewed, so arrowing back a day and typing `500 groceries` backfills correctly. Relative
 words (`yesterday`, `next friday`) still resolve against `now`, never against `defaultDay`.
+
+**A repeat is no exception to that, and used to be.** `soonestOf` counted from `now`, so arrowing
+forward to Monday the 14th and typing `standup 10am weekdays` filed it on Friday the 11th — the
+one entry `defaultDay` did not govern. It counts from `fallback` now: the soonest listed weekday
+on or after the day you are looking at. A date typed in the line still wins over both.
 
 **A written date takes an optional four-digit year, and it must begin 19 or 20.** Without the
 year `anniversary 12 sep 2025` filed to *this* September and left the `2025` behind to be read as
@@ -129,8 +134,16 @@ by *next* occurrence for a date answer and by recency for everything else, which
 reason "when is deepak birthday" leads with next February rather than the row from seven months
 ago.
 
-An extra is `{ label, value }`, not a string, so `avg` and `first` read as named numbers in a
-column rather than as prose; a null label is for the facts that name themselves. **`grouped` is
+An extra is `{ label, value }`, not a string, so `avg` and `first` read as named numbers rather
+than as prose; a null label is for the facts that name themselves. **An upcoming date only leads
+when the question named a subject** — or asked `when` outright. Without one, "what happened
+around 6 September" was answered with "Tuesday 8 September": a reminder that merely fell inside
+the window, offered as the answer to a question explicitly about the past. And with no subject
+*and* no measure the lead is the **span the rows actually cover** (`4 — 8 Sep`), because that
+question is asking which days, and a tally is not an answer to it. A subject or a measure turns
+it back into a question about a quantity, and the quantity leads again. `avg` rounds to whole
+rupees: money prints paise when it has them, which is right for a figure somebody typed and
+wrong for a derived one. **`grouped` is
 the answer's own decision, not the card's.** Rows in day order let each date become a heading
 over the rows beneath it, which is what stopped `Aug 20` from being the loudest thing on four
 separate rows. It is *not* the same as `!oneDay`: a date answer is ordered by next occurrence, so
@@ -161,6 +174,98 @@ such option, so `ics.ts` hands the event to the OS calendar instead. `App` offer
 applies: natively the reminder is already set, so pushing "Add to calendar" there would be asking
 for a step the app just took.
 
+**A weekly repeat is one row with several alarms.** `standup 10am weekdays` stores
+`data.rrule = 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR'` and schedules five notifications, each with
+`on: { weekday, hour, minute }` — a cron the OS keeps honouring. **"No recurring event expansion"
+still holds in the data**: the log keeps one row for a standup that rings every working day, so
+there is one thing to edit and one to delete. `alarms()` is the scheduling authority and
+`alarmIds()` covers every id an entry could *ever* have owned, because editing a weekday standup
+down to one Monday otherwise leaves four alarms armed with nothing left in the row to derive them
+from.
+
+**`occurred_on` is the day a repeat *starts*, not decoration, and three separate places had to
+learn that.** A standup set up to begin on Monday the 14th rang on Friday the 11th: the row said
+one thing and the phone did another.
+
+- `nextOccurrence` scans from `max(today, occurred_on)` rather than from today.
+- `occurrencesOn` will not draw it before that day.
+- `alarms()` bounds the cron **per weekday, not per entry**. A `weekday` cron's first firing is
+  simply the next matching day, so only the weekdays that would fire early are held back — each as
+  a one-off at its first real occurrence, under the *same* notification id, so the first launch on
+  or after the start date replaces it with the standing cron. Bounding the whole entry instead
+  turned the ordinary case (typed today, starting tomorrow) into five one-offs that would stop
+  repeating after a week. Predicting where a cron first fires must be **strictly after now**
+  (`nextFiring`), or a Thursday standup set up on Thursday evening is judged against this morning's
+  ten o'clock and needlessly held back.
+
+The cost is that a repeat starting a whole week out gets one-offs for its first week, since every
+weekday's cron would fire early; it converges to crons at the next launch on or after the start.
+Capacitor's cron cannot express a start date, and there is no way around that from JS.
+
+**A repeat is stored once and drawn on every day it lands on.** `src/lib/occurrences.ts` derives
+those days — it does *not* store them, which is why "no recurring event expansion" survives intact:
+still one row, one thing to edit, one to delete. What was wrong was treating the storage rule as a
+reason to hide the occurrence. The alarms were armed for Monday to Friday, the row was drawn on
+Monday alone, and Tuesday read as an empty day while the phone was set to go off — a working repeat
+that looked broken from inside the app, reported three times before it was believed. Totals are
+computed from the **stored** rows only, or a repeating entry would report five times what it cost.
+It fixed yearly repeats in the same stroke: a birthday logged in 2010 was drawn in 2010 and nowhere
+else, so 13 February 2027 showed nothing while the reminder fired.
+
+**`repeatLabel` in `events.ts` is the only place a repeat is put into words** — `weekdays`,
+`every Mon, Wed`, `every year`. The row, the bell and the editor all read it. Because nothing is
+expanded in storage, that label on the row is the *only* evidence a repeat took effect; showing
+the clock and nothing else made a five-day repeat identical to a one-off. `AheadSheet` had grown
+its own copy of the wording, which is how two of them would eventually have disagreed.
+
+**`weekdays` is an ordinary English word, so it needs a clock beside it.** Unanchored, it turned
+"weekdays are busy" into a reminder ringing five times a week titled "are busy". A repeat modifies
+an appointment and an appointment has a time; prose does not — so the bare form is read only when
+`takeTime` also matches, and `every weekday` covers the rare timeless case because `every` says
+outright that a repeat is meant. `takeRepeat` runs **before the date**, or `every monday` loses its
+weekday to the plain weekday matcher and files on *last* Monday. And `takeTime` now runs before
+the day is resolved, because `standup 10am weekdays` typed at eight in the evening means
+tomorrow's standup — without the clock the row sat on today while `nextOccurrence` said tomorrow,
+and the two disagreed about the same entry.
+
+**Sound comes from the channel, not the notification.** On Android 8+ the channel owns the sound
+and whether a notification pushes itself in front of you, and **its settings belong to the user
+once it exists** — an app cannot raise them later. Reminders had been going out on Capacitor's
+`default` channel, created at importance 3 with vibration off, which is exactly why every one of
+them arrived silently. The fix is a *new* channel: `lifelog-reminders-v1` at importance 5, which
+`dumpsys` confirms carries `mSound=…/notification_sound` and `mVibrationEnabled=true`. The daily
+prompts get their own quieter channel so muting them in Android's settings does not also mute a
+reminder you asked for.
+
+**`src/lib/ahead.ts` is what is coming, and it costs no query.** The app could raise a reminder but
+never show you the set of them, so the only way to know what the phone would do was to wait. A
+weekly repeat contributes its *next* occurrence — one line, not one per weekday to the horizon. The
+bell appears only when something is ahead: a bell that is always empty teaches you to ignore it.
+
+**The bell reads this device's log, not the launch fetch — and that asymmetry is the point.**
+`onThisDay` is fed from `history` because a memory of an earlier year cannot be made stale by
+anything typed today. What is *coming* very much can: set up a standup and the bell went on
+listing what was true when the app opened, which is the one question it exists to answer. So
+`useEntries` exposes `all` (the whole local log, which this device already holds) and `ahead` reads
+that. Costs no query either way.
+
+**Two daily prompts, and they are not entries.** `9am` asks what is coming, `9pm` asks what
+happened and what is wanted for tomorrow. One `schedule` call each with `on: { hour, minute }`,
+which is a cron rather than a one-off, so the phone raises them for ever with the app closed and
+nothing on a server involved — verified on the emulator by winding the clock: the 9pm prompt
+fired and re-armed itself for the next day. They hold **ids 1 and 2**, and `notificationId` was
+moved to start at 8 so a row can never hash onto one and silently replace it. On by default,
+because a log nobody is reminded to keep is a log that stops after a fortnight; the switch is in
+the profile sheet and states the times, because a daily notification is also the fastest way to
+get an app muted. Stored per device (`lifelog.nudges`) rather than in the log — the same account
+on a laptop has no business raising a 9am notification on a phone.
+
+**Launch reconciles the OS's alarms with the log's.** `sync` cancels anything pending that this
+launch does not want before re-arming: the OS holds alarms the app has no memory of — a row
+deleted on another device, an entry whose time moved, or an id scheme that changed under a
+pending alarm, which would otherwise leave the old copy to fire beside the new one. The prompts
+are exempt; `scheduleNudges` owns those.
+
 **Never return a Capacitor plugin from an `async` function.** Resolving an async return value
 reads `.then` to test whether it is thenable, and the plugin proxy forwards *every* property
 access to native as a method call — so returning it invents a native method named `then` and the
@@ -185,6 +290,32 @@ rather than hoped at. An all-day alarm is a *relative* trigger (`PT9H` past loca
 is why nothing stores a timezone — change that to an absolute time and yearly birthdays break in
 every timezone but one. `src/lib/deliver.ts` prefers the share sheet over a download, since
 downloads are unreliable inside a standalone iOS PWA.
+
+**`public/logo.svg` is the mark, and every other icon is derived from it.** A day's spine with
+three entries hanging off it, the nodes in the same expense / time / event colours the rows use, on
+the `ink` tile that is already the app's `theme-color`. Authored on a **24-unit grid**, and the
+Android vector drawables carry those exact path strings — the launcher icon, the themed icon and
+the notification silhouette cannot drift apart because they are the same geometry.
+
+That grid is also the constraint that shaped it: Android draws a notification small icon as a flat
+tinted silhouette at 24px, so the mark is three nodes and three bars and deliberately nothing
+finer. `ic_stat_lifelog` is that silhouette; without it Capacitor falls back to a generic bell and
+every reminder arrives looking like it came from nothing in particular. `capacitor.config.ts`
+names it under `plugins.LocalNotifications` along with `iconColor`.
+
+- `drawable/ic_launcher_foreground.xml` — the adaptive foreground, scaled into the central third
+  of the 108dp canvas, which is the only part guaranteed not to be cropped.
+- `drawable/ic_launcher_monochrome.xml` — the Android 13 themed-icon layer. Without it the system
+  shrinks the full-colour icon inside a flat blob, which looks like a mistake beside every other
+  themed icon on the screen.
+- `mipmap-*/ic_launcher.png` and `ic_launcher_round.png` — legacy rasters, needed only for the two
+  API levels below adaptive icons, since `minSdk` is 24.
+- `public/icon-maskable-512.png` — see the maskable trap below.
+
+The PNGs are generated, not drawn: there is no rasterizer on this machine and headless Chrome
+returned a blank image at 144px, so they come from a small zero-dependency renderer (every shape
+in the mark is an axis-aligned rounded rectangle, so coverage is analytic). It is not in the repo —
+the SVG is the source of truth and the PNGs regenerate from it.
 
 **Colour never appears as a raw grey.** `src/index.css` defines semantic tokens — `surface`,
 `raised`, `sunken`, `ink`, `muted`, `faint`, `line`, `edge`, `focus`, plus the four kind colours —
@@ -216,22 +347,98 @@ like, and `WEEK_STARTS` is the one place the week begins on Monday; `useMarkedDa
 place dots are loaded. Two grids disagreeing about which day starts the week is a bug you can see
 from across the room, and it is exactly the kind that arrives by copy-paste.
 
+**Two ways a row is behind you, one treatment.** `passed()` is the clock's answer — a reminder
+whose moment has gone. `done()` is yours, set by hand, and it is the only piece of state in the
+app that neither the parser nor the clock decides: a note saying "send the revised scope" is
+finished when you say so. `behindYou()` is the union, and it is what strikes the title through.
+Stored as `data.done` rather than a column because nothing sums it, which is the rule the schema
+already states — so it costs no migration. **Marking done silences the reminder**: `fireAt()`
+returns null for a done event, which is the single choke point every scheduling path runs
+through, and `forCalendar` drops them for the same reason. A reminder that rings at five for
+something you did at three is worse than none, because it teaches you to ignore them.
+
+**Nothing that repeats can be ticked off, so the editor does not offer it.** `done` sits on the
+row, so marking today's standup done would silence every Monday after it — the same reasoning that
+already keeps `passed` false for a repeat. Withholding the control is also what closed a real
+data-loss path: the editor recomputed `rrule` from the title on every save, which is right for
+`FREQ=YEARLY` (the word *birthday* is what makes it yearly) and wrong for a weekly rule, because
+`weekdays` was typed as an instruction and survives nowhere in the title. A save that merely
+toggled done therefore deleted the repeat, and since `alarms()` returns nothing for a done entry,
+one tap silently cancelled five standing alarms with the row still on screen looking unchanged.
+A weekly rule now survives every save; only leaving `kind: 'event'` drops it.
+
+**A title gets two lines.** One line with an ellipsis told you an entry existed and not what it
+was, and the longest titles are notes, where the words *are* the content. `line-clamp-2` in the
+timeline and in an answer; the editor gives it a textarea, because editing a sentence through a
+40-character window means scrolling sideways to read your own writing.
+
 **Every row draws the same way, wherever it appears.** Title on top; clock, category and anything
 else secondary on a quieter line beneath; the one number — money if the row has any, otherwise
-duration — right-aligned and `tabular-nums`. That number comes from `rowValue` in `format.ts`,
+duration — right-aligned, `tabular-nums`, and in `muted` at regular weight. **The number is
+metadata, not the headline**: at medium weight in full-strength ink it competed with the title on
+every row, including the many rows where it is incidental. What the entry *is* comes first. That number comes from `rowValue` in `format.ts`,
 which used to be three copies of the same four lines in `EntryRow`, `AnswerCard` and a toast.
 **`occurred_at` is optional, so a left-hand time gutter is not an option**: most rows have no
 clock, and a column that is empty on most rows is a 56px indent that buys nothing. `AnswerCard`
 had already discovered this and collapsed the column; the timeline's secondary line is the
 version that survived.
 
+**A day with nothing on it demonstrates the parser rather than describing it.** Three faded rows
+carry the line to type and what it becomes — `350 lunch swiggy` / *becomes an expense · ₹350 ·
+food* — drawn like the entries they would turn into, and tapping one fills the box so the next
+move is editing something real. The transformation is the whole trick and an empty log is the one
+place it cannot be seen. This replaced three example chips, which showed the syntax and hid the
+result.
+
 **A summary goes under what it summarises.** The day's totals sit below the last row, where the
 row's own border is the rule above them. Above the capture box they read as a label for what you
 are about to type instead of a summary of what you have just read.
 
+**The capture control is two rows, and its height never changes.** The parse preview lives
+*inside* the field — a rule beneath what you typed, then how it parsed, with the mic or send
+button on that same row. It used to sit outside and below, reserving its line whether or not it
+had anything to say, which left about 90px of dead space above the first entry on every
+populated day. It cannot simply collapse: it is a live region, and a line that changes height
+makes the timeline jump on every keystroke. Inside the control the height is fixed by the
+control, so nothing below it moves.
+
+**That second row is also where the mode lives: `Log · Ask`, then the parse, then send.** Asking
+used to be reachable only by typing a leading `?`, which meant the box's second job was invisible
+unless somebody told you the syntax. The toggle says it out loud, changes the placeholder to
+*What do you want to know?*, and needs no prefix. **`?` still works from Log**, because it costs
+nothing to keep and it is faster than reaching for a control — the mode is how the behaviour is
+discovered, not the only way to reach it. The toggle sits *inside* the control rather than under
+it for two reasons: this row has to exist anyway, and an empty strip inside a bordered box reads
+as a rendering fault. 44px targets, so the row is 44px.
+
+**A mode can be the wrong one, and a prefix cannot** — that is the cost of the toggle, and it is
+paid in one place. Type `350 lunch swiggy` with Ask selected and the honest answer is "nothing
+found", which is a dead end in front of something the app plainly understands. So that dead end
+offers **Log instead**, carrying the parse it would record on the button. Held behind a tap, never
+acted on by itself: automatic detection is what the leading `?` exists to avoid. Escape leaves Ask
+and clears; every day opens in Log, because logging is the primary act.
+
+**The answer is banded, not boxed.** `AnswerCard` was a bordered, recessed card; once day
+headings took over the grouping the card was drawing a boundary nothing needed, since dates
+separate the information and whitespace groups it. A pair of heavier rules and the size of the
+number now do that job with less ink. **The closing rule is load-bearing** — without it the last
+row of the answer and the first row of the day read as one list.
+
+**A day opens on what is still live.** A *leading run* of already-passed reminders folds into one
+`N already passed` line, from two upwards. Struck through at full size they made the loudest
+thing at the top of the day the part that no longer matters. Only a leading run, so nothing is
+reordered — a reminder that passed later in the day stays where it happened; and only from two,
+because hiding one row behind a tap costs a row and saves none. `passed` is true of events
+alone, so nothing carrying money or time is ever inside the fold, and the totals line still
+counts the whole day while the fold states how many it is holding.
+
 **`Sheet` owns modal correctness** — focus moves in, is trapped, and returns to the trigger on
 close; Escape closes; body scroll locks. Any new modal goes through it rather than reimplementing
-an overlay.
+an overlay. Focus lands on the **dialog**, not its first control: focusing the first button drew
+the focus ring on `Expense` every time the editor opened, which reads as a claim about the entry,
+and focusing the first field would throw the keyboard up before anyone asked. A sheet's actions
+are `sticky bottom-0` inside its scroll area, so the fields scroll behind them and Save is always
+where you left it.
 
 **Undo, not confirmation.** Reversible actions happen immediately and offer `Undo` in the toast
 (`useEntries.restore` clears `deleted_at`). Do not add "are you sure?" to a normal delete.
@@ -260,11 +467,42 @@ Four kinds — `expense`, `time`, `event`, `note`. Do not add a fifth.
 - RLS is the only thing protecting the data, since the publishable key ships in the bundle.
   Verified: with the anon key, reads return `[]` and inserts fail `42501`.
 
-`data.rrule = 'FREQ=YEARLY'` is set for birthday/anniversary events and currently does nothing.
+`data.rrule` holds the repeat: `FREQ=YEARLY` for a birthday or anniversary, and
+`FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` for `standup 10am weekdays`. It drives scheduling and the
+bell; it never expands into rows.
 
 ## Traps
 
 These cost real time to discover. None are visible from reading a single file.
+
+**Never pipe `npm run android` through PowerShell's `Select-Object -First`.** It stops the upstream
+pipeline once it has its objects, which kills npm *after* vite prints the asset name and *before*
+`cap sync` copies anything into `android/`. Two APKs were built, installed and reported as verified
+while carrying assets two builds old. `Out-String` the whole thing and match on it instead —
+`Sync finished` is the line that proves the copy ran. **Verify what is actually running rather than
+what was built**: read the bundle hash out of the APK (`unzip -l … | grep index-`) and out of the
+live WebView (`document.querySelector('script[src]')`), and check they agree. Any assertion about
+behaviour on device is worthless without that, and a launch that merely refetches can make old code
+look fixed.
+
+**`adb install -r` does not restart the app, and a screen that is off suspends the WebView.**
+Without `am force-stop` the running page survives the update and reports the previous build; with
+the display off, CDP stops answering entirely and looks like a broken tunnel. `input keyevent
+KEYCODE_WAKEUP` first.
+
+**Deleting anything under `android/app/src/main/res` needs a clean build.** Removing
+`drawable-v24/ic_launcher_foreground.xml` and adding `drawable/ic_launcher_foreground.xml` in the
+same change made aapt2 fail with `resource drawable/ic_launcher_foreground not found` for a file
+plainly on disk — a stale incremental resource merge. `gradlew clean assembleDebug` fixed it with
+no source change.
+
+**A maskable icon only guarantees the central circle of 80% diameter.** The mark at full size put
+the bottom bar's far corner 10.0 units from centre against a safe radius of 9.6, so the installed
+PWA shortcut showed three dots with the bars clipped off — while the native adaptive icon, whose
+own safe check passes at 30 of 33, was fine. The maskable PNG therefore insets its content to 0.85
+and is full-bleed square: reusing the rounded tile showed transparent corners under a square mask.
+A launcher caches an installed shortcut's icon, so fixing this does not fix an already-installed
+one — it has to be removed and re-added.
 
 **Bundle size must be measured with `.env.local` present.** Without it,
 [src/lib/supabase.ts](src/lib/supabase.ts) throws at module scope, the bundler proves the throw
@@ -298,6 +536,11 @@ read "saving" indefinitely, and — much worse — the sync loop's in-progress f
 released, so *every later sync was blocked too*, including the one due when the network returned.
 Hence `PATIENCE`: stop waiting after 10s and treat it as no network. Abandoning a request is safe
 here precisely because every write is an idempotent upsert.
+
+**`env(safe-area-inset-bottom)` is 0 in the Android WebView.** Measured, not assumed. A bottom
+sheet padded with `max(1rem, env(...))` therefore gets 16px, and Android's gesture bar is about
+24, so the sheet's own buttons sat underneath it. The floor has to be a real number — the inset
+adds nothing here and cannot be relied on to.
 
 **Never `toISOString().slice(0, 10)`.** In IST that returns yesterday's date for the first five
 and a half hours of every day. Use `dayKey()` / `format(d, 'yyyy-MM-dd')`.
@@ -349,9 +592,12 @@ fonts, one 100ms fade on new rows, nothing else animated.
 
 ## Deliberately not built
 
-No AI or LLM calls, no SMS parsing, no notification listeners, no Capacitor or native Android, no
-recurring event expansion, no push notifications, no charts, no category management UI, no
-search, no tags, no multi-day views. Time ranges are not a duration: `9-6` and `10 to 6` are
+No AI or LLM calls, no SMS parsing, no notification listeners, no push notifications, no charts,
+no category management UI, no search, no tags, no multi-day views. **No recurring event
+expansion**, which still means what it always did — a repeat is one stored row however many times
+it rings, so there is one thing to edit and one to delete. Drawing the days it lands on is a
+derivation over that row, not a set of rows (see `occurrences.ts`). Capacitor and the native
+Android app were on this list and came off it deliberately, along with the settings sheet. Time ranges are not a duration: `9-6` and `10 to 6` are
 explicitly out of the parser, and `9h worked` covers that need. A *clocked* span (`8 am to 9 am`,
 `10:00 to 11:00`) is read for its start only — half-reading one swept `to 9 am` into the title —
 and a colon or meridiem somewhere is what tells the two apart. There is no end-time column.
@@ -391,6 +637,15 @@ at the end of [README.md](README.md).
 - "On this day" is computed from the corpus fetched at launch, so backfilling an entry into a
   previous year does not appear there until the app is reloaded. Deliberate: refetching the whole
   log on every write would cost a round trip to keep a strip current that changes about never.
+- **There is no control to remove a repeat.** Typing `weekdays` sets one; nothing takes it off
+  again, so the only way out is to delete the row and retype it. An off switch has a wart worth
+  designing around rather than shipping blind: a *yearly* rule is re-derived from the title, so
+  turning off a birthday's repeat would resurrect it on the next save.
+- Deleting a row deletes the whole series, including from a derived occurrence on another day.
+  Consistent with one-row storage, and undo covers a mistake, but nothing on the sheet says so.
+- A repeat whose start is more than a week out arms one-offs for its first week rather than
+  standing crons, because every weekday's cron would otherwise fire early. It converges on the
+  first launch on or after the start date; Capacitor's cron has no start parameter.
 - Dictation uses the Web Speech API, which iOS Safari does not implement. `useDictation` reports
   `supported: false` there and `QuickAdd` hides the mic rather than offering a dead button.
 - The session lives in `localStorage`, so it is per-browser. Opening the magic link in a different

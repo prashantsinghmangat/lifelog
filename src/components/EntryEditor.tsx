@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { CheckIcon } from './Icons'
 import { Sheet } from './Sheet'
-import { done as isDone } from '../lib/events'
+import { done as isDone, recurring, repeatLabel, weeklyDays } from '../lib/events'
 import { atTime, paiseFrom, timeValue } from '../lib/format'
 import { recurringTitle } from '../lib/parser'
 import type { Patch, Row } from '../hooks/useEntries'
@@ -75,13 +75,22 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
     // Correcting a misparsed note into an event should apply the same yearly
     // rule the parser would have, or "when is X birthday" still cannot answer.
     // Demoting it away from an event drops the rule, since only events recur.
+    //
+    // A *weekly* rule is not the same kind of thing and must not be recomputed.
+    // Yearly is a reading of the title — the word `birthday` is what makes it
+    // yearly — but `weekdays` was typed as an instruction and survives nowhere
+    // in the title, so deriving it the same way deleted it. That silently
+    // unscheduled a five-day standup on the first save that merely marked it
+    // done, and nothing on screen said so.
+    const stored = typeof row.data.rrule === 'string' ? row.data.rrule : undefined
+    const weekly = weeklyDays(row) === null ? undefined : stored
     const yearly = kind === 'event' && recurringTitle(trimmed)
-    const had = row.data.rrule === 'FREQ=YEARLY'
+    const rule = kind !== 'event' ? undefined : (weekly ?? (yearly ? 'FREQ=YEARLY' : undefined))
 
-    if (yearly !== had || finished !== isDone(row)) {
+    if (rule !== row.data.rrule || finished !== isDone(row)) {
       const data = { ...row.data }
-      if (yearly) data.rrule = 'FREQ=YEARLY'
-      else delete data.rrule
+      if (rule === undefined) delete data.rrule
+      else data.rrule = rule
       if (finished) data.done = true
       else delete data.done
       patch.data = data
@@ -95,7 +104,16 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
   }
 
   // The date and time are editable below, so repeating them here would be noise.
-  const context = [row.category].filter((bit): bit is string => bit !== null && bit !== '')
+  // The repeat is not: it is the one thing about the entry that no field shows,
+  // and the date field alone reads as a one-off.
+  const context = [row.category, repeatLabel(row)].filter(
+    (bit): bit is string => bit !== null && bit !== '',
+  )
+
+  // Nothing that repeats can be ticked off. `done` sits on the row, so marking
+  // a weekday standup done would silence every future Monday as well as today's
+  // — the same reasoning that already keeps `passed` false for a repeat.
+  const tickable = !recurring(row)
 
   return (
     <Sheet label={`Edit ${row.title}`} onClose={onClose}>
@@ -205,17 +223,19 @@ export function EntryEditor({ row, onSave, onDelete, onAddToCalendar, onClose }:
         {/* The one piece of state here that no clock can work out. A reminder
             whose time has gone strikes itself through; a note saying "send the
             revised scope" is done when you decide it is. */}
-        <button
-          type="button"
-          aria-pressed={finished}
-          onClick={() => setFinished(!finished)}
-          className={`mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-medium ${
-            finished ? 'border-ink bg-sunken text-ink' : 'border-edge text-muted'
-          }`}
-        >
-          <CheckIcon size={16} className={finished ? '' : 'opacity-40'} />
-          {finished ? 'Done' : 'Mark done'}
-        </button>
+        {tickable && (
+          <button
+            type="button"
+            aria-pressed={finished}
+            onClick={() => setFinished(!finished)}
+            className={`mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-lg border text-sm font-medium ${
+              finished ? 'border-ink bg-sunken text-ink' : 'border-edge text-muted'
+            }`}
+          >
+            <CheckIcon size={16} className={finished ? '' : 'opacity-40'} />
+            {finished ? 'Done' : 'Mark done'}
+          </button>
+        )}
 
         {/* Only events have anything to remind about. */}
         {row.kind === 'event' && (

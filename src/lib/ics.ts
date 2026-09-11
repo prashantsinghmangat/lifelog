@@ -1,5 +1,5 @@
 import { addDays, addMinutes, parseISO } from 'date-fns'
-import { done } from './events'
+import { done, weeklyDays } from './events'
 import { dayKey } from './format'
 import type { Entry } from '../types'
 
@@ -84,7 +84,15 @@ function event(entry: Entry, now: Date): string[] {
     lines.push(...alarm(entry.title, ';RELATED=START:PT9H'))
   }
 
-  if (isYearly(entry)) lines.push('RRULE:FREQ=YEARLY')
+  // The rule goes into the file, so the OS calendar repeats it too rather than
+  // showing one lonely occurrence.
+  const weekly = weeklyDays(entry)
+  if (weekly !== null) {
+    const codes = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
+    lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${weekly.map((day) => codes[day]).join(',')}`)
+  } else if (isYearly(entry)) {
+    lines.push('RRULE:FREQ=YEARLY')
+  }
 
   lines.push(`SUMMARY:${escapeText(entry.title)}`)
   if (entry.note !== null && entry.note !== '') lines.push(`DESCRIPTION:${escapeText(entry.note)}`)
@@ -110,7 +118,7 @@ export function forCalendar(entries: Entry[], now: Date): Entry[] {
     (entry) =>
       entry.kind === 'event' &&
       !done(entry) &&
-      (isYearly(entry) || entry.occurred_on >= today),
+      (isYearly(entry) || weeklyDays(entry) !== null || entry.occurred_on >= today),
   )
 }
 

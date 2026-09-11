@@ -27,7 +27,16 @@ export default defineConfig({
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          // A maskable icon is cropped to whatever shape the launcher wants, so
+          // it needs its own full-bleed square rather than the rounded tile —
+          // reusing the rounded one showed transparent corners under a square
+          // mask and clipped the tile's own radius under a circular one.
+          {
+            src: '/icon-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
       workbox: {

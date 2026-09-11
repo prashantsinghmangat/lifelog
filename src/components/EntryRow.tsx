@@ -1,5 +1,5 @@
 import { KIND_NAME, KindMark } from './KindMark'
-import { behindYou } from '../lib/events'
+import { behindYou, repeatLabel } from '../lib/events'
 import { clock, relativeDay, rowValue } from '../lib/format'
 import type { Row } from '../hooks/useEntries'
 
@@ -18,6 +18,9 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
   const at = row.occurred_at === null ? null : clock(row.occurred_at)
   const detail = [
     at,
+    // A repeat has one row, so this line is the only thing that can say the
+    // standup on Friday is also the standup on Monday.
+    repeatLabel(row),
     row.category,
     offDay ? relativeDay(row.occurred_on, now) : null,
     // Words, not a colour or an icon: the row is saved on this device and the

@@ -186,7 +186,7 @@ that is what actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 387 tests
+npm test           # vitest run — 446 tests
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -203,6 +203,7 @@ existed. Order matters: duration is read before amount, or `2h client work` beco
 | Times | `5pm`, `5:30pm`, `17:30`, `9am` |
 | Durations | `2h`, `90m`, `2.5h`, `1h30m`, `2h30`, `45 min`, `2 hrs` |
 | Amounts | `350`, `₹350`, `rs 350`, `Rs.350`, `350rs`, `100 rupees`, `2,499`, `350.50` |
+| Repeats | `weekdays`, `every weekday`, `every monday`, `every tue` |
 | Filler stripped | `spent`, `paid`, `bought`, `for`, `on`, `at`, `worked`, `did` |
 
 Rules worth knowing:
@@ -214,8 +215,12 @@ Rules worth knowing:
   or that has no time at all.
 - With no date token, the entry files on **the day you are viewing**, so arrowing back a day and
   typing `500 groceries` backfills correctly.
-- `birthday`, `bday` or `anniversary` on an event sets `data.rrule = 'FREQ=YEARLY'`. V1 stores it
-  and does nothing with it.
+- `birthday`, `bday` or `anniversary` on an event sets `data.rrule = 'FREQ=YEARLY'`, and
+  `standup 10am weekdays` sets `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR`. One row either way — the
+  repeat becomes several alarms, never several entries.
+- **`weekdays` on its own needs a clock time beside it**, because it is also an ordinary English
+  word: without that rule `weekdays are busy` became a reminder ringing five times a week titled
+  *are busy*. `every weekday` works with no time, since `every` says a repeat outright.
 - Nothing recognised at all → `note`, with the input kept untouched as the title.
 - Money is an integer number of paise everywhere. ₹347.50 is `34750`. It becomes a string in
   exactly one place, [`src/lib/format.ts`](src/lib/format.ts).
@@ -400,9 +405,60 @@ dentist tomorrow 5pm        at the event
 + Mom birthday 14 nov       9am on the day, every year
 ```
 
+```
+standup 10am weekdays       10am Monday to Friday, for ever
+every monday 9am review     one row, one alarm a week
+```
+
 The toast confirms with the actual time — *"Reminder set for 12:04 pm"*. Reminders are cancelled
 when an entry is deleted, re-armed when it is edited, and re-armed for everything upcoming on
-launch, so an event logged on the web still fires on the phone.
+launch, so an event logged on the web still fires on the phone. Launch also **cancels alarms the
+log no longer wants** — a row deleted on the laptop leaves the phone holding an alarm nothing on
+screen can explain.
+
+A repeat is scheduled as a weekly cron per day (`on: { weekday, hour, minute }`), so
+`standup 10am weekdays` is five standing alarms from one line and needs no server and no
+re-arming.
+
+**The date on a repeat is the day it starts.** Arrow forward to Monday the 14th, type
+`standup 10am weekdays`, and it begins that week — 14th to 18th — not this one. A weekday cron has
+no notion of a start, so any weekday whose alarm would have fired before the start date is held
+back until its first real occurrence; the app swaps it for the standing cron on the next launch
+after the start.
+
+**A repeat shows on every day it lands on.** The log still keeps one row — one thing to edit, one
+to delete — but Tuesday's standup appears on Tuesday, and the row says `10:00 am · weekdays` so a
+repeat is never mistaken for a one-off. Without that, the alarms were armed Monday to Friday while
+only Monday showed anything, and a working repeat looked broken. The day's totals still count the
+stored rows, so a repeating entry never reports five times what it cost.
+
+**Marking an entry done silences it.** A reminder that rings at five for something finished at
+three teaches you to ignore reminders, so `done` removes the alarm and drops the row from the
+calendar export. **Anything that repeats has no done mark**, because `done` lives on the row: it
+would silence every Monday after this one, and a standup is not something you finish.
+
+**They make a sound.** They used not to: Android 8+ puts sound and importance on the *channel*,
+Capacitor's `default` channel is created at importance 3 with vibration off, and a channel's
+settings belong to the user once it exists — an app cannot raise them afterwards. So reminders
+now go out on their own channel at full importance, and the daily prompts on a quieter one, which
+means muting the prompts in Android's settings does not also mute a reminder you asked for.
+
+### Two prompts a day
+
+`9am` asks what is coming, `9pm` asks what happened and what you want waiting for tomorrow. They
+are notifications, not entries, and they are daily crons, so the phone raises them for ever with
+the app closed and nothing on a server involved. On by default — a log nobody is reminded to keep
+is a log that stops after a fortnight — and the switch in the profile sheet states the times.
+Stored per device, since the same account on a laptop has no business raising a 9am notification
+on a phone.
+
+### The bell
+
+A count in the header when something is ahead, and tapping it lists what the phone is going to
+raise over the next fortnight, soonest first; tapping a row goes to its day. A weekly repeat
+shows its *next* occurrence — one line, not one per weekday. It reads this device's own log, so a
+reminder is counted the moment it is typed and it still costs no query. The bell is absent when
+nothing is coming: one that is always empty teaches you to ignore it.
 
 Android grants notification permission per install, so a reinstall revokes it; the app asks again
 above the timeline. **Allow "Alarms and reminders"** too (Settings → Apps → lifelog), or Android
@@ -556,17 +612,34 @@ and an insert is rejected with `42501 new row violates row-level security policy
 ```
 src/
   lib/        supabase.ts  store.ts  identity.ts  parser.ts  query.ts  history.ts
-              ics.ts  reminders.ts  format.ts
+              events.ts  occurrences.ts  ahead.ts  ics.ts  deliver.ts  reminders.ts
+              platform.ts  format.ts
   hooks/      useEntries.ts  useSession.ts  useTheme.ts  useSwipe.ts  useDictation.ts
-              useMarkedDays.ts  useOnline.ts
+              useMarkedDays.ts  useOnline.ts  useNudges.ts
   components/ Login.tsx  DayHeader.tsx  WeekStrip.tsx  DayCell.tsx  MonthGrid.tsx
               MonthSheet.tsx  ProfileSheet.tsx  QuickAdd.tsx  AnswerCard.tsx
-              OnThisDay.tsx  EntryRow.tsx  KindMark.tsx  EntryEditor.tsx  HelpSheet.tsx
-              Sheet.tsx  Toast.tsx  Icons.tsx
+              OnThisDay.tsx  AheadSheet.tsx  EntryRow.tsx  KindMark.tsx
+              EntryEditor.tsx  HelpSheet.tsx  Sheet.tsx  Toast.tsx  Icons.tsx
   types.ts  App.tsx  main.tsx
 supabase/migrations/0001_entries.sql
-public/icon-192.png  public/icon-512.png
+public/logo.svg  public/icon-192.png  public/icon-512.png  public/icon-maskable-512.png
 ```
+
+### The icon
+
+[`public/logo.svg`](public/logo.svg) is the mark and everything else is derived from it: a day's
+spine with three entries hanging off it, the nodes in the same expense / time / event colours the
+rows use, on the same `ink` tile as the app's theme colour.
+
+It is drawn on a 24-unit grid, and the Android vector drawables carry those exact paths — so the
+launcher icon, the Android 13 themed icon and the notification silhouette are literally the same
+geometry and cannot drift apart. The grid is also what shaped it: Android draws a notification
+icon as a flat tinted silhouette at 24px, so the mark is three nodes and three bars and nothing
+finer. Before this, reminders arrived under a generic bell.
+
+The PNGs are generated from the SVG rather than drawn, and the maskable one insets its content,
+because a maskable icon is cropped to whatever shape the launcher likes and only its central
+circle is safe.
 
 Four kinds, no more: `expense`, `time`, `event`, `note`. Kind-specific extras go in the `data`
 jsonb column; anything that gets summed gets a real column. Deletes are soft — `deleted_at` is
@@ -609,8 +682,12 @@ set, rows are never removed.
 
 ## Not built, on purpose
 
-No AI or LLM calls, no SMS parsing, no notification listeners, no Capacitor or native Android,
-no recurring event expansion, no push notifications, no charts, no category management UI, no
-search, no tags, no settings screen. No multi-day view beyond the "on this day" strip above.
+No AI or LLM calls, no SMS parsing, no notification listeners, no push notifications, no charts,
+no category management UI, no search, no tags, no settings screen. No multi-day view beyond the
+"on this day" strip and the bell's fortnight. **Still no recurring event expansion** — a repeat
+is one row that schedules several alarms, never several entries, so there stays one thing to
+edit and one to delete. The days it lands on are *derived* for the view, which is not the same
+thing: nothing extra is stored, and deleting the row deletes the series. (Capacitor and the native Android app were on this list and came off it
+deliberately, along with the settings sheet; the deviations are listed above.)
 The service worker still precaches the app shell only and never caches API responses — offline
 reads come from the app's own log, not from an invisible cache of stale JSON.
