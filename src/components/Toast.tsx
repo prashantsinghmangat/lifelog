@@ -72,16 +72,19 @@ export function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () =
     <div
       role="status"
       aria-live="polite"
-      /* Clear of the docked capture control on a phone.
+      /* In flow, at the top of the bottom block — not fixed, and no offset to
+         keep in step with anything.
 
-         A toast over that control is not a cosmetic overlap: `Undo` and `Save`
-         sat on top of each other once before and pressing one hit the other.
-         `--dock` is how much of the bottom edge the control occupies, defined
-         once in `index.css` and zero from `lg` up, where the control is back at
-         the top. Measured from the control's height alone this was wrong by the
-         two paddings that hold it off the gesture bar, and the toast landed on
-         the field — verified on the device. */
-      className="pointer-events-none fixed inset-x-0 bottom-[var(--dock)] z-30 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+         A toast over the capture control is not a cosmetic overlap: `Undo` and
+         `Save` sat on top of each other once and pressing one hit the other.
+         That was answered for a while by `--dock`, a constant the toast read to
+         clear the control's height. The constant was the bug: it had to be
+         re-derived every time the bottom edge changed, it was wrong by two
+         paddings the first time, and once the nav could come and go mid-entry
+         it would have needed a rule for which of two values applied. The toast
+         is a sibling above the control instead, so clearing it is arithmetic
+         nothing has to do. */
+      className="pointer-events-none mb-2 flex justify-center"
     >
       <div
         onPointerDown={down}

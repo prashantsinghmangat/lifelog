@@ -65,34 +65,17 @@
   color-scheme: dark;
 }
 
-/**
- * How much of the bottom edge the docked capture control occupies on a phone.
+/* There is no `--dock`, and that is deliberate.
  *
- * One number in one place, because two things have to agree about it and they
- * are in different files: the control docks to the bottom on a compact screen,
- * and the toast has to stay clear of it. A toast over that control is not a
- * cosmetic overlap — `Undo` and `Save` sat on top of each other once and
- * pressing one hit the other.
- *
- * It is a constant rather than a measurement because every part of it is fixed
- * by design: the control is two rows and its height never changes (which is the
- * whole reason the parse preview lives inside it), and the two paddings holding
- * it off the gesture bar are written here and in `App`. Guessing it once from
- * the control's height alone was wrong by exactly those paddings, and the toast
- * landed on the field. The inset is carried through because the page's own
- * bottom padding includes it — on Android it measures 0 and the rem values are
- * what do the work.
+ * The toast used to be `fixed` at the bottom and read a constant from here to
+ * clear the docked capture control, because a message sitting over that control
+ * meant `Undo` and `Save` on top of each other and a tap hitting the wrong one.
+ * The constant had to be re-derived whenever the bottom edge changed — it was
+ * wrong by two paddings the first time — and once the bottom nav could come and
+ * go while typing, one value could no longer describe it. The toast, the control
+ * and the nav are one block in flow now, in that order, so an overlap is
+ * impossible by construction rather than kept away by a number. See `App`.
  */
-:root {
-  --dock: calc(8rem + env(safe-area-inset-bottom, 0px));
-}
-
-/* Wide screens put the control back at the top, so there is nothing to clear. */
-@media (min-width: 1024px) {
-  :root {
-    --dock: 0px;
-  }
-}
 
 html {
   font-family: var(--font-sans);

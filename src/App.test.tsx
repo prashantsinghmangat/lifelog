@@ -12,8 +12,6 @@ import {
 } from 'date-fns'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { Sheet } from './components/Sheet'
-import { Toast } from './components/Toast'
 import { dayKey } from './lib/format'
 import { load } from './lib/store'
 import type { RearmResult, ScheduleResult } from './lib/reminders'
@@ -496,31 +494,58 @@ describe('every control can be named out loud', () => {
 })
 
 describe('a sheet with a toast still on screen', () => {
-  it('stacks above it, so the toast cannot take a tap meant for Save', () => {
-    // Found in a real browser: the toast is `fixed bottom-0` and a sheet's
-    // actions are sticky along its own bottom edge, so at a lower stacking
-    // level the message sat squarely over Save, Cancel and Delete.
-    // `elementFromPoint` at the middle of Save returned the toast — the tap did
-    // not miss, it hit the wrong control, and on a toast carrying Undo that
-    // meant pressing Save restored the row just deleted.
-    const level = (node: Element | null) => {
-      const found = /(?:^|\s)z-(\d+)(?:\s|$)/.exec(node?.className ?? '')
-      return found?.[1] === undefined ? null : Number(found[1])
+  /** The nearest stacking level above a node, since the toast no longer sets its own. */
+  function level(from: Element | null): number | null {
+    let at: Element | null = from
+    while (at !== null) {
+      const classes = typeof at.className === 'string' ? at.className : ''
+      const found = /(?:^|\s)z-(\d+)(?:\s|$)/.exec(classes)
+      if (found?.[1] !== undefined) return Number(found[1])
+      at = at.parentElement
     }
+    return null
+  }
 
-    rowsOnServer = []
-    render(<Toast toast={{ text: 'Added lunch swiggy' }} onDismiss={() => undefined} />)
-    const toast = document.querySelector('[role="status"]')
+  const deleted = {
+    id: 'server-1',
+    kind: 'expense',
+    occurred_on: dayKey(new Date()),
+    occurred_at: null,
+    title: 'lunch swiggy',
+    note: null,
+    amount_paise: 35000,
+    duration_minutes: null,
+    category: 'food',
+    data: {},
+    created_at: '2026-09-05T09:00:00+05:30',
+  }
+  const other = { ...deleted, id: 'server-2', title: 'chai', amount_paise: 2000 }
 
-    render(
-      <Sheet label="Edit lunch swiggy" onClose={() => undefined}>
-        <button type="button">Save</button>
-      </Sheet>,
-    )
-    const overlay = document.querySelector('[role="dialog"]')?.parentElement ?? null
+  /**
+   * Found in a real browser, and worth keeping now that the toast has moved: it
+   * used to be `fixed` at the bottom while a sheet's actions are sticky along
+   * its own bottom edge, so at a lower stacking level the message sat squarely
+   * over Save, Cancel and Delete. `elementFromPoint` at the middle of Save
+   * returned the toast — the tap did not miss, it hit the wrong control, and on
+   * a toast carrying Undo that meant pressing Save restored the row just
+   * deleted. Deleting one entry and editing another within six seconds is all
+   * it takes, which is why the journey is walked here rather than asserted on
+   * two components rendered side by side.
+   */
+  it('stacks above it, so the toast cannot take a tap meant for Save', async () => {
+    rowsOnServer = [deleted, other]
+    await open()
 
-    const above = level(overlay)
-    const below = level(toast)
+    await userEvent.click(await screen.findByText('lunch swiggy'))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.getByText('Entry deleted')).toBeTruthy())
+
+    await userEvent.click(screen.getByText('chai'))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeTruthy()
+
+    const above = level(dialog.parentElement)
+    const below = level(screen.getByText('Entry deleted'))
     expect(above).not.toBeNull()
     expect(below).not.toBeNull()
     expect(above ?? 0).toBeGreaterThan(below ?? 0)

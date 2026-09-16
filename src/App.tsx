@@ -534,7 +534,10 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
           <WeekStrip day={day} now={now} loadDays={fetchDays} onPick={setDay} />
         </div>
 
-        {/* Docked to the thumb on a phone, kept at the top on a wide screen.
+        {/* The bottom block: the toast, then the capture control — in flow, in
+            that order, with nothing fixed.
+
+            Docked to the thumb on a phone, kept at the top on a wide screen.
 
             Capture is the whole product, so the control must never scroll out of
             reach — sticky either way. What changed is *which* edge: on a 6.4in
@@ -551,8 +554,21 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
 
             `pb` is a real number, not only the inset: `env(safe-area-inset-bottom)`
             measures 0 in the Android WebView while the gesture bar is about 24px,
-            so an inset-only floor puts the send button underneath it. */}
+            so an inset-only floor puts the send button underneath it.
+
+            The toast lives *here* rather than fixed to the viewport, and that is
+            what retired `--dock`. A message over the control is not a cosmetic
+            overlap — `Undo` and `Save` sat on top of each other once and the tap
+            hit the wrong one — and the answer was a constant in `index.css` that
+            the toast subtracted from the bottom edge. Every change to this block
+            had to remember to change that number too, and it was wrong by two
+            paddings the first time. As siblings, clearing each other is not
+            something either of them has to do. */}
         <div className="order-last mt-4 sticky bottom-0 z-10 bg-surface pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:order-none lg:bottom-auto lg:top-0 lg:pt-1 lg:pb-2">
+          {/* First in the block, so it is a sibling *above* the control rather
+              than a fixed layer over it. See `Toast` and `index.css`. */}
+          {toast !== null && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+
           <QuickAdd
             day={day}
             now={now}
@@ -793,8 +809,6 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
           onClose={() => setHelpOpen(false)}
         />
       )}
-
-      {toast !== null && <Toast toast={toast} onDismiss={() => setToast(null)} />}
     </div>
   )
 }
