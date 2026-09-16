@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   behindYou,
   done,
+  nextFireAt,
   nextOccurrence,
   passed,
   recurring,
@@ -89,6 +90,46 @@ describe('when an event happens next', () => {
 
   it('has no next for something that is not an event', () => {
     expect(nextOccurrence(entry({ occurred_on: '2026-12-01', kind: 'expense' }), NOW)).toBeNull()
+  })
+})
+
+describe('an anniversary on 29 February', () => {
+  const leapDay = () =>
+    entry({ occurred_on: '2008-02-29', title: 'riya birthday', data: { rrule: 'FREQ=YEARLY' } })
+
+  it('falls on the next leap year, not on 1 March', () => {
+    // `new Date(2027, 1, 29)` silently rolls to 1 March, which is how the bell
+    // and the alarm came to name a day the timeline draws nothing on:
+    // `occurrencesOn` and `onThisDay` both match the month and day as text, so
+    // a leap-day anniversary is only ever drawn on a real 29 February.
+    const at = nextOccurrence(leapDay(), new Date(2026, 8, 5))
+    expect(at?.getFullYear()).toBe(2028)
+    expect(at?.getMonth()).toBe(1)
+    expect(at?.getDate()).toBe(29)
+  })
+
+  it('is today when today is the leap day', () => {
+    const at = nextOccurrence(leapDay(), new Date(2028, 1, 29, 8, 0))
+    expect(at?.getDate()).toBe(29)
+    expect(at?.getFullYear()).toBe(2028)
+  })
+
+  it('moves on to the following leap year once it has gone', () => {
+    const at = nextOccurrence(leapDay(), new Date(2028, 2, 1))
+    expect(at?.getFullYear()).toBe(2032)
+  })
+
+  it('leaves an ordinary yearly date exactly as it was', () => {
+    const birthday = entry({ occurred_on: '2010-02-13', data: { rrule: 'FREQ=YEARLY' } })
+    const at = nextOccurrence(birthday, NOW)
+    expect(at?.getFullYear()).toBe(2027)
+    expect(at?.getMonth()).toBe(1)
+    expect(at?.getDate()).toBe(13)
+  })
+
+  it('keeps this year when the date is still ahead', () => {
+    const birthday = entry({ occurred_on: '2010-11-14', data: { rrule: 'FREQ=YEARLY' } })
+    expect(nextOccurrence(birthday, NOW)?.getFullYear()).toBe(2026)
   })
 })
 
@@ -199,5 +240,77 @@ describe('saying a repeat in words', () => {
   it('does not call a single weekday "weekdays"', () => {
     const row = entry({ occurred_on: '2026-09-14', data: { rrule: 'FREQ=WEEKLY;BYDAY=MO' } })
     expect(repeatLabel(row)).toBe('every Mon')
+  })
+})
+
+describe('the moment an entry next happens', () => {
+  /**
+   * `nextOccurrence` answers with a day, and the time had to be glued on
+   * separately in `ahead`, in the yearly branch of `alarms` and in the editor.
+   * Three readings of "what does an entry with no clock mean" is two too many:
+   * the one that disagreed would have been a reminder ringing at an hour the
+   * app had never shown anybody.
+   */
+  it('keeps the entry’s own clock', () => {
+    const row = entry({ occurred_on: '2026-09-07', occurred_at: '2026-09-07T10:30:00+05:30' })
+    const at = nextFireAt(row, NOW)
+    expect(at?.getDate()).toBe(7)
+    expect(at?.getHours()).toBe(10)
+    expect(at?.getMinutes()).toBe(30)
+  })
+
+  it('reads 9am when it carries none, which is when the alarm is set for', () => {
+    const at = nextFireAt(entry({ occurred_on: '2026-09-07' }), NOW)
+    expect(at?.getHours()).toBe(9)
+    expect(at?.getMinutes()).toBe(0)
+  })
+
+  it('puts a yearly repeat’s clock on its next occurrence, not on the stored year', () => {
+    const row = entry({
+      occurred_on: '2010-02-13',
+      occurred_at: '2010-02-13T18:00:00+05:30',
+      data: { rrule: 'FREQ=YEARLY' },
+    })
+    const at = nextFireAt(row, NOW)
+    expect(at?.getFullYear()).toBe(2027)
+    expect(at?.getMonth()).toBe(1)
+    expect(at?.getDate()).toBe(13)
+    expect(at?.getHours()).toBe(18)
+  })
+
+  it('answers for a repeat from the day it starts, never before', () => {
+    // Monday the 7th, asked on Saturday the 5th: Friday the 4th is a listed
+    // weekday and nearer, and answering with it is what rang before the entry
+    // had begun.
+    const row = entry({
+      occurred_on: '2026-09-07',
+      occurred_at: '2026-09-07T10:00:00+05:30',
+      data: { rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' },
+    })
+    expect(nextFireAt(row, NOW)?.getDate()).toBe(7)
+  })
+
+  it('has no answer for a one-off that has gone, or for anything that is not an event', () => {
+    expect(nextFireAt(entry({ occurred_on: '2026-09-01' }), NOW)).toBeNull()
+    expect(nextFireAt(entry({ occurred_on: '2026-09-07', kind: 'note' }), NOW)).toBeNull()
+  })
+
+  it('has no answer for a moment earlier today, which a *day* still counts as next', () => {
+    // The difference between the two functions, and the reason the rule lives
+    // here: 5 September is today either way, and nine o'clock this morning is
+    // not something that is about to happen.
+    const gone = entry({ occurred_on: '2026-09-05', occurred_at: at('2026-09-05', '09:00:00') })
+    expect(nextOccurrence(gone, NOW)?.getDate()).toBe(5)
+    expect(nextFireAt(gone, NOW)).toBeNull()
+
+    const still = entry({ occurred_on: '2026-09-05', occurred_at: at('2026-09-05', '17:00:00') })
+    expect(nextFireAt(still, NOW)?.getHours()).toBe(17)
+  })
+
+  it('still answers for a done entry — silence is `fireAt`’s decision, not this one', () => {
+    // Kept deliberately separate: one choke point decides whether a reminder is
+    // armed, and it is not this function. The editor says "done" in its own words.
+    const row = entry({ occurred_on: '2026-09-07', data: { done: true } })
+    expect(nextFireAt(row, NOW)?.getDate()).toBe(7)
   })
 })

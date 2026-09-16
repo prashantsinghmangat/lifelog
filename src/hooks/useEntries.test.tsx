@@ -2,6 +2,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useEntries } from './useEntries'
+import { keyFor, load } from '../lib/store'
 import type { ParsedEntry } from '../lib/parser'
 
 /**
@@ -37,8 +38,14 @@ type Builder = {
 
 const calls: { op: string; arg: unknown }[] = []
 let rowsOnServer: unknown[] = []
-/** The server answers and refuses: an HTTP status, so waiting will not help. */
+/** The server answers and refuses. An HTTP status, so it was genuinely reached. */
 let writeFails = false
+/**
+ * Which refusal. 403 is the default because it is the one that *can* come back
+ * — a token refresh or a sign-in changes the answer — so the retry keeps
+ * running. A 400 is about the row itself and never will.
+ */
+let writeStatus = 403
 /**
  * No network, exactly as postgrest-js reports it: an error result with
  * `status: 0`, never a rejection. This is what the emulator actually does.
@@ -83,7 +90,7 @@ function builder(): Builder {
       }
       const result: Result = writing
         ? writeFails
-          ? { error: { message: 'permission denied' }, status: 403 }
+          ? { error: { message: 'refused' }, status: writeStatus }
           : { error: null, status: 201 }
         : { data: rowsOnServer, error: null, status: 200 }
 
@@ -141,6 +148,7 @@ beforeEach(() => {
   calls.length = 0
   rowsOnServer = []
   writeFails = false
+  writeStatus = 403
   readThrows = false
   offlineResult = false
   held = null
@@ -206,6 +214,131 @@ describe('optimistic insert', () => {
     expect(calls.filter((call) => call.op === 'upsert')).toHaveLength(2)
   })
 
+  it('keeps retrying a refusal that could still come back', async () => {
+    // 403 is the shape of a token about to refresh, or a sign-in about to
+    // happen. Waiting is exactly the right response, and the thirty-second
+    // retry is what recovers a write on Android, where `online` never fires.
+    writeFails = true
+    writeStatus = 403
+    vi.useFakeTimers()
+    try {
+      const view = renderHook(() => useEntries('2026-09-05', USER))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50)
+      })
+      act(() => {
+        view.result.current.add(parsed)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100)
+      })
+      const first = calls.filter((call) => call.op === 'upsert').length
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000)
+      })
+      expect(calls.filter((call) => call.op === 'upsert').length).toBeGreaterThan(first)
+      expect(view.result.current.entries[0]?.status).toBe('failed')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops asking when the answer is about the row and will never change', async () => {
+    // A 400 is the server objecting to the row, not to the moment. Asking again
+    // every thirty seconds for as long as the app is open cannot change it, and
+    // costs a request each time.
+    writeFails = true
+    writeStatus = 400
+    vi.useFakeTimers()
+    try {
+      const view = renderHook(() => useEntries('2026-09-05', USER))
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50)
+      })
+      act(() => {
+        view.result.current.add(parsed)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100)
+      })
+      const first = calls.filter((call) => call.op === 'upsert').length
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000)
+      })
+      expect(calls.filter((call) => call.op === 'upsert').length).toBe(first)
+
+      // Still owed, still on screen, still carrying a Retry chip — only the
+      // timer has stopped.
+      expect(view.result.current.entries[0]?.status).toBe('failed')
+      expect(view.result.current.owed).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('sends a rejected row again the moment it is edited', async () => {
+    // The way out of a permanent refusal is to change the row, so an edit has
+    // to attempt it at once rather than wait for a timer that is now off.
+    writeFails = true
+    writeStatus = 400
+    const { result } = await mounted()
+    act(() => {
+      result.current.add(parsed)
+    })
+    await waitFor(() => expect(result.current.entries[0]?.status).toBe('failed'))
+    const before = calls.filter((call) => call.op === 'upsert').length
+
+    writeFails = false
+    const row = result.current.entries[0]
+    if (row === undefined) throw new Error('the row is there')
+    act(() => {
+      result.current.update(row, { title: 'something the server will take' })
+    })
+
+    await waitFor(() => expect(result.current.owed).toBe(0))
+    expect(calls.filter((call) => call.op === 'upsert').length).toBeGreaterThan(before)
+  })
+
+  it('sends a rejected row again when Retry is pressed', async () => {
+    writeFails = true
+    writeStatus = 400
+    const { result } = await mounted()
+    act(() => {
+      result.current.add(parsed)
+    })
+    await waitFor(() => expect(result.current.entries[0]?.status).toBe('failed'))
+
+    writeFails = false
+    act(() => {
+      result.current.retry()
+    })
+    await waitFor(() => expect(result.current.entries[0]?.status).toBeUndefined())
+  })
+
+  it('does not strand a good row behind a rejected one', async () => {
+    // The retry is armed per log, not per row, so a row that will never land
+    // must not take the rest of the queue down with it.
+    writeFails = true
+    writeStatus = 400
+    const { result } = await mounted()
+    act(() => {
+      result.current.add(parsed)
+    })
+    await waitFor(() => expect(result.current.entries[0]?.status).toBe('failed'))
+
+    writeFails = false
+    act(() => {
+      result.current.add({ ...parsed, title: 'the next one' })
+    })
+    await waitFor(() =>
+      expect(result.current.entries.find((row) => row.title === 'the next one')?.status).toBe(
+        undefined,
+      ),
+    )
+  })
+
   it('syncs an entry logged while the previous one was still in flight', async () => {
     const { result } = await mounted()
 
@@ -268,8 +401,12 @@ describe('logging with no network', () => {
       result.current.add(parsed)
     })
 
-    await waitFor(() => expect(result.current.owed).toBe(1))
-    expect(result.current.entries[0]?.status).toBe('queued')
+    // Waited on the status, not on `owed` — the same race the next test names:
+    // `owed` is 1 the instant the row is written, while the attempt that
+    // decides queued-versus-failed is still in flight and the row reads
+    // 'saving'. Asserting here merely happened to win that race.
+    await waitFor(() => expect(result.current.entries[0]?.status).toBe('queued'))
+    expect(result.current.owed).toBe(1)
     expect(result.current.reachable).toBe(false)
   })
 
@@ -585,5 +722,77 @@ describe('the calendar dots', () => {
 
     const days = await result.current.fetchDays('2026-09-01', '2026-09-30')
     expect(days).toEqual(['2026-09-01', '2026-09-04'])
+  })
+})
+
+describe('the user this device belongs to changing', () => {
+  /** A stored row, as `adopt` would have left it under the account's key. */
+  const row = {
+    id: 'adopted',
+    kind: 'expense' as const,
+    occurred_on: '2026-09-05',
+    occurred_at: null,
+    title: 'logged as a guest',
+    note: null,
+    amount_paise: 35000,
+    duration_minutes: null,
+    category: null,
+    data: {},
+    created_at: '2026-09-05T10:00:00+05:30',
+  }
+
+  /**
+   * A guest signing in changes the key the log is stored under, and `adopt` has
+   * already rewritten the account's key by the time this hook sees the new id.
+   *
+   * The initial state is read from `localStorage` *once*, so without a remount
+   * the hook keeps the previous user's in-memory log and the persist effect
+   * writes it straight over what adoption just built — taking the account's own
+   * unsynced writes with it. Silent, and only visible on the next launch.
+   */
+  it('reads the new user rather than writing the old one over them', async () => {
+    localStorage.setItem(
+      keyFor('account-1'),
+      JSON.stringify({
+        version: 1,
+        entries: [{ ...row, id: 'adopted', title: 'logged as a guest' }],
+        pending: [{ ...row, id: 'adopted', deleted_at: null, queued_at: 't1' }],
+      }),
+    )
+
+    const view = renderHook(({ user }: { user: string }) => useEntries('2026-09-05', user, true), {
+      initialProps: { user: 'local-guest' },
+    })
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+    expect(view.result.current.entries).toHaveLength(0)
+
+    view.rerender({ user: 'account-1' })
+
+    await waitFor(() => expect(view.result.current.entries).toHaveLength(1))
+    expect(view.result.current.entries[0]?.title).toBe('logged as a guest')
+  })
+
+  it('does not clobber the incoming log with the previous user’s', async () => {
+    localStorage.setItem(
+      keyFor('account-1'),
+      JSON.stringify({
+        version: 1,
+        entries: [{ ...row, id: 'adopted' }],
+        pending: [{ ...row, id: 'adopted', deleted_at: null, queued_at: 't1' }],
+      }),
+    )
+
+    const view = renderHook(({ user }: { user: string }) => useEntries('2026-09-05', user, true), {
+      initialProps: { user: 'local-guest' },
+    })
+    await waitFor(() => expect(view.result.current.loading).toBe(false))
+    view.rerender({ user: 'account-1' })
+    await waitFor(() => expect(view.result.current.entries).toHaveLength(1))
+
+    // The owed write is what actually carries the log to the server. Losing it
+    // leaves rows that look saved on the device and exist nowhere else.
+    const after = load(localStorage, 'account-1')
+    expect(after.entries.map((held) => held.id)).toEqual(['adopted'])
+    expect(after.pending.map((held) => held.id)).toEqual(['adopted'])
   })
 })

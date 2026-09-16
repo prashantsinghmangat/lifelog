@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#111827" />
+    <!-- The light surface. `useTheme` swaps it for the dark one at runtime; this
+         is what the chrome shows before the bundle has run. -->
+    <meta name="theme-color" content="#faf9f7" />
     <!-- The SVG is the master the PNGs are rendered from, and every browser
          that can use it gets a mark that is sharp at any tab size. -->
     <link rel="icon" href="/logo.svg" type="image/svg+xml" />

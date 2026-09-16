@@ -5,47 +5,93 @@
 
 /* Semantic tokens, not raw greys. Dark mode swaps the values below, so no
    component needs a `dark:` variant. A third theme (high contrast) would be
-   another block here and nothing else. */
+   another block here and nothing else.
+ *
+ * The hues are **warm** in both themes, which is the one decision the whole
+ * palette hangs off. A log of what happened to somebody is a personal record,
+ * not a console: a pure-white page with blue-grey text reads as a form to fill
+ * in, and the same layout on warm paper reads as something to keep. Light mode
+ * is therefore off-white paper with a near-black warm ink, and dark mode is
+ * warm charcoal with an off-white — not the light palette inverted, which is
+ * how a dark theme ends up looking like a lit screen rather than a dim room.
+ *
+ * Every text token clears 4.5:1 on the surface it is used over; `faint` in
+ * particular used to sit at 2.9:1, which is what "tertiary" had quietly come to
+ * mean. `line` and `edge` are deliberately below that — they separate, they do
+ * not inform, and nothing in the app is legible only because of a border. */
 @theme {
   --font-sans:
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
 
-  --color-surface: #ffffff;
+  --color-surface: #faf9f7;
   --color-raised: #ffffff;
-  --color-sunken: #f6f7f9;
-  --color-ink: #111827;
-  --color-muted: #5b6472;
-  --color-faint: #8b93a1;
-  --color-line: #e9ebef;
-  --color-edge: #cbd1da;
-  --color-focus: #2563eb;
+  --color-sunken: #f1efea;
+  --color-ink: #1b1a18;
+  --color-muted: #5c5851;
+  --color-faint: #726e66;
+  --color-line: #eae6e0;
+  --color-edge: #cbc4b8;
+  --color-focus: #1f5ed4;
 
-  --color-expense: #d9503b;
-  --color-time: #167f77;
-  --color-event: #6d3fd4;
-  --color-note: #6b7484;
+  /* Four scanning accents, not four UI colours. Each is deep enough to read as
+     ink with a hue rather than as a highlight — at 15px these mark a row, they
+     do not decorate it. */
+  --color-expense: #b0452c;
+  --color-time: #136b60;
+  --color-event: #5a41b5;
+  --color-note: #6f6a62;
 }
 
 [data-theme='dark'] {
-  --color-surface: #0d1220;
-  --color-raised: #161d2f;
-  --color-sunken: #131a2a;
-  --color-ink: #e8eaf0;
-  --color-muted: #a3abba;
-  --color-faint: #78818f;
-  --color-line: #212940;
-  --color-edge: #39425a;
-  --color-focus: #7aa2ff;
+  --color-surface: #141311;
+  --color-raised: #1e1c1a;
+  --color-sunken: #1a1816;
+  --color-ink: #eeeae3;
+  --color-muted: #a49f97;
+  --color-faint: #8a857c;
+  --color-line: #2a2724;
+  --color-edge: #4a453f;
+  --color-focus: #7fa6ff;
 
-  /* Lifted: the light-mode hues go muddy on a dark ground. */
-  --color-expense: #ff8f7a;
-  --color-time: #3ec5b9;
-  --color-event: #a78bfa;
-  --color-note: #8892a3;
+  /* Lifted and desaturated: the light-mode hues go muddy on a dark ground, and
+     a fully saturated one glows. */
+  --color-expense: #e79479;
+  --color-time: #5cb9a8;
+  --color-event: #a893ee;
+  --color-note: #9b958c;
 
   /* Native date inputs, scrollbars and focus rings follow this. */
   color-scheme: dark;
+}
+
+/**
+ * How much of the bottom edge the docked capture control occupies on a phone.
+ *
+ * One number in one place, because two things have to agree about it and they
+ * are in different files: the control docks to the bottom on a compact screen,
+ * and the toast has to stay clear of it. A toast over that control is not a
+ * cosmetic overlap — `Undo` and `Save` sat on top of each other once and
+ * pressing one hit the other.
+ *
+ * It is a constant rather than a measurement because every part of it is fixed
+ * by design: the control is two rows and its height never changes (which is the
+ * whole reason the parse preview lives inside it), and the two paddings holding
+ * it off the gesture bar are written here and in `App`. Guessing it once from
+ * the control's height alone was wrong by exactly those paddings, and the toast
+ * landed on the field. The inset is carried through because the page's own
+ * bottom padding includes it — on Android it measures 0 and the rem values are
+ * what do the work.
+ */
+:root {
+  --dock: calc(8rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Wide screens put the control back at the top, so there is nothing to clear. */
+@media (min-width: 1024px) {
+  :root {
+    --dock: 0px;
+  }
 }
 
 html {
@@ -58,6 +104,11 @@ body {
   margin: 0;
   background: var(--color-surface);
   color: var(--color-ink);
+  /* System UI faces are drawn heavy on a warm ground at these sizes, and the
+     app is almost entirely 12–14px text. Smoothing is what keeps the secondary
+     lines from thickening into the titles above them. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* One visible focus treatment for everything, so no component can forget it.
@@ -65,7 +116,43 @@ body {
 :where(button, a, input, select, textarea, [tabindex]):focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 6px;
+}
+
+/* A sheet takes focus so the keyboard starts inside it, not because the sheet
+   is something to act on — and the rule above, which matches any `[tabindex]`,
+   drew a 2px ring round the whole dialog every time one opened. The controls
+   inside it still draw their own. */
+[role='dialog']:focus-visible {
+  outline: none;
+}
+
+/**
+ * The capture control is one object, so its focus ring goes round the control
+ * rather than round the field nested inside it.
+ *
+ * The field fills the top row of a bordered box, so the global ring drew a box
+ * inside a box on every launch — the field is autofocused, which made that the
+ * first thing anybody saw. Kept here beside the global rule rather than in the
+ * component, so focus is still decided in one file.
+ *
+ * Three rules, and the order is the fallback: the ring is on for any focus
+ * inside the control, then taken off again unless the *field* is the thing
+ * keyboard-focused. Where `:has()` is unsupported the third rule is dropped
+ * whole and the ring simply shows more eagerly. Louder, never absent.
+ */
+#quick-add:focus-visible {
+  outline: none;
+}
+
+.capture:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+.capture:focus-within:not(:has(#quick-add:focus-visible)) {
+  outline: none;
 }
 
 @keyframes row-in {

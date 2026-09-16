@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js'
-import { useEffect, useState } from 'react'
-import { forget, recall, remember, type Identity } from '../lib/identity'
+import { useCallback, useEffect, useState } from 'react'
+import { guest, forget, recall, remember, type Identity } from '../lib/identity'
+import { adopt } from '../lib/store'
 import { supabase } from '../lib/supabase'
 
 /**
@@ -14,7 +15,12 @@ import { supabase } from '../lib/supabase'
  * has really been revoked signs the user out the moment there is a network to
  * discover that on.
  */
-export function useSession(): { identity: Identity | null; loading: boolean } {
+export function useSession(): {
+  identity: Identity | null
+  loading: boolean
+  /** Start using the app with no account. See `guest` in `identity.ts`. */
+  startGuest: () => void
+} {
   /**
    * Starts from what this device already knows, so a launch does not wait on
    * the network to find out who is using it.
@@ -38,6 +44,16 @@ export function useSession(): { identity: Identity | null; loading: boolean } {
         return
       }
       const found = { id: session.user.id, email: session.user.email ?? '' }
+
+      // A log kept without an account is keyed by its local id. Signing in
+      // changes the key, so without this every entry made as a guest is still on
+      // the device and no longer reachable — which reads exactly like the app
+      // threw them away.
+      const before = recall(localStorage)
+      if (before !== null && before.local === true && before.id !== found.id) {
+        adopt(localStorage, before.id, found.id, new Date().toISOString())
+      }
+
       remember(localStorage, found)
       setIdentity(found)
     }
@@ -62,5 +78,14 @@ export function useSession(): { identity: Identity | null; loading: boolean } {
     }
   }, [])
 
-  return { identity, loading }
+  const startGuest = useCallback(() => {
+    const who = guest()
+    remember(localStorage, who)
+    setIdentity(who)
+    // Nothing is waiting on the network any more, and `getSession` may still be
+    // retrying a refresh for the twenty seconds it takes to give up.
+    setLoading(false)
+  }, [])
+
+  return { identity, loading, startGuest }
 }

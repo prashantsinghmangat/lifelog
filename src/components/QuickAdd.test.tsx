@@ -178,6 +178,35 @@ describe('choosing between logging and asking', () => {
     expect(box.placeholder).toBe('What happened?')
   })
 
+  it('measures a relative reminder from the real clock when logged instead', async () => {
+    // The same trap as Enter, one screen along: the offer was built from the
+    // cached `now` and handed straight to onSubmit, so a reminder recovered
+    // this way could already be due and be dropped without a word.
+    const { box, onSubmit } = setup({ corpus: [] })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, 'ping me in 5 minutes')
+
+    await userEvent.click(await screen.findByRole('button', { name: /Log instead/ }))
+
+    const parsed = onSubmit.mock.calls[0]?.[0]
+    expect(parsed?.kind).toBe('event')
+    expect(new Date(parsed?.occurredAt ?? 0).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('does not keep the question mark when a question is logged instead', async () => {
+    // `?` still works from Ask, since the habit does not switch off with the
+    // mode. What must not survive is the mark itself, in the title of an entry.
+    const { box, onSubmit } = setup({ corpus: [] })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, '? 350 lunch swiggy')
+
+    await userEvent.click(await screen.findByRole('button', { name: /Log instead/ }))
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      kind: 'expense',
+      title: 'lunch swiggy',
+    })
+  })
+
   it('leaves Ask on Escape rather than only dropping the keyboard', async () => {
     const { box } = setup({ corpus })
     await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
@@ -185,6 +214,50 @@ describe('choosing between logging and asking', () => {
 
     expect(box.value).toBe('')
     expect(box.placeholder).toBe('What happened?')
+  })
+})
+
+describe('what the box can be asked', () => {
+  const corpus = [
+    entry({ occurred_on: TODAY, kind: 'expense', title: 'lunch swiggy', amount_paise: 35000, duration_minutes: null }),
+  ]
+
+  it('says what Ask answers, because a blank box and a placeholder do not', async () => {
+    setup({ corpus })
+    expect(screen.queryByRole('button', { name: 'how much this month' })).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    expect(screen.getByRole('button', { name: 'how much this month' })).toBeTruthy()
+  })
+
+  it('answers the question it suggested rather than filing it away', async () => {
+    // The whole point of tapping one: half the app was reachable and unknowable
+    // at the same time, and the other half of that trap is a suggestion that
+    // silently becomes a note.
+    const { box, onSubmit } = setup({ corpus })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.click(screen.getByRole('button', { name: 'how much this month' }))
+
+    expect(box.value).toBe('how much this month')
+    // The answer, not the row it is totalled from — both print ₹350.
+    expect(screen.getByText(/₹350 · 1 entry/)).toBeTruthy()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('gets out of the way as soon as there is a question', async () => {
+    const { box } = setup({ corpus })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, 'lunch')
+
+    expect(screen.queryByRole('button', { name: 'how much this month' })).toBeNull()
+  })
+
+  it('leaves the log examples to Log, so an empty day never shows two lists', async () => {
+    setup({ corpus, showExamples: true })
+    expect(screen.getByRole('button', { name: /350 lunch swiggy/ })).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    expect(screen.queryByRole('button', { name: /350 lunch swiggy/ })).toBeNull()
   })
 })
 

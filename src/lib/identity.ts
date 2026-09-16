@@ -20,12 +20,36 @@
 
 const KEY = 'lifelog.who'
 
-export type Identity = { id: string; email: string }
+/**
+ * `local` marks a log with no account behind it — see `guest`. Optional rather
+ * than required, so an identity remembered before this existed still reads back
+ * as an account rather than signing its owner out.
+ */
+export type Identity = { id: string; email: string; local?: boolean }
 
 function isIdentity(value: unknown): value is Identity {
   if (typeof value !== 'object' || value === null) return false
   const held = value as Partial<Identity>
   return typeof held.id === 'string' && held.id !== '' && typeof held.email === 'string'
+}
+
+/**
+ * A log with nobody signed in behind it.
+ *
+ * **The auth gate was the last thing in this app that needed a network, and it
+ * did not need one.** Nothing about parsing an entry, drawing a day, totalling
+ * it, answering a question or raising a reminder involves the server — the whole
+ * architecture says so — and yet the first screen demanded an email and a
+ * round-trip before any of that could be seen. An app whose case is "logging
+ * takes under five seconds" cannot open with a sign-in form.
+ *
+ * The id is a uuid because it keys this device's log exactly as a Supabase user
+ * id does, so every layer above `store.ts` is unchanged: a guest has a log, it
+ * persists, and signing in later moves it onto the account rather than
+ * discarding it. See `adopt`.
+ */
+export function guest(): Identity {
+  return { id: `local-${crypto.randomUUID()}`, email: '', local: true }
 }
 
 /** Never throws: storage can be unavailable, and that is not worth a crash. */

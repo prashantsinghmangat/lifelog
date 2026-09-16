@@ -1,4 +1,4 @@
-﻿import { done, weeklyDays } from './events'
+﻿import { ALL_DAY_HOUR, done, nextOccurrence, weeklyDays } from './events'
 import { isNative } from './platform'
 import type { LocalNotificationsPlugin } from '@capacitor/local-notifications'
 import type { Entry } from '../types'
@@ -15,9 +15,6 @@ import type { Entry } from '../types'
  * Both imports are dynamic on purpose: nothing from Capacitor then reaches the
  * browser bundle, and this module stays importable under vitest.
  */
-
-/** An all-day event has no clock time, so it alarms at 9am, as the .ics does. */
-const ALL_DAY_HOUR = 9
 
 /**
  * The two daily prompts, and the ids they own.
@@ -247,6 +244,34 @@ export function alarms(entry: Entry, now: Date): Alarm[] {
     })
   }
 
+  /**
+   * A birthday is armed for its *next* occurrence, not for the date on the row.
+   *
+   * `fireAt` answers with the stored date, which for an anniversary is almost
+   * always in the past — so `alarms` returned nothing and a yearly reminder was
+   * never scheduled at all. Everything else about it worked, which is what made
+   * it invisible: the bell listed it, the day it lands on drew it, the .ics
+   * carried `RRULE:FREQ=YEARLY`, and the README promised "9am on the day, every
+   * year". Only the notification, the one part that has to work, was missing.
+   *
+   * A one-off at the next occurrence rather than a yearly cron, deliberately:
+   * `{ at }` is the mechanism already proven here, and `sync` re-arms it on
+   * every launch under the same id — the same converge-on-next-launch shape the
+   * held-back weekday crons use. An app opened once a year would drift; one
+   * that prompts twice a day does not.
+   */
+  if (entry.data.rrule === 'FREQ=YEARLY') {
+    const next = nextOccurrence(entry, now)
+    if (next === null) return []
+
+    const clock = entry.occurred_at === null ? null : new Date(entry.occurred_at)
+    const when = new Date(next)
+    when.setHours(clock?.getHours() ?? ALL_DAY_HOUR, clock?.getMinutes() ?? 0, 0, 0)
+    if (when.getTime() <= now.getTime()) return []
+
+    return [{ id: notificationId(entry.id), at: when }]
+  }
+
   const at = fireAt(entry)
   if (at === null || at.getTime() <= now.getTime()) return []
   return [{ id: notificationId(entry.id), at }]
@@ -334,6 +359,48 @@ export async function cancel(entry: Entry): Promise<void> {
   const found = await plugin()
   if (!found) return
   await found.api.cancel({ notifications: alarmIds(entry).map((id) => ({ id })) })
+}
+
+/**
+ * What a re-arm ended as. `stale` is the one outcome `schedule` cannot produce:
+ * the entry wants no alarm any more and the old one could not be cleared, so
+ * something is still going to ring for a row that should be silent.
+ */
+export type RearmResult = ScheduleResult | 'stale'
+
+/**
+ * An edited entry's alarms, replaced.
+ *
+ * **Cancelling is best effort and must never decide whether the new alarm is
+ * set.** Chained as `cancel().then(schedule)`, a cancel that rejected skipped
+ * the schedule altogether — so the failure that merely *might* leave an extra
+ * notification instead reliably lost the reminder the user had just edited,
+ * which is the worse of the two by a distance and the one nobody would notice.
+ *
+ * Scheduling after a failed cancel is safe rather than noisy: the ids come from
+ * the entry, so re-scheduling replaces each alarm in place rather than adding a
+ * second copy. Only an id the *new* plan has dropped — a weekday removed from a
+ * standup — can survive, and launch reconciliation in `sync` is what already
+ * exists to clear those.
+ *
+ * `stale` therefore means the narrow case where nothing replaces anything: the
+ * entry schedules nothing now, and the old alarms are still armed.
+ */
+export async function rearm(entry: Entry, now: Date): Promise<RearmResult> {
+  const found = await plugin()
+  if (!found) return 'skipped'
+
+  let cleared = true
+  try {
+    await found.api.cancel({ notifications: alarmIds(entry).map((id) => ({ id })) })
+  } catch {
+    cleared = false
+  }
+
+  // Left to throw. A reminder that could not be set has to say so — that is
+  // the whole reason these paths report anything at all.
+  const result = await schedule(entry, now)
+  return !cleared && result === 'skipped' ? 'stale' : result
 }
 
 /**

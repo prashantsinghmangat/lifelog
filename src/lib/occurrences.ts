@@ -1,4 +1,4 @@
-import { parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { weeklyDays } from './events'
 import type { Entry } from '../types'
 
@@ -26,7 +26,16 @@ function movedTo(entry: Entry, day: string): Occurrence {
 
   const when = parseISO(`${day}T00:00:00`)
   when.setHours(at.getHours(), at.getMinutes(), 0, 0)
-  return { ...entry, occurred_on: day, occurred_at: when.toISOString(), occurrence: true }
+  // The same shape every other writer produces. `toISOString()` is UTC, and an
+  // occurrence whose stamp reads `04:30:00.000Z` beside a stored
+  // `06:30:00+05:30` is a row that sorts by the wrong number whenever anything
+  // compares the two as text.
+  return {
+    ...entry,
+    occurred_on: day,
+    occurred_at: format(when, "yyyy-MM-dd'T'HH:mm:ssXXX"),
+    occurrence: true,
+  }
 }
 
 /**

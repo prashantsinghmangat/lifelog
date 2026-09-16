@@ -44,6 +44,16 @@ describe('drawing a repeat on the days it lands on', () => {
     expect(new Date(at ?? '').getDate()).toBe(16)
   })
 
+  it('stamps the clock the way every other writer does', () => {
+    // `toISOString()` is UTC. An occurrence reading `04:30:00.000Z` beside a
+    // stored `06:30:00+05:30` sorts by the wrong number wherever the two are
+    // compared as text, which put a ten o'clock standup at the top of the day
+    // above a half past six reminder — and cost the passed-reminder fold.
+    const at = occurrencesOn([standup()], '2026-09-15')[0]?.occurred_at ?? ''
+    expect(at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([+-]\d{2}:\d{2}|Z)$/)
+    expect(at).not.toMatch(/\.\d{3}Z$/)
+  })
+
   it('is not drawn twice on its own start date', () => {
     // The stored row is already on screen there.
     expect(occurrencesOn([standup()], '2026-09-14')).toEqual([])

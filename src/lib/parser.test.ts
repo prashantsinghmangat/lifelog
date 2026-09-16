@@ -701,6 +701,86 @@ describe('amount shapes', () => {
   })
 })
 
+describe('a refund, which is money going the other way', () => {
+  // The money model already said negatives are real: the column is signed,
+  // `rupees` prints a leading minus, and `paiseFrom` has always accepted one,
+  // so the editor stored refunds correctly. Only the parser threw the sign
+  // away — filing `-50 refund` as fifty rupees *spent* and quietly inflating
+  // the day. Not a fifth kind: an expense of −₹50.
+
+  it('reads a leading minus', () => {
+    const r = p('-50 refund')
+    expect(r?.kind).toBe('expense')
+    expect(r?.amountPaise).toBe(-5000)
+    expect(r?.title).toBe('refund')
+  })
+
+  it('reads one after a filler word', () => {
+    expect(p('paid -1200 amazon return')?.amountPaise).toBe(-120000)
+  })
+
+  it('reads a currency-marked one', () => {
+    expect(p('₹-250 cashback')?.amountPaise).toBe(-25000)
+    expect(p('rs -250 cashback')?.amountPaise).toBe(-25000)
+  })
+
+  it('keeps paise exact', () => {
+    expect(p('-347.50 refund')?.amountPaise).toBe(-34750)
+  })
+
+  // The three readings a bare `-?` would have broken. A hyphen between digits
+  // is not a minus sign.
+  it('does not turn a hyphenated number into a negative', () => {
+    expect(p('covid-19 test 500')?.amountPaise).toBe(1900)
+  })
+
+  it('leaves a bare time range exactly as it was', () => {
+    const r = p('9-6 work')
+    expect(r?.amountPaise).toBe(900)
+    expect(r?.title).toBe('6 work')
+  })
+
+  it('leaves "2 to 3 apples" alone', () => {
+    expect(p('2 to 3 apples')?.amountPaise).toBe(200)
+  })
+})
+
+describe('a number too big for the column it would go in', () => {
+  // `amount_paise` and `duration_minutes` are Postgres `integer`. Above that
+  // the row is written here, totals into the day, and is refused by the server
+  // for ever with `22003` — saved-looking and unsyncable. It is not an amount,
+  // so it is left in the title like any other number the parser cannot use.
+
+  it('reads the largest amount that does fit', () => {
+    const r = p('21474836.47 flat booking')
+    expect(r?.kind).toBe('expense')
+    expect(r?.amountPaise).toBe(2_147_483_647)
+  })
+
+  it('leaves a larger one in the title rather than recording it', () => {
+    const r = p('21474837 flat booking')
+    expect(r?.kind).toBe('note')
+    expect(r?.amountPaise).toBeUndefined()
+    expect(r?.title).toBe('21474837 flat booking')
+  })
+
+  it('does the same for a currency-marked amount', () => {
+    const r = p('₹99999999999 yacht')
+    expect(r?.amountPaise).toBeUndefined()
+    expect(r?.kind).toBe('note')
+  })
+
+  it('leaves an absurd duration alone too', () => {
+    const r = p('99999999h grind')
+    expect(r?.durationMinutes).toBeUndefined()
+    expect(r?.kind).toBe('note')
+  })
+
+  it('still reads a duration that fits', () => {
+    expect(p('9999h grind')?.durationMinutes).toBe(599_940)
+  })
+})
+
 describe('clock times', () => {
   it('reads noon as 12:00', () => {
     const r = p('+ lunch 12pm')

@@ -1,6 +1,33 @@
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import type { Entry } from '../types'
 
+/**
+ * What the columns can actually hold.
+ *
+ * `amount_paise` and `duration_minutes` are Postgres `integer`. A value past
+ * that is written to this device happily and then refused by the server for
+ * ever with `22003` — a row that looks saved, totals into the day, and can
+ * never sync, with a Retry chip that cannot work. The ceiling therefore belongs
+ * here, beside the only other place that knows money is paise, so the parser
+ * and the editor cannot come to disagree about it.
+ *
+ * ₹21,474,836.47. Raising it is a `bigint` migration, not a change here.
+ */
+const INT4_MAX = 2_147_483_647
+const INT4_MIN = -2_147_483_648
+
+export const MAX_PAISE = INT4_MAX
+
+/** Whether an amount in paise is one the server will accept. */
+export function amountFits(paise: number): boolean {
+  return Number.isInteger(paise) && paise >= INT4_MIN && paise <= INT4_MAX
+}
+
+/** The same ceiling, for the other integer column. Minutes are never negative. */
+export function minutesFit(value: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value <= INT4_MAX
+}
+
 /** The only place paise become a string. 34750 → "₹347.50", 35000 → "₹350". */
 export function rupees(paise: number): string {
   const sign = paise < 0 ? '-' : ''
@@ -26,9 +53,22 @@ export function minutes(total: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`
 }
 
+/**
+ * A moment → "5:00 pm".
+ *
+ * Most callers hold a timestamp off a row and want `clock`. This one is for the
+ * derived moments — the next firing of a repeat — which are computed as `Date`
+ * and have no ISO string to read. The same function either way, or the editor
+ * would have grown its own `format(…, 'h:mm a')` and the app would eventually
+ * have printed a time two ways on one screen.
+ */
+export function clockAt(at: Date): string {
+  return format(at, 'h:mm a').toLowerCase()
+}
+
 /** ISO timestamp → "5:00 pm". */
 export function clock(iso: string): string {
-  return format(parseISO(iso), 'h:mm a').toLowerCase()
+  return clockAt(parseISO(iso))
 }
 
 /**
@@ -37,6 +77,28 @@ export function clock(iso: string): string {
  */
 export function dayKey(date: Date): string {
   return format(date, 'yyyy-MM-dd')
+}
+
+/**
+ * How long until a moment happening later today: "in 47m", "in 1h 30m".
+ *
+ * A clock time answers *when* and leaves the arithmetic to you, which is the one
+ * thing a phone is better at. `10:00 am` on a row tells you nothing at a glance
+ * about whether that is the next thing or hours away; `in 47m` is the fact you
+ * were reading the row for.
+ *
+ * **Today only, and never a countdown.** Beyond today `relativeDay` already says
+ * "tomorrow", which reads far better than "in 19h 20m" — and a ticking display
+ * would need a timer per row to stay true, where this is recomputed on the same
+ * 30-second clock tick everything else here uses. Null once the moment has gone,
+ * so nothing can announce a wait that is already over.
+ */
+export function until(at: Date, now: Date): string | null {
+  if (dayKey(at) !== dayKey(now)) return null
+  const away = at.getTime() - now.getTime()
+  if (away <= 0) return null
+  // Rounded up, or the last 59 seconds before a reminder read "in 0m".
+  return `in ${minutes(Math.ceil(away / 60_000))}`
 }
 
 /** ISO timestamp → `HH:mm`, the value a native time input wants. */
@@ -74,6 +136,45 @@ export function dayLabel(day: string, now: Date): string {
   const date = parseISO(day)
   if (differenceInCalendarDays(date, now) === 0) return 'Today'
   return format(date, date.getFullYear() === now.getFullYear() ? 'EEE, d MMM' : 'EEE, d MMM yyyy')
+}
+
+/**
+ * The day header, said in two parts.
+ *
+ * `dayLabel` packs both into one string — "Today", "Sat, 30 Aug" — which is
+ * right for a tab title and for an accessible name, and wrong for the largest
+ * line on the screen: at one size the weekday, the date and the word "Today"
+ * all claim the same weight, so the header states everything and emphasises
+ * nothing. Split, the small line says *which* day relative to now and the large
+ * one is the date itself.
+ *
+ * Deliberately two functions over one returning a pair: the eyebrow is uppercase
+ * and the title is not, and they are set at different sizes, so they were never
+ * going to be rendered together anyway. `dayLabel` stays exactly as it was —
+ * nothing that names a control or a tab has changed.
+ */
+export function dayEyebrow(day: string, now: Date): string {
+  const date = parseISO(day)
+  switch (differenceInCalendarDays(date, now)) {
+    case 0:
+      return 'Today'
+    case -1:
+      return 'Yesterday'
+    case 1:
+      return 'Tomorrow'
+    default:
+      return format(date, 'EEEE')
+  }
+}
+
+/**
+ * "15 September", and "15 September 2024" for any other year — the same rule
+ * `dayLabel` follows, since browsing back a year with nothing on screen naming
+ * it is how you end up reading the wrong September.
+ */
+export function dayTitle(day: string, now: Date): string {
+  const date = parseISO(day)
+  return format(date, date.getFullYear() === now.getFullYear() ? 'd MMMM' : 'd MMMM yyyy')
 }
 
 /**

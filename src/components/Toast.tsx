@@ -28,10 +28,20 @@ export function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () =
   const [dragging, setDragging] = useState(false)
   const from = useRef<number | null>(null)
 
+  // Held in a ref so the timer below depends on the message alone. The caller
+  // passes an inline `() => setToast(null)`, which is a new function on every
+  // render of the page — and the page re-renders on a write settling and on the
+  // 30-second clock tick, each of which restarted the countdown. A toast that
+  // outstays its welcome is the thing the three ways out exist to prevent.
+  const dismiss = useRef(onDismiss)
   useEffect(() => {
-    const timer = window.setTimeout(onDismiss, toast.action ? WITH_ACTION : PLAIN)
+    dismiss.current = onDismiss
+  }, [onDismiss])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => dismiss.current(), toast.action ? WITH_ACTION : PLAIN)
     return () => window.clearTimeout(timer)
-  }, [toast, onDismiss])
+  }, [toast])
 
   function down(event: PointerEvent<HTMLDivElement>) {
     // Starting on Undo or the close button is aiming at that button, not a swipe.
@@ -62,7 +72,16 @@ export function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () =
     <div
       role="status"
       aria-live="polite"
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+      /* Clear of the docked capture control on a phone.
+
+         A toast over that control is not a cosmetic overlap: `Undo` and `Save`
+         sat on top of each other once before and pressing one hit the other.
+         `--dock` is how much of the bottom edge the control occupies, defined
+         once in `index.css` and zero from `lg` up, where the control is back at
+         the top. Measured from the control's height alone this was wrong by the
+         two paddings that hold it off the gesture bar, and the toast landed on
+         the field — verified on the device. */
+      className="pointer-events-none fixed inset-x-0 bottom-[var(--dock)] z-30 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
     >
       <div
         onPointerDown={down}
@@ -76,7 +95,10 @@ export function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () =
         }}
         // Vertical stays with the page: a toast across the bottom must not
         // swallow a scroll that merely started on top of it.
-        className={`sheet-in pointer-events-auto flex w-full max-w-sm touch-pan-y items-center gap-3 rounded-lg bg-ink px-4 py-3 text-sm text-surface shadow-xl ${
+        // A system message, not a notification card: one line of text, a
+        // rounded bar, and enough shadow to lift it off the timeline and no
+        // more.
+        className={`sheet-in pointer-events-auto flex w-full max-w-sm touch-pan-y items-center gap-2 rounded-xl bg-ink py-2.5 pr-1 pl-4 text-[0.8125rem] text-surface shadow-[0_10px_30px_-10px_rgb(0_0_0/0.45)] ${
           dragging ? '' : 'transition-transform duration-150'
         }`}
       >
@@ -91,7 +113,7 @@ export function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () =
             }}
             // Negative margin, not less padding: the target stays 44px while the
             // toast keeps the height of a line of text.
-            className="-my-2 flex h-11 shrink-0 items-center px-1 font-semibold underline"
+            className="-my-2 flex h-11 shrink-0 items-center px-2 font-semibold underline underline-offset-2"
           >
             {action.label}
           </button>
@@ -101,9 +123,9 @@ export function Toast({ toast, onDismiss }: { toast: ToastState; onDismiss: () =
           type="button"
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="-my-2 -mr-2 flex h-11 w-11 shrink-0 items-center justify-center opacity-70"
+          className="-my-2 flex h-11 w-11 shrink-0 items-center justify-center opacity-60 transition-opacity hover:opacity-100"
         >
-          <CloseIcon size={16} />
+          <CloseIcon size={15} />
         </button>
       </div>
     </div>

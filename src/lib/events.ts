@@ -8,6 +8,12 @@ import type { Entry } from '../types'
  */
 
 /**
+ * An all-day event has no clock, so it happens at 9am — the hour the alarms use
+ * and the one the exported `.ics` triggers at.
+ */
+export const ALL_DAY_HOUR = 9
+
+/**
  * The weekdays a weekly rule fires on, as `Date.getDay()` numbers, or null when
  * the entry does not repeat weekly.
  *
@@ -97,14 +103,67 @@ export function nextOccurrence(entry: Entry, now: Date): Date | null {
   }
 
   if (entry.data.rrule === 'FREQ=YEARLY') {
-    const thisYear = new Date(today.getFullYear(), on.getMonth(), on.getDate())
-    return thisYear >= today
-      ? thisYear
-      : new Date(today.getFullYear() + 1, on.getMonth(), on.getDate())
+    /**
+     * A year the date does not exist in is not a year it happens in.
+     *
+     * 29 February is the only such date, and the rest of the app had already
+     * decided what it means: `occurrencesOn` and `onThisDay` both match the
+     * month and day *as text*, so a leap-day anniversary is drawn on 29
+     * February and nowhere else, and an exported `FREQ=YEARLY` from a 29
+     * February start recurs only in leap years by RFC 5545. This function was
+     * the one place that disagreed — and not by decision: `new Date(2027, 1,
+     * 29)` silently rolls to 1 March. So the bell said 1 March, the alarm rang
+     * on 1 March, and the timeline drew nothing there.
+     *
+     * Rejecting the rolled-over date is not a new rule, it is the existing one
+     * applied here. The cost is that a leap-day birthday reminds you every four
+     * years, which is what the date means and what the OS calendar already does
+     * with the same entry. Eight years of headroom covers the century gap,
+     * where 1896 is followed by 1904.
+     */
+    for (let ahead = 0; ahead <= 8; ahead += 1) {
+      const at = new Date(today.getFullYear() + ahead, on.getMonth(), on.getDate())
+      if (at.getMonth() !== on.getMonth() || at.getDate() !== on.getDate()) continue
+      if (at >= today) return at
+    }
+    return null
   }
 
   // A one-off that has passed has no next.
   return on >= today ? on : null
+}
+
+/**
+ * The next moment this entry actually happens: its next occurrence, at its own
+ * clock, or 9am when it carries none.
+ *
+ * `nextOccurrence` answers with a *day*, and gluing a time onto that day was
+ * being done separately in `ahead`, in the yearly branch of `alarms`, and — the
+ * reason this exists — in the editor, which is the first place that has to *say*
+ * the answer out loud rather than act on it. A fourth copy would eventually have
+ * disagreed with the other three about what an entry with no clock means, and
+ * the disagreement would have been a reminder that rang at a time the app had
+ * never shown anybody.
+ *
+ * Says nothing about whether the reminder is *armed* — a done entry still has a
+ * next occurrence, it just does not ring. `fireAt` and `alarms` remain the choke
+ * point for that, so silencing stays one decision made in one place.
+ *
+ * A moment that has gone is not a next one. `nextOccurrence` answers with a day
+ * and can hand back *today* for a reminder that rang this morning, which is
+ * correct of a day and wrong of a moment — it is why `alarms` drops a yearly
+ * `when <= now` and `ahead` drops an `at <= now`. The same rule belongs here,
+ * once, rather than in each of the three callers that would otherwise have to
+ * remember it.
+ */
+export function nextFireAt(entry: Entry, now: Date): Date | null {
+  const day = nextOccurrence(entry, now)
+  if (day === null) return null
+
+  const at = entry.occurred_at === null ? null : parseISO(entry.occurred_at)
+  const when = new Date(day)
+  when.setHours(at?.getHours() ?? ALL_DAY_HOUR, at?.getMinutes() ?? 0, 0, 0)
+  return when <= now ? null : when
 }
 
 /**

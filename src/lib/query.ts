@@ -382,7 +382,9 @@ export function answer(summary: Summary, question: Question, now: Date): Answer 
 
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`
   const entryCount = `${summary.entries} ${summary.entries === 1 ? 'entry' : 'entries'}`
-  const money = summary.paise > 0 ? rupees(summary.paise) : null
+  // Not `> 0`: a refund nets a real, negative answer, and reporting ₹0 for it
+  // would be the one number that is plainly untrue.
+  const money = summary.paise !== 0 ? rupees(summary.paise) : null
   const time = summary.minutes > 0 ? durationText(summary.minutes) : null
   const extras: Extra[] = []
   let lead: string

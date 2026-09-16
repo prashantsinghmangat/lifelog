@@ -15,6 +15,23 @@ export function snapshotKey(now: Date): string {
   return `${PREFIX}${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())}${SUFFIX}`
 }
 
+/**
+ * Whether a caller-supplied key names a snapshot this function could have
+ * written.
+ *
+ * The key arrives in a query string and goes two places: a blob lookup, and a
+ * `filename="…"` in a Content-Disposition header. Matching the exact shape
+ * `snapshotKey` produces is cheaper than escaping either one and leaves nothing
+ * to reason about — no traversal, no separators, no quotes, no surprises about
+ * what a blob store does with a path-like name.
+ *
+ * Deliberately not a date *validity* check: `entries-2026-02-31.json` is a name
+ * nothing ever wrote, so it simply will not be found.
+ */
+export function isSnapshotKey(key: string): boolean {
+  return new RegExp(`^${PREFIX}\\d{4}-\\d{2}-\\d{2}\\${SUFFIX}$`).test(key)
+}
+
 /** Snapshots to delete: everything older than the newest `keep`. */
 export function stale(keys: string[], keep: number): string[] {
   const snapshots = keys.filter((key) => key.startsWith(PREFIX) && key.endsWith(SUFFIX)).sort()

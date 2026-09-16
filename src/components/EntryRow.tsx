@@ -1,6 +1,7 @@
+import { parseISO } from 'date-fns'
 import { KIND_NAME, KindMark } from './KindMark'
 import { behindYou, repeatLabel } from '../lib/events'
-import { clock, relativeDay, rowValue } from '../lib/format'
+import { clock, relativeDay, rowValue, until } from '../lib/format'
 import type { Row } from '../hooks/useEntries'
 
 type Props = {
@@ -16,8 +17,16 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
   const right = rowValue(row)
   const gone = behindYou(row, now)
   const at = row.occurred_at === null ? null : clock(row.occurred_at)
+  // Beside the clock, never instead of it: "in 47m" is the fact you are reading
+  // the row for, and "10:00 am" is the one you will repeat to somebody else.
+  // Only for something still ahead of you today — an expense at one o'clock
+  // happened, and counting down to it would be nonsense.
+  const soon =
+    row.kind === 'event' && !gone && row.occurred_at !== null
+      ? until(parseISO(row.occurred_at), now)
+      : null
   const detail = [
-    at,
+    soon,
     // A repeat has one row, so this line is the only thing that can say the
     // standup on Friday is also the standup on Monday.
     repeatLabel(row),
@@ -34,11 +43,14 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
         row.status === 'saving' ? 'opacity-60' : ''
       }`}
     >
-      {/* The whole row is the target: one tap opens everything about the entry. */}
+      {/* The whole row is the target: one tap opens everything about the entry.
+          The highlight is inset past the page gutter rather than drawn at the
+          text, so a hover or a press reads as the row lighting up and not as a
+          box appearing around the title. */}
       <button
         type="button"
         onClick={onOpen}
-        className="flex min-h-[3.25rem] min-w-0 flex-1 items-center gap-3 py-2 text-left"
+        className="-mx-2 flex min-h-[3.25rem] min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-sunken active:bg-sunken"
       >
         <KindMark kind={row.kind} />
 
@@ -50,7 +62,12 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
               existed and not what it was, and the longest titles are the notes,
               where the words are the whole content. */}
           <span
-            className={`block line-clamp-2 text-sm ${gone ? 'text-muted line-through' : ''}`}
+            // No `block` beside `line-clamp-2`: the clamp needs
+            // `display:-webkit-box` and `block` wins the cascade, which left
+            // every long title running to as many lines as it liked.
+            className={`line-clamp-2 text-sm leading-snug ${
+              gone ? 'text-muted line-through' : 'text-ink'
+            }`}
           >
             {row.title}
           </span>
@@ -58,8 +75,18 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
             {KIND_NAME[row.kind]}
             {gone ? ', done' : ''}.{' '}
           </span>
-          {detail.length > 0 && (
-            <span className="mt-0.5 block truncate text-xs text-faint">{detail.join(' · ')}</span>
+          {(at !== null || detail.length > 0) && (
+            <span className="mt-1 block truncate text-xs text-faint">
+              {/* The clock sits a step forward of the rest of the line. There is
+                  no time gutter — `occurred_at` is optional, so a column for it
+                  is empty on most rows and buys a 56px indent for nothing — but
+                  where a row does carry a time, that time is what anchors it in
+                  the day, and flattened into the list of categories and repeat
+                  rules it read as one more tag. */}
+              {at !== null && <span className="text-muted tabular-nums">{at}</span>}
+              {at !== null && detail.length > 0 && ' · '}
+              {detail.join(' · ')}
+            </span>
           )}
         </span>
 
@@ -75,7 +102,7 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
         <button
           type="button"
           onClick={onRetry}
-          className="my-2 ml-3 shrink-0 self-center rounded border border-expense px-2 py-1 text-xs text-expense"
+          className="my-2 ml-3 shrink-0 self-center rounded-md border border-expense px-2 py-1 text-xs font-medium text-expense"
         >
           Retry
         </button>

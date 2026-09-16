@@ -1,5 +1,65 @@
 import { describe, expect, it } from 'vitest'
-import { pageRange, snapshotKey, stale, totalFrom } from './backup.ts'
+import { isSnapshotKey, pageRange, snapshotKey, stale, totalFrom } from './backup.ts'
+
+describe('which keys the download endpoint will accept', () => {
+  // The key reaches a blob lookup and a `filename="…"` header. Matching the
+  // exact shape `snapshotKey` writes is what keeps both of those boring.
+
+  it('accepts a name it could itself have written', () => {
+    expect(isSnapshotKey(snapshotKey(new Date(Date.UTC(2026, 8, 5))))).toBe(true)
+    expect(isSnapshotKey('entries-2026-09-05.json')).toBe(true)
+  })
+
+  it('refuses anything that tries to climb out', () => {
+    for (const key of [
+      '../secret',
+      '../../secret',
+      '../entries-2026-09-05.json',
+      'entries-2026-09-05.json/../../secret',
+      '..%2Fsecret',
+    ]) {
+      expect(isSnapshotKey(key)).toBe(false)
+    }
+  })
+
+  it('refuses anything carrying a separator, either kind', () => {
+    expect(isSnapshotKey('foo/bar')).toBe(false)
+    expect(isSnapshotKey('foo\\bar')).toBe(false)
+    expect(isSnapshotKey('backups/entries-2026-09-05.json')).toBe(false)
+    expect(isSnapshotKey('C:\\Windows\\win.ini')).toBe(false)
+    expect(isSnapshotKey('/etc/passwd')).toBe(false)
+  })
+
+  it('refuses a quote, which would end the filename parameter early', () => {
+    expect(isSnapshotKey('entries-2026-09-05.json"; filename="x')).toBe(false)
+    expect(isSnapshotKey('entries-2026-09-05.json\r\nX-Injected: 1')).toBe(false)
+  })
+
+  it('refuses the wrong extension, or none', () => {
+    expect(isSnapshotKey('entries-2026-09-05.txt')).toBe(false)
+    expect(isSnapshotKey('entries-2026-09-05')).toBe(false)
+    expect(isSnapshotKey('entries-2026-09-05.json.bak')).toBe(false)
+  })
+
+  it('refuses the wrong shape of name', () => {
+    expect(isSnapshotKey('')).toBe(false)
+    expect(isSnapshotKey('entries-.json')).toBe(false)
+    expect(isSnapshotKey('entries-26-9-5.json')).toBe(false)
+    expect(isSnapshotKey('notentries-2026-09-05.json')).toBe(false)
+    expect(isSnapshotKey('entries-2026-09-05.json '.trimEnd() + 'x')).toBe(false)
+  })
+
+  it('refuses a very long key without trying to read it', () => {
+    expect(isSnapshotKey(`entries-2026-09-05${'0'.repeat(10_000)}.json`)).toBe(false)
+    expect(isSnapshotKey('a'.repeat(100_000))).toBe(false)
+  })
+
+  it('anchors both ends, so a valid name buried in junk is still refused', () => {
+    expect(isSnapshotKey('x entries-2026-09-05.json')).toBe(false)
+    expect(isSnapshotKey('entries-2026-09-05.json x')).toBe(false)
+    expect(isSnapshotKey('entries-2026-09-05.json\nentries-2026-09-06.json')).toBe(false)
+  })
+})
 
 describe('snapshotKey', () => {
   it('names one snapshot per UTC day', () => {

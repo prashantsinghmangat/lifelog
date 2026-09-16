@@ -108,6 +108,49 @@ describe('the ids the daily prompts own', () => {
   })
 })
 
+describe('a yearly repeat', () => {
+  const birthday = (on: string) =>
+    entry({ id: 'bday', occurred_on: on, title: 'deepak birthday', data: { rrule: 'FREQ=YEARLY' } })
+
+  it('is armed for next year once this year has gone by', () => {
+    // The bell, the day it lands on and the .ics all say a birthday recurs.
+    // The alarm did not: `fireAt` returns the date on the row, so a birthday
+    // logged in February was simply in the past by March and nothing was ever
+    // scheduled again — the one part of a recurring reminder that has to work.
+    const now = new Date(2026, 8, 11, 14, 30)
+    const due = alarms(birthday('2010-02-13'), now)
+
+    expect(due).toHaveLength(1)
+    expect(due[0]?.at?.getFullYear()).toBe(2027)
+    expect(due[0]?.at?.getMonth()).toBe(1)
+    expect(due[0]?.at?.getDate()).toBe(13)
+    expect(due[0]?.at?.getHours()).toBe(9)
+  })
+
+  it('keeps this year while the day is still ahead', () => {
+    const now = new Date(2026, 8, 11, 14, 30)
+    const due = alarms(birthday('2010-11-14'), now)
+
+    expect(due[0]?.at?.getFullYear()).toBe(2026)
+    expect(due[0]?.at?.getMonth()).toBe(10)
+  })
+
+  it('keeps the id it always had, so the launch re-arm replaces rather than doubles', () => {
+    const now = new Date(2026, 8, 11, 14, 30)
+    expect(alarms(birthday('2010-02-13'), now)[0]?.id).toBe(notificationId('bday'))
+  })
+
+  it('stays silent once it is ticked off', () => {
+    const now = new Date(2026, 8, 11, 14, 30)
+    const finished = entry({
+      id: 'bday',
+      occurred_on: '2010-02-13',
+      data: { rrule: 'FREQ=YEARLY', done: true },
+    })
+    expect(alarms(finished, now)).toEqual([])
+  })
+})
+
 describe('when a weekly repeat has not begun yet', () => {
   // Thursday 10 September 2026, twenty past ten at night.
   const NOW = new Date(2026, 8, 10, 22, 20, 0)

@@ -1,4 +1,5 @@
 import { getStore } from '@netlify/blobs'
+import { isSnapshotKey } from '../lib/backup.ts'
 
 /**
  * Reading the backups back out. A copy that cannot be retrieved is not a
@@ -28,6 +29,13 @@ export default async (request: Request): Promise<Response> => {
   if (wanted === null) {
     const { blobs } = await store.list()
     return Response.json(blobs.map((blob) => blob.key).sort().reverse())
+  }
+
+  // Only a name this function could itself have written. Checked before the
+  // store is touched, so nothing path-like ever reaches it and nothing
+  // caller-supplied ever reaches the header below.
+  if (!isSnapshotKey(wanted)) {
+    return new Response('Not a snapshot name', { status: 400 })
   }
 
   const snapshot = await store.get(wanted)

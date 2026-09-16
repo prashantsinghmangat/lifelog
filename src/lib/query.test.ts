@@ -302,6 +302,21 @@ describe('the parts an answer is laid out from', () => {
     ])
   })
 
+  it('nets a refund out rather than reporting ₹0', () => {
+    // The sign survives the whole way: an expense of −₹50 is what a refund is,
+    // and answering "₹0" for it would be the one number plainly untrue.
+    const question = parseQuestion('? how much refund', NOW)
+    if (question === null) throw new Error('not a question')
+
+    const refund = entry({
+      occurred_on: '2026-09-05',
+      title: 'amazon refund',
+      amount_paise: -5000,
+    })
+    const said = answer(summarise([refund], question, NOW), question, NOW)
+    expect(said.lead).toBe('-₹50')
+  })
+
   it('gives a total its shape: how many went into it, and the average', () => {
     // ₹2,340 across two entries is a very different week from ₹2,340 across
     // twenty, and the total alone cannot tell them apart.

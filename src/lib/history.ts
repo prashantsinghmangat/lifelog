@@ -18,6 +18,11 @@ export type Recollection = {
   entries: Entry[]
 }
 
+/** Text order, for the stamps that are only ever compared with their own kind. */
+function byText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
 /**
  * Within-day order: timed entries first in clock order, then untimed ones in
  * the order they were logged.
@@ -25,14 +30,27 @@ export type Recollection = {
  * Shared with the timeline rather than written twice — a day recalled from last
  * year listing its entries in a different order from the day itself is the kind
  * of disagreement nobody thinks to test for.
+ *
+ * **Compared as moments, not as text.** `occurred_at` carries an offset, and not
+ * every writer produces the same one: `occurrences.ts` built a derived
+ * occurrence with `toISOString()`, which is UTC, while the parser writes the
+ * local offset and PostgREST answers in UTC again. Comparing those as strings
+ * compares `04:30:00.000Z` against `06:30:00+05:30` and puts a ten o'clock
+ * standup above a half past six reminder. On a day opening with passed
+ * reminders that also cost the fold, since the run at the head of the day was
+ * no longer the passed one — a feature switched off by a sort.
  */
 export function byClock(a: Entry, b: Entry): number {
   if (a.occurred_at !== null && b.occurred_at !== null) {
-    return a.occurred_at < b.occurred_at ? -1 : a.occurred_at > b.occurred_at ? 1 : 0
+    const first = Date.parse(a.occurred_at)
+    const second = Date.parse(b.occurred_at)
+    // A stamp that will not parse is not worth reordering the day over.
+    if (Number.isNaN(first) || Number.isNaN(second)) return byText(a.occurred_at, b.occurred_at)
+    return first - second
   }
   if (a.occurred_at !== null) return -1
   if (b.occurred_at !== null) return 1
-  return a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0
+  return byText(a.created_at, b.created_at)
 }
 
 /**

@@ -31,13 +31,16 @@ export function WeekStrip({ day, now, loadDays, onPick }: Props) {
 
   return (
     <nav aria-label="This week" className="lg:hidden">
-      <div className="grid grid-cols-7 text-center text-xs text-faint" aria-hidden="true">
+      <div
+        className="grid grid-cols-7 text-center text-[0.625rem] font-medium tracking-[0.08em] text-faint uppercase"
+        aria-hidden="true"
+      >
         {WEEKDAYS.map((letter, index) => (
           <span key={index}>{letter}</span>
         ))}
       </div>
 
-      <div className="mt-0.5 grid grid-cols-7">
+      <div className="mt-1 grid grid-cols-7 gap-0.5">
         {eachDayOfInterval({ start, end }).map((date) => (
           <DayCell
             key={dayKey(date)}

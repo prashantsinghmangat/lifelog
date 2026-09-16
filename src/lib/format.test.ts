@@ -9,6 +9,7 @@ import {
   relativeDay,
   rupees,
   timeValue,
+  until,
 } from './format'
 
 describe('rupees', () => {
@@ -134,5 +135,32 @@ describe('the span an answer covers', () => {
 
   it('names the years when either falls outside this one', () => {
     expect(daySpan('2025-12-30', '2026-01-02', NOW)).toBe('30 Dec 2025 — 2 Jan 2026')
+  })
+})
+
+describe('how long until something today', () => {
+  // Monday 14 September 2026, nine in the morning.
+  const now = new Date(2026, 8, 14, 9, 0, 0)
+  const at = (h: number, m = 0) => new Date(2026, 8, 14, h, m, 0)
+
+  it('counts the minutes, then the hours', () => {
+    expect(until(at(9, 47), now)).toBe('in 47m')
+    expect(until(at(10, 30), now)).toBe('in 1h 30m')
+    expect(until(at(11), now)).toBe('in 2h')
+  })
+
+  it('rounds up, so the last minute never reads "in 0m"', () => {
+    expect(until(new Date(2026, 8, 14, 9, 0, 30), now)).toBe('in 1m')
+  })
+
+  it('has nothing to say once the moment has gone', () => {
+    expect(until(at(8, 59), now)).toBeNull()
+    expect(until(now, now)).toBeNull()
+  })
+
+  it('leaves another day to `relativeDay`, which words it better', () => {
+    // "in 19h 20m" is arithmetic nobody asked for; "tomorrow" is the answer.
+    expect(until(new Date(2026, 8, 15, 4, 20, 0), now)).toBeNull()
+    expect(until(new Date(2026, 8, 13, 23, 59, 0), now)).toBeNull()
   })
 })

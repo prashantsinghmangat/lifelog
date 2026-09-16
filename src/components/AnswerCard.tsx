@@ -46,12 +46,21 @@ export function AnswerCard({ answer, now, onPick }: Props) {
   const rest = answer.rows.length - shown.length
 
   return (
-    <div className="mt-2 border-y border-edge py-3">
-      {answer.caption !== null && <p className="truncate text-xs text-faint">{answer.caption}</p>}
-      <p className="mt-0.5 text-3xl font-semibold tracking-tight tabular-nums">{answer.lead}</p>
+    <div className="mt-3 border-y border-edge py-4">
+      {/* The conclusion, then its working. Caption set as a small uppercase
+          eyebrow so it reads as the label on the number rather than as the
+          first line of a paragraph the number then interrupts. */}
+      {answer.caption !== null && (
+        <p className="truncate text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+          {answer.caption}
+        </p>
+      )}
+      <p className="mt-1.5 text-3xl leading-none font-semibold tracking-tight tabular-nums">
+        {answer.lead}
+      </p>
 
       {answer.extras.length > 0 && (
-        <p className="mt-1 text-xs text-muted">
+        <p className="mt-2.5 text-xs text-muted">
           {answer.extras.map((extra, index) => (
             <span key={extraText(extra)}>
               {index > 0 && <span className="text-faint"> · </span>}
@@ -66,7 +75,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
 
       {/* Capped rather than unbounded: the box above stays put while you scroll,
           so an answer allowed to grow without limit would take the screen with it. */}
-      <div className={`mt-2 ${expanded ? 'max-h-[50vh] overflow-y-auto' : ''}`}>
+      <div className={`mt-4 ${expanded ? 'max-h-[50vh] overflow-y-auto' : ''}`}>
         {shown.map((row, index) => {
           const right = rowValue(row)
           const gone = behindYou(row, now)
@@ -87,12 +96,16 @@ export function AnswerCard({ answer, now, onPick }: Props) {
           ].filter((bit): bit is string => bit !== null && bit !== '')
 
           return (
-            <div key={row.id}>
+            // The rule is on the wrapper, not on the button: the button is inset
+            // past the gutter so its highlight clears the text, and a separator
+            // that moved with it would sit 8px wider than every rule in the
+            // timeline directly below.
+            <div key={row.id} className="border-b border-line">
               {heads && (
                 <p
                   aria-hidden="true"
-                  className={`pb-1.5 text-xs font-medium tracking-wide text-faint uppercase ${
-                    index === 0 ? '' : 'pt-3.5'
+                  className={`pb-2 text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase ${
+                    index === 0 ? '' : 'pt-4'
                   }`}
                 >
                   {dayHeading(row.occurred_on, now)}
@@ -102,7 +115,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
               <button
                 type="button"
                 onClick={() => onPick(row.occurred_on)}
-                className="flex min-h-12 w-full items-center gap-3 border-b border-line py-2 text-left active:bg-raised"
+                className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
               >
                 <KindMark kind={row.kind} />
 
@@ -114,12 +127,15 @@ export function AnswerCard({ answer, now, onPick }: Props) {
                     {gone ? ', done' : ''}.{' '}
                   </span>
                   <span
-                    className={`block line-clamp-2 text-sm ${gone ? 'text-muted line-through' : ''}`}
+                    // `block` would override the clamp's own display. See EntryRow.
+                    className={`line-clamp-2 text-sm leading-snug ${
+                      gone ? 'text-muted line-through' : 'text-ink'
+                    }`}
                   >
                     {row.title}
                   </span>
                   {detail.length > 0 && (
-                    <span className="mt-0.5 block truncate text-xs text-faint">
+                    <span className="mt-1 block truncate text-xs text-faint">
                       {detail.join(' · ')}
                     </span>
                   )}
@@ -139,7 +155,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="flex h-11 w-full items-center text-xs text-muted active:text-ink"
+          className="flex h-11 w-full items-center text-xs text-muted transition-colors hover:text-ink active:text-ink"
         >
           {rest} more · see all {answer.rows.length}
         </button>

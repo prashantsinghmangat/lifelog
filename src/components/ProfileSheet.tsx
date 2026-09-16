@@ -13,6 +13,8 @@ const THEMES: { value: Theme; label: string }[] = [
 
 type Props = {
   email: string
+  /** No account behind the log. See `guest` in `identity.ts`. */
+  local: boolean
   theme: Theme
   onTheme: (theme: Theme) => void
   nudges: boolean
@@ -20,12 +22,14 @@ type Props = {
   onHelp: () => void
   onExport: () => void
   onExportCalendar: () => void
+  onSignIn: () => void
   onSignOut: () => void
   onClose: () => void
 }
 
 export function ProfileSheet({
   email,
+  local,
   theme,
   onTheme,
   nudges,
@@ -33,6 +37,7 @@ export function ProfileSheet({
   onHelp,
   onExport,
   onExportCalendar,
+  onSignIn,
   onSignOut,
   onClose,
 }: Props) {
@@ -83,29 +88,42 @@ export function ProfileSheet({
 
   return (
     <Sheet label="Profile and settings" onClose={onClose}>
-      <p className="truncate text-sm font-medium">{email}</p>
-      <p className="text-xs text-faint">Signed in</p>
+      {/* A guest has no address to show and is not signed out either — the log
+          is simply on this phone. Said plainly, because the one thing worth
+          knowing about this state is what happens if the phone is lost. */}
+      <p className="truncate text-base font-semibold tracking-tight">
+        {local ? 'No account' : email}
+      </p>
+      <p className="mt-0.5 text-xs text-faint">
+        {local ? 'This log is on this device only' : 'Signed in'}
+      </p>
 
       <button
         type="button"
         onClick={onHelp}
-        className="mt-4 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink"
+        className="mt-5 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
       >
         How to use lifelog
       </button>
 
-      <p className="mt-5 mb-2 text-xs text-muted" id="appearance">
+      <p className="mt-6 mb-2 text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase" id="appearance">
         Appearance
       </p>
-      <div role="group" aria-labelledby="appearance" className="flex gap-1 rounded-lg border border-line p-1">
+      <div
+        role="group"
+        aria-labelledby="appearance"
+        className="flex gap-1 rounded-xl border border-line bg-sunken p-1"
+      >
         {THEMES.map((option) => (
           <button
             key={option.value}
             type="button"
             aria-pressed={theme === option.value}
             onClick={() => onTheme(option.value)}
-            className={`h-11 flex-1 rounded px-2 text-sm ${
-              theme === option.value ? 'bg-ink font-medium text-surface' : 'text-muted'
+            className={`h-11 flex-1 rounded-lg px-2 text-sm transition-colors ${
+              theme === option.value
+                ? 'bg-raised font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
+                : 'text-muted hover:text-ink'
             }`}
           >
             {option.label}
@@ -116,7 +134,7 @@ export function ProfileSheet({
       {/* Only meaningful in the native app; the web has no reminders to grant. */}
       {isNative() && (
         <>
-          <p className="mt-5 mb-2 text-xs text-muted">Reminders</p>
+          <p className="mt-6 mb-2 text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase">Reminders</p>
           {reminders === 'granted' && <p className="text-sm text-time">Notifications allowed.</p>}
 
           {reminders === 'denied' && (
@@ -124,7 +142,7 @@ export function ProfileSheet({
               <button
                 type="button"
                 onClick={() => void allowReminders()}
-                className="h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface"
+                className="h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90"
               >
                 Allow notifications
               </button>
@@ -166,7 +184,27 @@ export function ProfileSheet({
         </>
       )}
 
-      <p className="mt-5 mb-2 text-xs text-muted" id="password-label">
+      {/* Setting a password goes through `updateUser`, which needs a session
+          there is none of here. Offered as the thing that actually applies: an
+          account, which is what carries the log to a second device. */}
+      {local && (
+        <>
+          <button
+            type="button"
+            onClick={onSignIn}
+            className="mt-6 h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90"
+          >
+            Sign in to sync
+          </button>
+          <p className="mt-1.5 text-xs text-faint">
+            Everything logged here comes with you. Nothing is lost by waiting.
+          </p>
+        </>
+      )}
+
+      {!local && (
+        <>
+      <p className="mt-6 mb-2 text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase" id="password-label">
         Password
       </p>
       <div className="flex gap-2">
@@ -191,11 +229,13 @@ export function ProfileSheet({
       <p role="status" aria-live="polite" className="mt-1.5 min-h-4 text-xs text-muted">
         {note}
       </p>
+        </>
+      )}
 
       <button
         type="button"
         onClick={onExportCalendar}
-        className="mt-5 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink"
+        className="mt-6 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
       >
         Send events to calendar
       </button>
@@ -204,13 +244,28 @@ export function ProfileSheet({
         alarm at 9am.
       </p>
 
-      <div className="mt-5 flex items-center justify-between">
-        <button type="button" onClick={onExport} className="h-11 text-sm text-muted underline">
+      {/* The things you leave by, set apart from the things you come here to
+          change. A rule and a quieter row, rather than three more full-width
+          buttons that read as equal in weight to the theme you actually use. */}
+      <div className="mt-6 flex items-center justify-between border-t border-line pt-2">
+        <button
+          type="button"
+          onClick={onExport}
+          className="-ml-2 h-11 rounded-lg px-2 text-sm text-muted transition-colors hover:bg-sunken hover:text-ink"
+        >
           Export JSON
         </button>
-        <button type="button" onClick={onSignOut} className="h-11 px-1 text-sm text-expense">
-          Sign out
-        </button>
+        {/* Nothing to sign out of, and the button would read as "delete my log"
+            — which is the one thing it must not do to the only copy there is. */}
+        {!local && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="-mr-2 h-11 rounded-lg px-2 text-sm text-expense transition-colors hover:bg-sunken"
+          >
+            Sign out
+          </button>
+        )}
       </div>
     </Sheet>
   )

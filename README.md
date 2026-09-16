@@ -29,9 +29,12 @@ Single user. No sharing, no onboarding, no settings.
 | PWA | `vite-plugin-pwa` |
 | Deploy | Netlify (a Vercel config is committed too) |
 
-Runtime dependencies are exactly four: `react`, `react-dom`, `@supabase/supabase-js`,
-`date-fns`. No component library, no state manager, no data-fetching library, no icon
-package. The handful of icons are inline SVG.
+The browser bundle has exactly four dependencies: `react`, `react-dom`,
+`@supabase/supabase-js`, `date-fns`. Capacitor (`@capacitor/core`, `@capacitor/android`,
+`@capacitor/local-notifications`) was added with the Android app and reaches the web bundle
+only through the dynamic import in `reminders.ts`; `@netlify/blobs` is used by the backup
+functions and never by the app. No component library, no state manager, no data-fetching
+library, no icon package. The handful of icons are inline SVG.
 
 ## Setup
 
@@ -182,11 +185,18 @@ npm run dev
 are in, switch off **Allow new users to sign up** under Authentication → Sign In / Providers —
 that is what actually makes this single-user.
 
+## Docs
+
+| File | What it is |
+| --- | --- |
+| [DESIGN.md](DESIGN.md) | The UI rules, written to be followed — tokens, type scale, row anatomy, targets, the checklist. Read this before touching the interface. |
+| [CLAUDE.md](CLAUDE.md) | The architecture and the reasoning, including the bug behind each rule and the traps that cost real time. |
+
 ## Scripts
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 446 tests
+npm test           # vitest run — 568 tests
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -202,7 +212,7 @@ existed. Order matters: duration is read before amount, or `2h client work` beco
 | Dates | `today`, `yesterday`, `tomorrow`, `3 days ago`, `3d ago`, `next friday`, `sat`, `friday`, `14 nov`, `nov 14`, `14/11`, `14/11/26` |
 | Times | `5pm`, `5:30pm`, `17:30`, `9am` |
 | Durations | `2h`, `90m`, `2.5h`, `1h30m`, `2h30`, `45 min`, `2 hrs` |
-| Amounts | `350`, `₹350`, `rs 350`, `Rs.350`, `350rs`, `100 rupees`, `2,499`, `350.50` |
+| Amounts | `350`, `₹350`, `rs 350`, `Rs.350`, `350rs`, `100 rupees`, `2,499`, `350.50`, `-50` |
 | Repeats | `weekdays`, `every weekday`, `every monday`, `every tue` |
 | Filler stripped | `spent`, `paid`, `bought`, `for`, `on`, `at`, `worked`, `did` |
 
@@ -224,6 +234,14 @@ Rules worth knowing:
 - Nothing recognised at all → `note`, with the input kept untouched as the title.
 - Money is an integer number of paise everywhere. ₹347.50 is `34750`. It becomes a string in
   exactly one place, [`src/lib/format.ts`](src/lib/format.ts).
+- **A refund is money going the other way, not a fifth kind.** `-50 refund` is an expense of −₹50
+  and nets out of the day's total, which is what the signed column, `rupees` and the editor always
+  did — the parser used to drop the sign and file it as fifty rupees *spent*. The minus is read
+  only at the start of a word, so `covid-19 test 500` is still ₹19.
+- **The ceiling is ₹21,474,836.47**, because `amount_paise` is a Postgres `integer`. A bigger
+  number is not read as an amount at all — it stays in the title, the way any number the parser
+  cannot use does — and the editor says so rather than saving a row the server will refuse for
+  ever. Same bound on minutes.
 - Local dates only. `toISOString().slice(0, 10)` returns yesterday for the first five and a half
   hours of every IST day, so everything goes through `format(d, 'yyyy-MM-dd')`.
 
@@ -482,6 +500,12 @@ it downloads.
 - An all-day event alarms at **9am** on the day
 - `birthday`, `bday` or `anniversary` repeat yearly, which is what `data.rrule` was always for
 
+A yearly one is armed for its **next** occurrence rather than for the date on the row, since that
+date is almost always in the past — a birthday logged in February used to be scheduled for a day
+that had already gone, which is to say not scheduled at all. It is re-armed on every launch, so
+the year after looks after itself. A 29 February anniversary comes round every four years, which
+is what the date means and what the exported `FREQ=YEARLY` does too.
+
 The alarm on an all-day event is a *relative* trigger nine hours after local midnight, so it is
 9am in any timezone and stays correct every year. That is why no timezone is stored anywhere.
 
@@ -544,12 +568,14 @@ Measured with `npm run build`:
 
 | File | Raw | Gzipped |
 | --- | --- | --- |
-| `assets/index-*.js` | 412.34 kB | **119.17 kB** |
-| `assets/index-*.css` | 15.92 kB | 4.40 kB |
-| `index.html` | 0.85 kB | 0.47 kB |
-| **Total** | | **124.04 kB** |
+| `assets/index-*.js` | 463.01 kB | **135.23 kB** |
+| `assets/web-*.js` | 4.44 kB | 1.29 kB |
+| `assets/index-*.css` | 19.83 kB | 5.10 kB |
+| `assets/esm-*.js` | 0.57 kB | 0.34 kB |
+| `index.html` | 1.06 kB | 0.55 kB |
+| **Total** | | **142.51 kB** |
 
-Against a 150 KB budget. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
+Against a 150 KB budget, with 7 KB of headroom. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
 `postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and
 postgrest are used. If the budget ever gets tight, importing `@supabase/auth-js` and
 `@supabase/postgrest-js` directly drops the rest.
@@ -628,8 +654,15 @@ public/logo.svg  public/icon-192.png  public/icon-512.png  public/icon-maskable-
 ### The icon
 
 [`public/logo.svg`](public/logo.svg) is the mark and everything else is derived from it: a day's
-spine with three entries hanging off it, the nodes in the same expense / time / event colours the
-rows use, on the same `ink` tile as the app's theme colour.
+spine with three entries hanging off it, the nodes in expense / time / event colours on a
+near-black tile.
+
+Those are the palette as it stood when the mark was drawn, and they stay that way. The PNGs, the
+Android vector drawables and the installed launcher icons are all rendered from this file by a
+tool that is not in the repo, so a colour changed here and nowhere else is how the launcher icon,
+the themed icon and the notification silhouette start to disagree — the one thing the shared
+geometry exists to prevent. An icon is also not a token: it is the same mark on a home screen
+whatever theme the app is in.
 
 It is drawn on a 24-unit grid, and the Android vector drawables carry those exact paths — so the
 launcher icon, the Android 13 themed icon and the notification silhouette are literally the same

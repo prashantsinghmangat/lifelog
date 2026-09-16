@@ -30,10 +30,12 @@ export function OnThisDay({ found, onPick }: Props) {
   if (found.length === 0) return null
 
   return (
-    <section className="mt-8 border-t border-line pt-4">
-      <h2 className="text-xs font-medium tracking-wide text-faint uppercase">On this day</h2>
+    <section className="mt-10 border-t border-line pt-5">
+      <h2 className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+        On this day
+      </h2>
 
-      <div className="mt-1">
+      <div className="mt-2">
         {found.slice(0, YEARS).map((year) => {
           const shown = year.entries.slice(0, ENTRIES)
           const rest = year.entries.length - shown.length
@@ -43,9 +45,9 @@ export function OnThisDay({ found, onPick }: Props) {
               key={year.day}
               type="button"
               onClick={() => onPick(year.day)}
-              className="-mx-2 w-full rounded-md px-2 py-2.5 text-left active:bg-raised"
+              className="-mx-2 w-[calc(100%+1rem)] rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-sunken active:bg-sunken"
             >
-              <span className="block text-xs font-medium text-muted">
+              <span className="block text-xs font-medium text-muted tabular-nums">
                 {format(parseISO(year.day), 'd MMMM yyyy')}
               </span>
 
@@ -53,24 +55,20 @@ export function OnThisDay({ found, onPick }: Props) {
                 const right = rowValue(entry)
 
                 return (
-                  <span key={entry.id} className="mt-1 flex items-center gap-2.5">
+                  <span key={entry.id} className="mt-1.5 flex items-center gap-3">
                     <KindMark kind={entry.kind} />
-                    <span className="min-w-0 flex-1 truncate text-sm">
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">
                       <span className="sr-only">{KIND_NAME[entry.kind]}. </span>
                       {entry.title}
                     </span>
                     {right !== null && (
-                      <span className="shrink-0 text-xs tabular-nums text-muted">{right}</span>
+                      <span className="shrink-0 text-xs text-muted tabular-nums">{right}</span>
                     )}
                   </span>
                 )
               })}
 
-              {rest > 0 && (
-                <span className="mt-1 block text-xs text-faint">
-                  and {rest} more
-                </span>
-              )}
+              {rest > 0 && <span className="mt-1.5 block text-xs text-faint">and {rest} more</span>}
             </button>
           )
         })}

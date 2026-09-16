@@ -6,11 +6,12 @@ import { supabase } from '../lib/supabase'
 type Mode = 'password' | 'otp'
 
 const FIELD =
-  'w-full rounded-lg border border-edge bg-surface px-3.5 py-3 text-base text-ink outline-none focus:border-ink'
-const LABEL = 'mb-1 block text-xs text-muted'
+  'w-full rounded-lg border border-edge bg-raised px-3.5 py-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-muted'
+const LABEL = 'mb-1.5 block text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase'
 const PRIMARY =
-  'h-12 w-full rounded-lg bg-ink text-sm font-medium text-surface disabled:opacity-50'
-const QUIET = 'h-11 text-xs text-muted underline disabled:opacity-50'
+  'h-12 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-50'
+const QUIET =
+  'h-11 text-xs text-muted underline decoration-edge underline-offset-2 hover:decoration-muted disabled:opacity-50'
 
 /**
  * Three routes in, because each covers a hole in the others.
@@ -27,7 +28,17 @@ const QUIET = 'h-11 text-xs text-muted underline disabled:opacity-50'
  * because a link tapped in Mail opens in Safari, and an installed iOS PWA has
  * separate storage, so the app itself could never be signed in that way.
  */
-export function Login() {
+type Props = {
+  /**
+   * Start with no account at all. Absent when this screen was reached *from*
+   * the app — a guest signing in has a log already and no use for the offer.
+   */
+  onGuest?: () => void
+  /** Present only when there is somewhere to go back to. */
+  onCancel?: () => void
+}
+
+export function Login({ onGuest, onCancel }: Props) {
   const [mode, setMode] = useState<Mode>('password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -120,7 +131,25 @@ export function Login() {
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]">
-      <h1 className="mb-4 text-lg font-semibold">lifelog</h1>
+      {/* The one screen that has to say what this is. One line, not a tour: the
+          whole product is a text box that reads a sentence, and somebody who
+          knows that before signing in knows what to do with the box when they
+          get there. */}
+      <h1 className="text-2xl font-semibold tracking-tight">lifelog</h1>
+      <p className="mt-1 mb-6 text-sm text-muted">
+        Everything that happens, one line at a time.
+      </p>
+
+      {/* Reached from inside the app, which only a guest can do — so there is a
+          log sitting behind this screen. Saying what happens to it is the whole
+          reason anyone taps Sign in from here, and the silence was the app
+          asking for an email without saying what it buys. */}
+      {onCancel !== undefined && (
+        <p className="mb-4 text-sm text-muted">
+          Everything already logged on this device moves to your account and syncs from then on.
+          Nothing is lost.
+        </p>
+      )}
 
       {mode === 'password' && (
         <form onSubmit={withPassword}>
@@ -265,6 +294,35 @@ export function Login() {
       <p role="status" aria-live="polite" className="mt-2 min-h-5 text-sm text-expense">
         {message}
       </p>
+
+      {/* The app needs no account to do any of its work — the log lives on the
+          device and every other layer says so — so demanding an email before the
+          text box can be seen was the one thing left here that waited on a
+          network it did not need. An account is what carries the log to a second
+          device; it is not what makes the first one work. Kept under the sign-in
+          form rather than over it, because syncing is still the better answer
+          for anyone willing to give an address. */}
+      {onGuest !== undefined && (
+        <div className="mt-6 border-t border-line pt-5">
+          <button
+            type="button"
+            onClick={onGuest}
+            className="h-12 w-full rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
+          >
+            Continue as guest
+          </button>
+          <p className="mt-1.5 text-center text-xs text-faint">
+            Everything works. The log stays on this device, and signing in later brings it with
+            you.
+          </p>
+        </div>
+      )}
+
+      {onCancel !== undefined && (
+        <button type="button" onClick={onCancel} className={`mt-6 ${QUIET}`}>
+          Back to the log
+        </button>
+      )}
     </div>
   )
 }

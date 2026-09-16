@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { onThisDay } from './history'
+import { byClock, onThisDay } from './history'
 import type { Entry, Kind } from '../types'
 
 let seq = 0
@@ -19,6 +19,42 @@ function entry(over: Partial<Entry> & { occurred_on: string }): Entry {
     ...over,
   }
 }
+
+describe('stamps written by different hands', () => {
+  // `occurred_at` carries an offset and not every writer produces the same one:
+  // a derived occurrence used `toISOString()` (UTC) while the parser writes the
+  // local offset and PostgREST answers in UTC again. Compared as text that put
+  // a ten o'clock standup above a half past six reminder — and, because the head
+  // of the day was then a repeat rather than a passed reminder, it silently
+  // switched off the "N already passed" fold.
+  const at = (iso: string) => entry({ occurred_on: '2026-09-11', occurred_at: iso })
+
+  it('orders a UTC stamp against a local one by the moment, not the text', () => {
+    const tenAmAsUtc = at('2026-09-11T04:30:00.000Z') // 10:00 where the offset is +05:30
+    const halfSixLocal = at('2026-09-11T06:30:00+05:30')
+
+    const order = [tenAmAsUtc, halfSixLocal].sort(byClock).map((row) => row.occurred_at)
+    expect(order).toEqual(['2026-09-11T06:30:00+05:30', '2026-09-11T04:30:00.000Z'])
+  })
+
+  it('still orders two stamps of the same shape', () => {
+    const early = at('2026-09-11T06:30:00+05:30')
+    const late = at('2026-09-11T23:30:00+05:30')
+    expect([late, early].sort(byClock)[0]?.occurred_at).toBe('2026-09-11T06:30:00+05:30')
+  })
+
+  it('keeps a timed entry above an untimed one', () => {
+    const timed = at('2026-09-11T06:30:00+05:30')
+    const untimed = entry({ occurred_on: '2026-09-11' })
+    expect([untimed, timed].sort(byClock)[0]?.occurred_at).toBe('2026-09-11T06:30:00+05:30')
+  })
+
+  it('does not throw over a stamp it cannot read', () => {
+    const broken = at('not a time')
+    const fine = at('2026-09-11T06:30:00+05:30')
+    expect(() => [broken, fine].sort(byClock)).not.toThrow()
+  })
+})
 
 describe('on this day', () => {
   const LOG: Entry[] = [

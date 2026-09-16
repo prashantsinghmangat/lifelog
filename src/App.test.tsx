@@ -1,11 +1,22 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { addDays, eachDayOfInterval, format, startOfWeek, subYears } from 'date-fns'
+import {
+  addDays,
+  eachDayOfInterval,
+  format,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+  subYears,
+} from 'date-fns'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { Sheet } from './components/Sheet'
+import { Toast } from './components/Toast'
 import { dayKey } from './lib/format'
-import type { ScheduleResult } from './lib/reminders'
+import { load } from './lib/store'
+import type { RearmResult, ScheduleResult } from './lib/reminders'
 
 /**
  * The journeys that only exist once everything is wired together: whether a
@@ -20,6 +31,10 @@ type Result = { data?: unknown; error?: { message: string } | null }
 
 let rowsOnServer: unknown[] = []
 let scheduleResult: ScheduleResult = 'scheduled'
+/** What the re-arm on a save reports back, including the ways it can fail. */
+let rearmResult: RearmResult | 'throw' = 'scheduled'
+/** Whether cancelling an alarm rejects, as a failing native call does. */
+let cancelThrows = false
 /** Every request rejects, which is what no network actually looks like. */
 let unreachable = false
 
@@ -51,12 +66,21 @@ vi.mock('./lib/supabase', () => ({
   supabase: { from: () => builder(), auth: { signOut: vi.fn() } },
 }))
 
+/** Who this device belongs to. A guest is the same shape with no account. */
+let who: { id: string; email: string; local?: boolean } | null = {
+  id: 'user-1',
+  email: 'you@example.com',
+}
+
 vi.mock('./hooks/useSession', () => ({
   // An identity, not a session: the app runs for whoever this device belongs
   // to, which is not the same as whether Supabase can prove it right now.
   useSession: () => ({
-    identity: { id: 'user-1', email: 'you@example.com' },
+    identity: who,
     loading: false,
+    startGuest: () => {
+      who = { id: 'local-guest', email: '', local: true }
+    },
   }),
 }))
 
@@ -66,7 +90,13 @@ vi.mock('./lib/reminders', () => ({
   schedule: vi.fn(async (entry: { kind: string }) =>
     entry.kind === 'event' ? scheduleResult : 'skipped',
   ),
-  cancel: vi.fn(async () => undefined),
+  cancel: vi.fn(async () => {
+    if (cancelThrows) throw new Error('cancel failed on android')
+  }),
+  rearm: vi.fn(async () => {
+    if (rearmResult === 'throw') throw new Error('schedule failed on android')
+    return rearmResult
+  }),
   sync: vi.fn(async () => undefined),
   scheduleNudges: vi.fn(async () => 'scheduled'),
   permission: vi.fn(async () => 'granted'),
@@ -77,8 +107,11 @@ afterEach(cleanup)
 
 let ids = 0
 beforeEach(() => {
+  who = { id: 'user-1', email: 'you@example.com' }
   rowsOnServer = []
   scheduleResult = 'scheduled'
+  rearmResult = 'scheduled'
+  cancelThrows = false
   unreachable = false
   ids = 0
   // The log persists between mounts now, so without this each test inherits the
@@ -339,8 +372,19 @@ describe('with no network', () => {
     await userEvent.type(box, '350 lunch swiggy{Enter}')
     await userEvent.type(box, '2h client work{Enter}')
 
-    // Arithmetic over local rows. None of it was ever a server's job.
-    await waitFor(() => expect(screen.getByText(/₹350 spent · 2h logged/)).toBeTruthy())
+    // Arithmetic over local rows. None of it was ever a server's job. The
+    // figures carry their own weight now, so each is its own node — asserted on
+    // the totals line rather than on the rows, which print the same two numbers.
+    // `2 entries` exactly — the offline notice says "entries" too, in a longer
+    // sentence that an exact match does not reach.
+    const totals = await waitFor(() => {
+      const found = screen.getByText('2 entries').closest('p')
+      if (found === null) throw new Error('no totals line')
+      return found
+    })
+    expect(totals.textContent).toContain('₹350 spent')
+    expect(totals.textContent).toContain('2h logged')
+    expect(totals.textContent).toContain('2 entries')
   })
 
   it('answers a question about the log with no network', async () => {
@@ -404,6 +448,328 @@ describe('looking back at the same day', () => {
   })
 })
 
+describe('every control can be named out loud', () => {
+  /** Text, or a label where the control is an icon. No third possibility. */
+  function nameless(): string[] {
+    return [...document.querySelectorAll('button')]
+      .filter(
+        (node) =>
+          node.textContent?.trim() === '' &&
+          node.getAttribute('aria-label') === null &&
+          node.getAttribute('aria-labelledby') === null,
+      )
+      .map((node) => node.outerHTML.slice(0, 120))
+  }
+
+  const row = {
+    id: 'server-1',
+    kind: 'expense',
+    occurred_on: dayKey(new Date()),
+    occurred_at: null,
+    title: 'lunch swiggy',
+    note: null,
+    amount_paise: 35000,
+    duration_minutes: null,
+    category: 'food',
+    data: {},
+    created_at: '2026-09-05T09:00:00+05:30',
+  }
+
+  it('on the day, in the editor, in the profile sheet and in the calendar', async () => {
+    rowsOnServer = [row]
+    await open()
+
+    await screen.findByText('lunch swiggy')
+    expect(nameless()).toEqual([])
+
+    await userEvent.click(screen.getByText('lunch swiggy'))
+    expect(nameless()).toEqual([])
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Profile and settings' }))
+    expect(nameless()).toEqual([])
+    await userEvent.keyboard('{Escape}')
+
+    await userEvent.click(screen.getByLabelText(/open calendar/))
+    expect(nameless()).toEqual([])
+  })
+})
+
+describe('a sheet with a toast still on screen', () => {
+  it('stacks above it, so the toast cannot take a tap meant for Save', () => {
+    // Found in a real browser: the toast is `fixed bottom-0` and a sheet's
+    // actions are sticky along its own bottom edge, so at a lower stacking
+    // level the message sat squarely over Save, Cancel and Delete.
+    // `elementFromPoint` at the middle of Save returned the toast — the tap did
+    // not miss, it hit the wrong control, and on a toast carrying Undo that
+    // meant pressing Save restored the row just deleted.
+    const level = (node: Element | null) => {
+      const found = /(?:^|\s)z-(\d+)(?:\s|$)/.exec(node?.className ?? '')
+      return found?.[1] === undefined ? null : Number(found[1])
+    }
+
+    rowsOnServer = []
+    render(<Toast toast={{ text: 'Added lunch swiggy' }} onDismiss={() => undefined} />)
+    const toast = document.querySelector('[role="status"]')
+
+    render(
+      <Sheet label="Edit lunch swiggy" onClose={() => undefined}>
+        <button type="button">Save</button>
+      </Sheet>,
+    )
+    const overlay = document.querySelector('[role="dialog"]')?.parentElement ?? null
+
+    const above = level(overlay)
+    const below = level(toast)
+    expect(above).not.toBeNull()
+    expect(below).not.toBeNull()
+    expect(above ?? 0).toBeGreaterThan(below ?? 0)
+  })
+})
+
+describe('a sheet behaving like a dialog', () => {
+  // `Sheet` owns modal correctness for the whole app, so it is worth pinning
+  // here rather than trusting each surface to have got it right.
+  it('closes on Escape and hands focus back to what opened it', async () => {
+    await open()
+
+    const trigger = screen.getByRole('button', { name: 'Profile and settings' })
+    await userEvent.click(trigger)
+    expect(screen.getByRole('dialog')).toBeTruthy()
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it('keeps Tab inside it', async () => {
+    await open()
+    await userEvent.click(screen.getByRole('button', { name: 'Profile and settings' }))
+
+    const dialog = screen.getByRole('dialog')
+    const focusable = [...dialog.querySelectorAll<HTMLElement>('button, input, textarea')]
+    focusable[focusable.length - 1]?.focus()
+    await userEvent.tab()
+
+    expect(dialog.contains(document.activeElement)).toBe(true)
+  })
+})
+
+describe('a reminder that could not be re-armed', () => {
+  const row = {
+    id: 'server-1',
+    kind: 'event',
+    occurred_on: dayKey(new Date()),
+    occurred_at: new Date(Date.now() + 3_600_000).toISOString(),
+    title: 'dentist',
+    note: null,
+    amount_paise: null,
+    duration_minutes: null,
+    category: null,
+    data: {},
+    created_at: '2026-09-05T09:00:00+05:30',
+  }
+
+  async function save() {
+    rowsOnServer = [row]
+    await open()
+    await userEvent.click(await screen.findByText('dentist'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  }
+
+  it('says so rather than rejecting into nothing', async () => {
+    rearmResult = 'throw'
+    await save()
+    await waitFor(() => expect(screen.getByText(/Reminder failed/)).toBeTruthy())
+  })
+
+  it('offers the way out when the block is a refused permission', async () => {
+    rearmResult = 'blocked'
+    await save()
+    await waitFor(() => expect(screen.getByText('Saved, but reminders are blocked')).toBeTruthy())
+    expect(screen.getByText(/Allow notifications/)).toBeTruthy()
+  })
+
+  it('warns when an old alarm is left armed with nothing replacing it', async () => {
+    rearmResult = 'stale'
+    await save()
+    await waitFor(() =>
+      expect(screen.getByText('Saved, but an old reminder may still fire')).toBeTruthy(),
+    )
+  })
+
+  it('stays quiet when it worked', async () => {
+    await save()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByText(/Reminder failed/)).toBeNull()
+    expect(screen.queryByText(/may still fire/)).toBeNull()
+  })
+
+  it('keeps Undo on the delete when cancelling the alarm fails', async () => {
+    // The warning replaces the message, so it has to carry the way back with
+    // it — otherwise a failing cancel quietly costs you the undo as well.
+    cancelThrows = true
+    rowsOnServer = [row]
+    await open()
+    await userEvent.click(await screen.findByText('dentist'))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() =>
+      expect(screen.getByText('Deleted, but its reminder may still fire')).toBeTruthy(),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await waitFor(() => expect(screen.getByText('dentist')).toBeTruthy())
+  })
+})
+
+describe('a repeat opened from a day it merely lands on', () => {
+  /** Started last week, so today draws it as an occurrence and not as the row. */
+  const STARTED = dayKey(new Date(Date.now() - 7 * 86_400_000))
+
+  function standup() {
+    const codes = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
+    return {
+      id: 'standup',
+      kind: 'event',
+      occurred_on: STARTED,
+      occurred_at: null,
+      title: 'team standup',
+      note: null,
+      amount_paise: null,
+      duration_minutes: null,
+      category: null,
+      data: { rrule: `FREQ=WEEKLY;BYDAY=${codes[new Date().getDay()]}` },
+      created_at: '2026-01-01T09:00:00+05:30',
+    }
+  }
+
+  const stored = () => load(localStorage, 'user-1').entries.find((row) => row.id === 'standup')
+
+  it('saves onto the row, not onto the day it was drawn on', async () => {
+    // The occurrence carries the day it was *drawn* on. Editing one therefore
+    // wrote that day back: opening Tuesday's standup and pressing Save moved
+    // the series start to Tuesday, and a birthday logged in 2010 opened from
+    // this year had its year rewritten — the original date gone, silently.
+    rowsOnServer = [standup()]
+    render(<App />)
+
+    await userEvent.click(await screen.findByText('team standup'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(stored()).toBeTruthy())
+    expect(stored()?.occurred_on).toBe(STARTED)
+  })
+
+  it('brings the same row back when its delete is undone', async () => {
+    rowsOnServer = [standup()]
+    render(<App />)
+
+    await userEvent.click(await screen.findByText('team standup'))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+
+    await waitFor(() => expect(stored()).toBeTruthy())
+    expect(stored()?.occurred_on).toBe(STARTED)
+  })
+})
+
+describe('the sidebar calendar, which stays mounted all day', () => {
+  it('follows the day when it lands in another month', async () => {
+    render(<App />)
+    await screen.findByLabelText('What happened?')
+
+    const thisMonth = startOfMonth(new Date())
+    const previous = subMonths(thisMonth, 1)
+    const label = (date: Date) => format(date, 'MMMM yyyy')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Previous month' }))
+    expect(screen.getByText(label(previous))).toBeTruthy()
+
+    // Browsing is the grid's own state: picking a day inside the month on show
+    // must not snap it forward again.
+    const grid = screen.getByText(label(previous)).closest('div')?.parentElement as HTMLElement
+    const fifteenth = new Date(previous.getFullYear(), previous.getMonth(), 15)
+    await userEvent.click(within(grid).getByLabelText(format(fifteenth, 'EEEE d MMMM yyyy')))
+    expect(screen.getByText(label(previous))).toBeTruthy()
+
+    // But a day landing outside it has to bring the grid with it, or the month
+    // on screen holds no selected cell anywhere — which is what every jump from
+    // an answer, a memory or the bell used to do.
+    await userEvent.click(within(grid).getByRole('button', { name: 'Today' }))
+    await waitFor(() => expect(screen.getByText(label(thisMonth))).toBeTruthy())
+  })
+})
+
+describe('an impatient hand', () => {
+  it('makes one entry from two quick presses of Enter', async () => {
+    await open().then((box) => userEvent.type(box, '350 lunch swiggy{Enter}{Enter}'))
+    await waitFor(() => expect(load(localStorage, 'user-1').entries).toHaveLength(1))
+  })
+})
+
+describe('what survives a reload with no network', () => {
+  const row = {
+    id: 'server-1',
+    kind: 'expense',
+    occurred_on: dayKey(new Date()),
+    occurred_at: null,
+    title: 'lunch swiggy',
+    note: null,
+    amount_paise: 35000,
+    duration_minutes: null,
+    category: 'food',
+    data: {},
+    created_at: '2026-09-05T09:00:00+05:30',
+  }
+
+  it('keeps entries made offline', async () => {
+    unreachable = true
+    const box = await open()
+    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await userEvent.type(box, '2h client work{Enter}')
+    await waitFor(() => expect(load(localStorage, 'user-1').entries).toHaveLength(2))
+
+    cleanup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
+    expect(screen.getByText('client work')).toBeTruthy()
+  })
+
+  it('keeps a delete made offline deleted', async () => {
+    rowsOnServer = [row]
+    await open()
+    await userEvent.click(await screen.findByText('lunch swiggy'))
+
+    unreachable = true
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByText('lunch swiggy')).toBeNull())
+
+    cleanup()
+    render(<App />)
+    await screen.findByLabelText('What happened?')
+    await waitFor(() => expect(screen.getByText(/waiting to sync/)).toBeTruthy())
+    expect(screen.queryByText('lunch swiggy')).toBeNull()
+  })
+
+  it('keeps an edit made offline', async () => {
+    rowsOnServer = [row]
+    await open()
+    await userEvent.click(await screen.findByText('lunch swiggy'))
+
+    unreachable = true
+    const title = screen.getByLabelText('Title')
+    await userEvent.clear(title)
+    await userEvent.type(title, 'dinner instead')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(screen.getByText('dinner instead')).toBeTruthy())
+
+    cleanup()
+    render(<App />)
+    await waitFor(() => expect(screen.getByText('dinner instead')).toBeTruthy())
+    expect(screen.queryByText('lunch swiggy')).toBeNull()
+  })
+})
+
 describe('asking, once everything is wired', () => {
   it('answers from the whole log rather than the visible day', async () => {
     rowsOnServer = [
@@ -427,5 +793,111 @@ describe('asking, once everything is wired', () => {
     // The card leads with the count; the live region says the whole sentence.
     await waitFor(() => expect(screen.getByText('1 day')).toBeTruthy())
     expect(screen.getByText('1 day · 1h · last today')).toBeTruthy()
+  })
+})
+
+describe('using the app without an account', () => {
+  /**
+   * The auth gate was the last thing here that needed a network and did not.
+   * Nothing about parsing, drawing a day, totalling it or raising a reminder
+   * involves the server, so a sign-in form in front of all of it was asking for
+   * a round trip to reach a text box.
+   */
+  it('logs and totals with no account at all', async () => {
+    who = { id: 'local-guest', email: '', local: true }
+    const box = await open()
+    await userEvent.type(box, '350 lunch swiggy{Enter}')
+
+    await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
+    // The totals line, not the row — both print ₹350, which is the arithmetic
+    // working rather than a duplicate. Read off the line, because the figure
+    // and its label are separate nodes now.
+    expect(screen.getByText('1 entry').closest('p')?.textContent).toContain('₹350 spent')
+  })
+
+  it('never labels a guest row as owed, queued or failed', async () => {
+    // There is no server to be behind. Marking every row "saved here, not
+    // synced" would be the app apologising for working exactly as designed.
+    who = { id: 'local-guest', email: '', local: true }
+    const box = await open()
+    await userEvent.type(box, '350 lunch swiggy{Enter}')
+
+    await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
+    expect(screen.queryByText(/saved here, not synced/)).toBeNull()
+    expect(screen.queryByText(/waiting to sync/)).toBeNull()
+    expect(screen.queryByText(/Offline/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+
+  it('answers a question from a log no server has ever seen', async () => {
+    who = { id: 'local-guest', email: '', local: true }
+    const box = await open()
+    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, 'how much today')
+
+    await waitFor(() => expect(screen.getByText(/₹350 · 1 entry/)).toBeTruthy())
+  })
+
+  it('offers an account rather than a sign-out, which would read as "delete my log"', async () => {
+    who = { id: 'local-guest', email: '', local: true }
+    await open()
+    await userEvent.click(screen.getByLabelText('Profile and settings'))
+
+    expect(screen.getByText('No account')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in to sync' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull()
+  })
+
+  it('keeps the log behind the sign-in screen it opens', async () => {
+    who = { id: 'local-guest', email: '', local: true }
+    const box = await open()
+    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
+
+    await userEvent.click(screen.getByLabelText('Profile and settings'))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in to sync' }))
+
+    // A way back matters: reaching sign-in must not be a one-way door out of a
+    // log that is sitting on the device.
+    const back = await screen.findByRole('button', { name: 'Back to the log' })
+    await userEvent.click(back)
+    await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
+  })
+
+  it('does not offer a second empty log to somebody who already has one', async () => {
+    who = { id: 'local-guest', email: '', local: true }
+    await open()
+    await userEvent.click(screen.getByLabelText('Profile and settings'))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in to sync' }))
+
+    await screen.findByRole('button', { name: 'Back to the log' })
+    expect(screen.queryByRole('button', { name: /without an account/ })).toBeNull()
+  })
+})
+
+describe('the way in for somebody with no account', () => {
+  it('offers guest access on the first screen, not just a sign-in form', async () => {
+    // The app needs no account to do any of its work, so a sign-in form as the
+    // only way past the first screen was asking for a round trip to reach a
+    // text box.
+    who = null
+    render(<App />)
+
+    const guest = await screen.findByRole('button', { name: 'Continue as guest' })
+    expect(guest).toBeTruthy()
+    // And it says what the trade is, rather than leaving it to be discovered.
+    expect(screen.getByText(/signing in later brings it with you/i)).toBeTruthy()
+  })
+
+  it('tells a guest what signing in does to the log they already have', async () => {
+    who = { id: 'local-guest', email: '', local: true }
+    await open()
+    await userEvent.click(screen.getByLabelText('Profile and settings'))
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in to sync' }))
+
+    await screen.findByRole('button', { name: 'Back to the log' })
+    expect(screen.getByText(/moves to your account/i)).toBeTruthy()
+    expect(screen.getByText(/Nothing is lost/i)).toBeTruthy()
   })
 })

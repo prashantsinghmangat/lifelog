@@ -82,10 +82,53 @@ export function payloadOf(row: Pending): Record<string, unknown> {
   }
 }
 
+const KINDS = new Set(['expense', 'time', 'event', 'note'])
+/** A local calendar day, which is the only shape `parseISO` is ever handed. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/** Present and of the right type, or absent — never something else. */
+function optional(value: unknown, type: 'string' | 'number'): boolean {
+  return value === null || value === undefined || typeof value === type
+}
+
+/**
+ * Every field the app dereferences without first asking whether it can.
+ *
+ * This guard's whole promise is that a corrupt or half-written value costs a
+ * fetch rather than the app, so it has to cover what the app actually reads —
+ * and checking only `id` and `occurred_on` did not. Each of these is a real way
+ * a bad row takes the screen down or corrupts a number, on every launch, with
+ * the value still in `localStorage` and no screen left to clear it from:
+ *
+ * - `title` — React throws outright when asked to render an object as a child.
+ * - `kind` — `KIND_NAME[kind]` and the colour maps are total over four values.
+ * - `occurred_on` — `parseISO` feeds `format`, which throws on an invalid date.
+ * - `occurred_at` — same, by way of `clock` and the occurrence rewriter.
+ * - `data` — `done`, `weeklyDays` and `repeatLabel` read into it on every row.
+ * - `amount_paise` — `total + row.amount_paise` on a string *concatenates*, so
+ *   a day of ₹350 and ₹120 silently totals "0350120" rather than failing.
+ */
 function isEntry(value: unknown): value is Entry {
   if (typeof value !== 'object' || value === null) return false
   const row = value as Partial<Entry>
-  return typeof row.id === 'string' && typeof row.occurred_on === 'string'
+
+  return (
+    typeof row.id === 'string' &&
+    row.id !== '' &&
+    typeof row.title === 'string' &&
+    typeof row.kind === 'string' &&
+    KINDS.has(row.kind) &&
+    typeof row.occurred_on === 'string' &&
+    DAY.test(row.occurred_on) &&
+    typeof row.created_at === 'string' &&
+    optional(row.occurred_at, 'string') &&
+    optional(row.note, 'string') &&
+    optional(row.category, 'string') &&
+    optional(row.amount_paise, 'number') &&
+    optional(row.duration_minutes, 'number') &&
+    typeof row.data === 'object' &&
+    row.data !== null
+  )
 }
 
 /**
@@ -157,6 +200,49 @@ export function save(storage: Storage, userId: string, state: Stored): void {
   }
 }
 
+/**
+ * Moves a guest log onto the account that has just signed in.
+ *
+ * A log kept without an account is keyed by a local id, and signing in would
+ * otherwise swap the key and leave every entry on the device, unreachable and
+ * looking deleted — which is a worse first impression than the sign-in wall this
+ * replaces.
+ *
+ * **Every adopted row is queued.** The server has never seen one of them, and
+ * each is a full-row upsert, so re-queueing the lot is both correct and cheap:
+ * the ids are uuids generated here, so nothing can collide with what the account
+ * already holds. The guest's *pending* list is deliberately dropped — it records
+ * writes owed for rows the server never had, including deletes of entries that
+ * never reached it, and replaying those would ask the server to delete rows that
+ * do not exist.
+ *
+ * The old key is removed last: a failure before that point leaves the guest log
+ * exactly where it was, which is the safe direction to fail in.
+ */
+export function adopt(storage: Storage, from: string, to: string, at: string): void {
+  const guest = load(storage, from)
+
+  if (guest.entries.length > 0) {
+    const moving = new Set(guest.entries.map((row) => row.id))
+    const account = load(storage, to)
+
+    save(storage, to, {
+      version: VERSION,
+      entries: [...account.entries.filter((row) => !moving.has(row.id)), ...guest.entries],
+      pending: [
+        ...account.pending.filter((row) => !moving.has(row.id)),
+        ...guest.entries.map((row) => ({ ...row, deleted_at: null, queued_at: at })),
+      ],
+    })
+  }
+
+  try {
+    storage.removeItem(keyFor(from))
+  } catch {
+    // The log has already been copied; a key left behind costs only space.
+  }
+}
+
 function replace<T extends { id: string }>(rows: T[], row: T): T[] {
   const at = rows.findIndex((current) => current.id === row.id)
   if (at === -1) return [...rows, row]
@@ -193,6 +279,13 @@ export function settle(state: Stored, id: string, queuedAt: string): Stored {
   }
 }
 
+/** Whether `created` is at or after `since`, across either stamp's offset. */
+function loggedSince(created: string, since: string): boolean {
+  const at = Date.parse(created)
+  const from = Date.parse(since)
+  return Number.isFinite(at) && Number.isFinite(from) && at >= from
+}
+
 /**
  * Folds a successful read into what this device holds.
  *
@@ -201,8 +294,22 @@ export function settle(state: Stored, id: string, queuedAt: string): Stored {
  * the server's copy of it — the server is the one that is out of date, and
  * overwriting a local edit with the version it is about to replace is how an
  * offline change disappears the moment the network returns.
+ *
+ * **`since` is when the read was sent, and it is what stops a read from
+ * deleting something logged after it.** A read is only evidence about the log
+ * as it was when the server answered it. An entry typed while a read was in
+ * flight, whose own write then landed first, is absent from that reply and not
+ * pending any more — so it was dropped from the device, vanishing from the
+ * screen while sitting safely on the server until something happened to fetch
+ * it again. Arrowing to another day and typing straight away is enough to reach
+ * it, and a disappearing entry is the worst thing this app can do.
  */
-export function reconcile(state: Stored, fetched: Entry[], day: string | null): Stored {
+export function reconcile(
+  state: Stored,
+  fetched: Entry[],
+  day: string | null,
+  since?: string,
+): Stored {
   const pendingIds = new Set(state.pending.map((row) => row.id))
   const incoming = fetched.filter((row) => !pendingIds.has(row.id))
 
@@ -214,7 +321,9 @@ export function reconcile(state: Stored, fetched: Entry[], day: string | null): 
   const kept = state.entries.filter(
     (row) =>
       !arriving.has(row.id) &&
-      (pendingIds.has(row.id) || (day !== null && row.occurred_on !== day)),
+      (pendingIds.has(row.id) ||
+        (since !== undefined && loggedSince(row.created_at, since)) ||
+        (day !== null && row.occurred_on !== day)),
   )
 
   return { version: VERSION, entries: [...kept, ...incoming], pending: state.pending }

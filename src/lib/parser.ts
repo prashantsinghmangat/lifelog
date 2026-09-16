@@ -1,5 +1,6 @@
 import { addDays, format, parseISO, startOfDay, subDays } from 'date-fns'
 import type { Kind } from '../types'
+import { amountFits, minutesFit } from './format'
 import { categoryForWord } from './merchants'
 
 export type ParsedEntry = {
@@ -222,15 +223,15 @@ const MINUTES = '(?:minutes?|mins?|m)'
 function takeDuration(input: string): Cut<number> | null {
   return (
     cut(input, new RegExp(`\\b(\\d+)\\s*${HOURS}\\s*(\\d+)\\s*${MINUTES}\\b`, 'i'), (m) =>
-      int(m[1]) * 60 + int(m[2]),
+      asMinutes(int(m[1]) * 60 + int(m[2])),
     ) ??
     // `2h30`, with the m dropped. The space is forbidden on purpose: in
     // `2h 500 client work` the 500 is an amount, not thirty-plus hours of minutes.
-    cut(input, /\b(\d+)h([0-5]?\d)\b/i, (m) => int(m[1]) * 60 + int(m[2])) ??
+    cut(input, /\b(\d+)h([0-5]?\d)\b/i, (m) => asMinutes(int(m[1]) * 60 + int(m[2]))) ??
     cut(input, new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*${HOURS}\\b`, 'i'), (m) =>
-      Math.round(Number(m[1]) * 60),
+      asMinutes(Number(m[1]) * 60),
     ) ??
-    cut(input, new RegExp(`\\b(\\d+)\\s*${MINUTES}\\b`, 'i'), (m) => int(m[1]))
+    cut(input, new RegExp(`\\b(\\d+)\\s*${MINUTES}\\b`, 'i'), (m) => asMinutes(int(m[1])))
   )
 }
 
@@ -367,20 +368,71 @@ export function recurringTitle(title: string): boolean {
 }
 
 const AMOUNT = '(\\d[\\d,]*(?:\\.\\d{1,2})?)'
+const CURRENCY = '(?:₹|\\brs\\.?|\\binr\\.?)'
+const SUFFIX = '(?:₹|rs\\.?|inr\\.?|rupees?)\\b'
 
+/**
+ * A minus only at the start of a word, never mid-token.
+ *
+ * `covid-19 test 500` and `9-6 work` both carry a hyphen between digits and
+ * neither is a negative number, so a bare `-?` in front of the amount would
+ * turn the first into minus nineteen rupees. Requiring the line's start or a
+ * space before it keeps every existing reading exactly as it was.
+ */
+const MINUS = '(?:^|\\s)-\\s*'
+
+/**
+ * Money can be negative, because a refund is money.
+ *
+ * The rest of the money model already says so: the column is a signed integer,
+ * `rupees` prints a leading minus, and `paiseFrom` has always accepted one — so
+ * the editor stored refunds correctly while the parser threw the sign away and
+ * filed `-50 refund` as fifty rupees *spent*, quietly inflating the day's
+ * total. That is the one reading here that can be wrong without looking wrong.
+ *
+ * This is not a fifth kind and not a new concept: it is an expense of −₹50.
+ */
 function takeAmount(input: string, currencyOnly: boolean): Cut<number> | null {
   const marked =
-    cut(input, new RegExp(`(?:₹|\\brs\\.?|\\binr\\.?)\\s*${AMOUNT}`, 'i'), toPaise) ??
+    cut(input, new RegExp(`${CURRENCY}\\s*-\\s*${AMOUNT}`, 'i'), negated) ??
+    cut(input, new RegExp(`${CURRENCY}\\s*${AMOUNT}`, 'i'), toPaise) ??
+    cut(input, new RegExp(`${MINUS}${AMOUNT}\\s*${SUFFIX}`, 'i'), negated) ??
     // Suffixed, as in `350rs` or `100 rupees`. No \b before `rs`: there is no word
     // boundary between `0` and `r`, which is exactly the case this has to catch.
-    cut(input, new RegExp(`\\b${AMOUNT}\\s*(?:₹|rs\\.?|inr\\.?|rupees?)\\b`, 'i'), toPaise)
+    cut(input, new RegExp(`\\b${AMOUNT}\\s*${SUFFIX}`, 'i'), toPaise)
   if (marked || currencyOnly) return marked
-  return cut(input, new RegExp(`\\b${AMOUNT}\\b`), toPaise)
+
+  return (
+    cut(input, new RegExp(`${MINUS}${AMOUNT}`), negated) ??
+    cut(input, new RegExp(`\\b${AMOUNT}\\b`), toPaise)
+  )
 }
 
+function negated(m: RegExpMatchArray): number | null {
+  const paise = toPaise(m)
+  return paise === null ? null : -paise
+}
+
+/**
+ * Out of range is not an amount.
+ *
+ * `amount_paise` is a Postgres `integer`, so a bigger number is one this device
+ * would store, total into the day and then owe the server for ever — refused
+ * with `22003` on every attempt. Returning null makes the pattern simply not
+ * match, so the digits stay in the title exactly as any other number the parser
+ * cannot use does, and nothing on screen ever claims the money was recorded.
+ */
 function toPaise(m: RegExpMatchArray): number | null {
   const raw = Number((m[1] ?? '').replace(/,/g, ''))
-  return Number.isFinite(raw) ? Math.round(raw * 100) : null
+  if (!Number.isFinite(raw)) return null
+  const paise = Math.round(raw * 100)
+  return amountFits(paise) ? paise : null
+}
+
+/** The same bound for the other integer column. */
+function asMinutes(value: number): number | null {
+  const whole = Math.round(value)
+  return minutesFit(whole) ? whole : null
 }
 
 function collapse(text: string): string {

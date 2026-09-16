@@ -1,5 +1,4 @@
-import { parseISO } from 'date-fns'
-import { done, nextOccurrence } from './events'
+import { done, nextFireAt } from './events'
 import type { Entry } from '../types'
 
 /**
@@ -17,14 +16,6 @@ const HORIZON_DAYS = 14
 
 export type Upcoming = { entry: Entry; at: Date }
 
-/** The clock an occurrence happens at — 9am when the entry carries no time. */
-function moment(entry: Entry, day: Date): Date {
-  const at = entry.occurred_at === null ? null : parseISO(entry.occurred_at)
-  const when = new Date(day)
-  when.setHours(at?.getHours() ?? 9, at?.getMinutes() ?? 0, 0, 0)
-  return when
-}
-
 export function ahead(entries: Entry[], now: Date, horizon = HORIZON_DAYS): Upcoming[] {
   const until = new Date(now)
   until.setDate(until.getDate() + horizon)
@@ -35,11 +26,9 @@ export function ahead(entries: Entry[], now: Date, horizon = HORIZON_DAYS): Upco
     // Ticked off means it is not coming, the same way it means silent.
     if (done(entry)) continue
 
-    const day = nextOccurrence(entry, now)
-    if (day === null) continue
-
-    const at = moment(entry, day)
-    if (at <= now || at > until) continue
+    // Already past is `nextFireAt`'s own answer now — null, not a stale moment.
+    const at = nextFireAt(entry, now)
+    if (at === null || at > until) continue
 
     found.push({ entry, at })
   }

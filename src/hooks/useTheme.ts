@@ -29,7 +29,10 @@ export function useTheme() {
       const resolved = theme === 'system' ? (media.matches ? 'dark' : 'light') : theme
       document.documentElement.dataset.theme = resolved
       const meta = document.querySelector('meta[name="theme-color"]')
-      if (meta) meta.setAttribute('content', resolved === 'dark' ? '#0d1220' : '#111827')
+      // The surface itself, not the ink: drawn edge-to-edge the browser chrome
+      // is a continuation of the page, and a dark bar over a paper-coloured
+      // page reads as a header the app does not have.
+      if (meta) meta.setAttribute('content', resolved === 'dark' ? '#141311' : '#faf9f7')
     }
 
     apply()

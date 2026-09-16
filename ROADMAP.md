@@ -13,10 +13,10 @@ is a regression.
 | Web | https://lifelog-timeline.netlify.app, auto-deployed from `main` |
 | Android | Capacitor shell, installed by `npm run android:install` |
 | iOS | the web app, installable as a PWA — **never tested** |
-| Tests | 185, across parser, format, ics, query, reminders, sign-in links and backup |
-| Bundle | ~127 KB gzipped against a 150 KB budget |
+| Tests | 578, across the pure libraries plus component journeys for the app, the editor, the capture box and the sheets |
+| Bundle | ~138 KB gzipped against a 150 KB budget |
 | Data | one `entries` table, RLS verified, soft deletes, nightly backups off-site |
-| Runtime deps | react, react-dom, supabase-js, date-fns, Capacitor, @netlify/blobs |
+| Runtime deps | react, react-dom, supabase-js, date-fns, Capacitor (core, android, local-notifications, app), @netlify/blobs |
 
 ---
 

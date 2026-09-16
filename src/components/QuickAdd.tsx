@@ -23,11 +23,45 @@ const EXAMPLES: { typed: string; becomes: string; kind: Kind }[] = [
   { typed: 'dentist tomorrow 5pm', becomes: 'a reminder that will ring', kind: 'event' },
 ]
 
+/**
+ * What the box can be asked, for the moment it is switched to Ask.
+ *
+ * The toggle says the box has a second job and then hands over a blank field and
+ * a placeholder, which names the job without saying what it can do — so the half
+ * of the app that answers questions was reachable and unknowable at the same
+ * time. These are the same thing the empty day does for logging: the feature
+ * demonstrated rather than described.
+ *
+ * Every one of them is deliberately **subject-free** — a period and a measure,
+ * nothing else. A suggestion naming a merchant or a person would answer "nothing
+ * found" on a log that has never mentioned them, which is the worst possible
+ * first impression of the thing being introduced. These answer from whatever the
+ * log happens to hold.
+ *
+ * Tapping fills the box rather than submitting, as the log examples do — but
+ * here that *is* asking, because the answer is computed as you type. The text
+ * stays put afterwards, so the question can be edited into the next one.
+ */
+const QUESTIONS = ['how much this month', 'hours worked this week', 'what happened last week']
+
+/** Written out, never interpolated: Tailwind only compiles classes it can see. */
+const DOT: Record<Kind, string> = {
+  expense: 'bg-expense',
+  time: 'bg-time',
+  event: 'bg-event',
+  note: 'bg-note',
+}
+
 type Mode = 'log' | 'ask'
 
 /** The text as the question grammar wants it: exactly one leading `?`. */
 function asQuestion(text: string): string {
   return `? ${text.replace(/^\s*\?+\s*/, '')}`
+}
+
+/** The same text as something to log: the question mark is not part of it. */
+function asEntry(text: string): string {
+  return text.replace(/^\s*\?+\s*/, '')
 }
 
 type Props = {
@@ -123,7 +157,7 @@ export function QuickAdd({
    * button, never acted on by itself.
    */
   const wouldLog = useMemo(
-    () => (mode === 'ask' && trimmed !== '' ? parse(text, new Date(now), day) : null),
+    () => (mode === 'ask' && trimmed !== '' ? parse(asEntry(text), new Date(now), day) : null),
     [mode, trimmed, text, now, day],
   )
   useEffect(() => {
@@ -161,7 +195,11 @@ export function QuickAdd({
   }
 
   return (
-    <form onSubmit={submit}>
+    // A column so the two halves can swap. Docked to the bottom on a phone, the
+    // field has to be the *last* thing in the form or the answer and the
+    // examples sit below the screen edge; at the top on a wide screen it has to
+    // be the first. Ordering rather than two render sites — see `App`.
+    <form onSubmit={submit} className="flex flex-col">
       {/* One control, two rows: what you typed, then how it parsed.
           The parse line used to sit outside and below, reserving its height
           whether or not it had anything to say — about 90px of dead space
@@ -171,7 +209,11 @@ export function QuickAdd({
           height is fixed by the control itself, so nothing below it ever
           moves, and the preview reads as part of what you are typing rather
           than as an orphaned caption. */}
-      <div className="rounded-lg border border-edge bg-surface focus-within:border-ink">
+      {/* `capture` is read by one rule in `index.css`, which moves the focus
+          ring from the field onto the control — see there. Raised off the page
+          rather than drawn on it: this is the strongest interactive thing on
+          the screen and the only one that has to be found without looking. */}
+      <div className="capture order-last mt-2 rounded-xl border border-edge bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors focus-within:border-muted lg:order-first lg:mt-0">
         <input
           id="quick-add"
           type="text"
@@ -214,7 +256,7 @@ export function QuickAdd({
               }
             }
           }}
-          className="w-full bg-transparent px-3.5 pt-3 pb-2 text-base text-ink outline-none"
+          className="w-full bg-transparent px-4 pt-3 pb-2 text-base text-ink outline-none placeholder:text-faint"
         />
 
         {/* The second row of the control: what the box does, then how it read
@@ -223,6 +265,11 @@ export function QuickAdd({
             what keeps the height fixed — and an empty strip inside a bordered
             box reads as a rendering fault. 44px targets, so the row is 44px. */}
         <div className="flex items-center border-t border-line px-2">
+          {/* Two words, and which one is live has to be obvious at a glance:
+              weight alone was doing that job, and weight alone is what a
+              disabled control also looks like. The selected word now sits in a
+              filled pill. The pill is 28px and the button around it is 44 —
+              the target is not allowed to shrink to fit the decoration. */}
           <div role="group" aria-label="What the box does" className="flex shrink-0 items-center">
             {(['log', 'ask'] as const).map((option) => (
               <button
@@ -233,11 +280,19 @@ export function QuickAdd({
                   setMode(option)
                   document.getElementById('quick-add')?.focus()
                 }}
-                className={`flex h-11 items-center px-1.5 text-xs ${
-                  mode === option ? 'font-medium text-ink' : 'text-faint'
-                }`}
+                className="flex h-11 items-center px-0.5"
               >
-                {option === 'log' ? 'Log' : 'Ask'}
+                <span
+                  // `min-h`, not `h`: the pill is sized by the word inside it,
+                  // and at Android's 2× font scale a fixed height clips it.
+                  className={`flex min-h-7 items-center rounded-full px-2.5 py-1 text-xs transition-colors ${
+                    mode === option
+                      ? 'bg-sunken font-medium text-ink'
+                      : 'text-faint hover:text-muted'
+                  }`}
+                >
+                  {option === 'log' ? 'Log' : 'Ask'}
+                </span>
               </button>
             ))}
           </div>
@@ -249,7 +304,7 @@ export function QuickAdd({
             id="quick-add-preview"
             role="status"
             aria-live="polite"
-            className="min-w-0 flex-1 truncate px-1.5 text-xs"
+            className="min-w-0 flex-1 truncate px-2 text-xs"
           >
             {dictation.error !== null ? (
               <span className="text-expense">{dictation.error}</span>
@@ -261,7 +316,17 @@ export function QuickAdd({
             ) : asking ? (
               <span className="text-faint">…</span>
             ) : parsed ? (
-              <span className="text-muted">
+              // The whole line is one text node on purpose — it is read aloud as
+              // one phrase, and splitting it into coloured parts would turn a
+              // reassurance into a debug dump. The accent is a 5px dot in the
+              // kind's colour, carrying no meaning the word beside it does not.
+              <span className="text-muted tabular-nums">
+                <span
+                  aria-hidden="true"
+                  className={`mr-1.5 mb-px inline-block h-[5px] w-[5px] rounded-full align-middle ${
+                    DOT[parsed.kind]
+                  }`}
+                />
                 {summarise(parsed, sameDay, now)}
                 {!sameDay && (
                   <span className="font-medium text-event">
@@ -276,14 +341,20 @@ export function QuickAdd({
           {/* One slot: the mic while the box is empty, send once there is
               something to save. A send affordance has to be visible — on a
               phone the keyboard's action key was the only way in, and it did
-              nothing. */}
+              nothing.
+
+              Filled once it is live. An outline arrow the same weight as the
+              mic beside it said "there is a button here"; it did not say that
+              pressing it is the thing you came to do. */}
           {ready ? (
             <button
               type="submit"
               aria-label="Save entry"
-              className="flex h-11 w-9 shrink-0 items-center justify-center text-ink"
+              className="-mr-0.5 flex h-11 w-11 shrink-0 items-center justify-center"
             >
-              <ArrowUpIcon size={20} />
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink text-surface">
+                <ArrowUpIcon size={17} />
+              </span>
             </button>
           ) : (
             dictation.supported && (
@@ -292,8 +363,8 @@ export function QuickAdd({
                 aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
                 aria-pressed={dictation.listening}
                 onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
-                className={`flex h-11 w-9 shrink-0 items-center justify-center ${
-                  dictation.listening ? 'text-expense' : 'text-faint'
+                className={`-mr-0.5 flex h-11 w-11 shrink-0 items-center justify-center transition-colors ${
+                  dictation.listening ? 'text-expense' : 'text-faint hover:text-muted'
                 }`}
               >
                 <MicIcon size={18} />
@@ -325,14 +396,19 @@ export function QuickAdd({
         <button
           type="button"
           onClick={() => {
-            onSubmit(wouldLog)
+            // Re-parsed against the real clock for the same reason `submit`
+            // does: `now` is a 30-second tick, and a reminder measured from a
+            // stale one can already be due and is then silently skipped. The
+            // preview above is allowed to be a tick behind; what gets saved is
+            // not.
+            onSubmit(parse(asEntry(text), new Date(), day) ?? wouldLog)
             setText('')
             setMode('log')
           }}
-          className="mt-2 flex h-11 w-full items-center gap-2 rounded-lg border border-edge px-3 text-xs active:bg-raised"
+          className="mt-2 flex h-11 w-full items-center gap-2 rounded-lg border border-edge px-3 text-xs transition-colors hover:bg-sunken active:bg-sunken"
         >
           <ArrowUpIcon size={14} className="shrink-0 text-muted" />
-          <span className="shrink-0 text-muted">Log instead</span>
+          <span className="shrink-0 font-medium text-muted">Log instead</span>
           {/* The same words the preview would have used, so what the button is
               about to record is on the button. */}
           <span className="min-w-0 truncate text-faint">
@@ -341,18 +417,66 @@ export function QuickAdd({
         </button>
       )}
 
-      {showExamples && (
-        <div className="mt-4">
-          <p className="px-1 text-xs text-faint">Nothing here yet — try one of these.</p>
+      {/* Switched to Ask with nothing typed yet — the one moment where saying
+          what the box can answer costs nothing, because there is no answer on
+          screen to push down. Gone as soon as there is any text, so it never
+          sits under a result. */}
+      {mode === 'ask' && trimmed === '' && (
+        <div className="mt-5">
+          <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+            Try asking
+          </p>
 
-          <div className="mt-1">
+          <div className="mt-1.5">
+            {QUESTIONS.map((asked) => (
+              <button
+                key={asked}
+                type="button"
+                onClick={() => {
+                  setText(asked)
+                  document.getElementById('quick-add')?.focus()
+                }}
+                className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
+              >
+                {/* The glyph, not a drawn icon — the same call `KindMark` makes
+                    for the rupee, and it sits in the same 20px gutter so these
+                    line up with the rows they are standing in for. */}
+                <span className="flex w-5 shrink-0 justify-center text-faint" aria-hidden="true">
+                  <span className="text-[0.9375rem] leading-none font-semibold">?</span>
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm text-muted">{asked}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* The manual's Asking section covers the half these three cannot:
+              naming a subject, and a single day. */}
+          <button
+            type="button"
+            onClick={onHelp}
+            className="-ml-1 mt-1 flex h-11 items-center px-1 text-xs text-muted underline decoration-edge underline-offset-2 hover:decoration-muted"
+          >
+            all examples
+          </button>
+        </div>
+      )}
+
+      {/* Only while logging: on an empty day in Ask mode the questions above are
+          the useful thing, and both at once is two lists of examples. */}
+      {showExamples && mode === 'log' && (
+        <div className="mt-5">
+          <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+            Nothing here yet
+          </p>
+
+          <div className="mt-1.5">
             {EXAMPLES.map((example) => (
               <button
                 key={example.typed}
                 type="button"
                 // Fills the input instead of submitting, so the syntax is learned by editing.
                 onClick={() => setText(example.typed)}
-                className="flex min-h-12 w-full items-center gap-3 border-b border-line py-2 text-left active:bg-raised"
+                className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
               >
                 {/* Faded, because these are not entries — they are what an entry
                     would look like if you typed the line beside them. */}
@@ -369,15 +493,25 @@ export function QuickAdd({
             ))}
           </div>
 
-          {/* Three examples teach the shape; the manual teaches the rest. Someone
-              new never opens a settings sheet to find out how to type. */}
-          <button
-            type="button"
-            onClick={onHelp}
-            className="mt-1 flex h-11 items-center px-1 text-xs text-muted underline"
-          >
-            all examples
-          </button>
+          <div className="mt-1 flex items-baseline justify-between gap-3">
+            {/* Three examples teach the shape; the manual teaches the rest.
+                Someone new never opens a settings sheet to find out how to
+                type. */}
+            <button
+              type="button"
+              onClick={onHelp}
+              className="-ml-1 flex h-11 items-center px-1 text-xs text-muted underline decoration-edge underline-offset-2 hover:decoration-muted"
+            >
+              all examples
+            </button>
+
+            {/* The one thing the examples cannot say: how to get to another day.
+                It belongs *here* rather than under the timeline, because with
+                the control docked to the bottom the timeline's empty space sits
+                between the two — the hint was left stranded at the top of the
+                screen, a paragraph away from the block it completes. */}
+            <p className="shrink-0 text-xs text-faint">Swipe sideways for another day.</p>
+          </div>
         </div>
       )}
     </form>

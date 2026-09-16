@@ -20,17 +20,19 @@ import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { ahead } from './lib/ahead'
+import { arm as armBack } from './lib/back'
 import { download, shareOrDownload } from './lib/deliver'
 import { passed } from './lib/events'
 import { clock, dayKey, dayLabel, minutes, relativeDay, rowValue, rupees } from './lib/format'
 import { byClock, onThisDay } from './lib/history'
 import { forget } from './lib/identity'
 import { forCalendar, toIcs } from './lib/ics'
-import { occurrencesOn } from './lib/occurrences'
+import { isOccurrence, occurrencesOn } from './lib/occurrences'
 import { isNative } from './lib/platform'
 import {
   cancel as cancelReminder,
   permission as reminderPermission,
+  rearm as rearmReminder,
   requestPermission,
   schedule as scheduleReminder,
   scheduleNudges,
@@ -40,26 +42,66 @@ import { supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
 import type { Entry } from './types'
 
+/** Whatever was thrown, as something a person can read. */
+function message(failure: unknown): string {
+  return failure instanceof Error ? failure.message : String(failure)
+}
+
 export default function App() {
-  const { identity, loading } = useSession()
+  const { identity, loading, startGuest } = useSession()
   // Resolved before the auth gate, so the login screen honours the choice too.
   const { theme, choose } = useTheme()
+  /** A guest who has asked to sign in. The log is still there behind this. */
+  const [signingIn, setSigningIn] = useState(false)
+
+  // Armed here rather than inside `Day`, so it covers the sign-in screen too
+  // and survives a guest signing in — which unmounts and remounts `Day`.
+  // Nothing happens away from native.
+  useEffect(() => {
+    let live = true
+    let disarm: (() => void) | null = null
+    void armBack().then((off) => {
+      // The listener can land after this effect has already been torn down,
+      // which is exactly what a StrictMode double-mount does in development.
+      if (live) disarm = off
+      else off()
+    })
+    return () => {
+      live = false
+      disarm?.()
+    }
+  }, [])
 
   if (loading) return <div className="p-4 text-sm text-faint">…</div>
-  if (identity === null) return <Login />
+  if (identity === null) return <Login onGuest={startGuest} />
+  // No `onGuest`: this reader already has a log, and starting a second empty one
+  // is not an offer, it is a way to lose the first.
+  if (signingIn) return <Login onCancel={() => setSigningIn(false)} />
 
-  return <Day email={identity.email} userId={identity.id} theme={theme} onTheme={choose} />
+  return (
+    <Day
+      email={identity.email}
+      userId={identity.id}
+      local={identity.local === true}
+      theme={theme}
+      onTheme={choose}
+      onSignIn={() => setSigningIn(true)}
+    />
+  )
 }
 
 type DayProps = {
   email: string
   /** Keys this device's copy of the log, so two accounts cannot see each other's. */
   userId: string
+  /** No account behind the log, so nothing here may claim to be syncing. */
+  local: boolean
   theme: ReturnType<typeof useTheme>['theme']
   onTheme: ReturnType<typeof useTheme>['choose']
+  onSignIn: () => void
 }
 
-function Day({ email, userId, theme, onTheme }: DayProps) {
+function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
   const { nudges, choose: chooseNudges } = useNudges()
   const [now, setNow] = useState(() => new Date())
   const [day, setDay] = useState(() => dayKey(new Date()))
@@ -97,7 +139,7 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
     retry,
     fetchAll,
     fetchDays,
-  } = useEntries(day, userId)
+  } = useEntries(day, userId, local)
 
   // A tab left open overnight would keep parsing `today` as yesterday. The
   // interval matters as much as the events: with the app simply left open,
@@ -173,6 +215,25 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
     [entries, all, day],
   )
 
+  /**
+   * The row as it is actually stored, for anything that writes.
+   *
+   * A derived occurrence carries the day it was *drawn* on, not the day the
+   * repeat starts. Handing one to the editor therefore saved that day back onto
+   * the row: opening Tuesday's standup and pressing Save moved the series start
+   * from Monday to Tuesday, and opening a birthday logged in 2010 from this
+   * year's view rewrote its year to this one — the original date gone, with
+   * nothing on screen to say so. Delete and Undo went the same way, since Undo
+   * restores whatever row it was handed.
+   *
+   * One row, one thing to edit, one thing to delete: reading is what may be
+   * derived, writing is not.
+   */
+  const asStored = useCallback(
+    (row: Row): Row => (isOccurrence(row) ? (all.find((held) => held.id === row.id) ?? row) : row),
+    [all],
+  )
+
   // Totalled from the stored rows only. A derived occurrence is the same entry
   // seen from another day, so counting it would say a repeating entry cost five
   // times what it did.
@@ -196,6 +257,31 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
     } catch (failure) {
       setToast({ text: failure instanceof Error ? failure.message : 'Could not share' })
     }
+  }
+
+  /**
+   * Re-arms an edited entry, and says so when it could not.
+   *
+   * Every other scheduling path reports its outcome — `reminders.ts` returns one
+   * precisely because three bugs here were invisible for as long as their
+   * promises rejected into nothing. The editor was the one that did not: an edit
+   * that moved a reminder's time cancelled the old alarm and then failed to set
+   * the new one in silence, leaving an entry on screen with a time and no alarm
+   * behind it. The ordering inside the re-arm is `reminders.ts`'s problem.
+   */
+  function rearmRow(row: Row, at: Date) {
+    void rearmReminder(row, at)
+      .then((result) => {
+        if (result === 'blocked') {
+          setNotify('denied')
+          setToast({ text: 'Saved, but reminders are blocked' })
+        } else if (result === 'stale') {
+          setToast({ text: 'Saved, but an old reminder may still fire' })
+        }
+      })
+      .catch((failure: unknown) => {
+        setToast({ text: `Reminder failed: ${message(failure)}` })
+      })
   }
 
   // A reinstall resets the permission, so the state has to be read on launch
@@ -298,17 +384,23 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
       // Without this the promise rejects into nothing: a plugin that throws
       // looked exactly like a reminder that worked.
       .catch((failure: unknown) => {
-        setToast({
-          text: `Reminder failed: ${failure instanceof Error ? failure.message : String(failure)}`,
-        })
+        setToast({ text: `Reminder failed: ${message(failure)}` })
       })
   }
 
   function deleteRow(row: Row) {
+    const undo = { label: 'Undo', run: () => restore(row) }
     remove(row)
-    void cancelReminder(row)
     setEditing(null)
-    setToast({ text: 'Entry deleted', action: { label: 'Undo', run: () => restore(row) } })
+    setToast({ text: 'Entry deleted', action: undo })
+
+    // Caught, not voided into nothing. An alarm the plugin refused to cancel is
+    // going to ring for a row that is no longer on screen, which is the one
+    // reminder failure nobody can explain afterwards. The warning keeps Undo on
+    // it: replacing the message must not also take away the way back.
+    void cancelReminder(row).catch(() => {
+      setToast({ text: 'Deleted, but its reminder may still fire', action: undo })
+    })
   }
 
   async function exportJson() {
@@ -355,13 +447,13 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
 
       {/* Wide screens get the calendar permanently: navigation at zero taps.
           Narrow screens reach the same component through the header button. */}
-      <aside className="hidden lg:block">
-        <p className="mb-5 text-sm font-semibold tracking-wide">lifelog</p>
+      <aside className="hidden lg:flex lg:flex-col">
+        <p className="mb-6 text-[0.8125rem] font-semibold tracking-[0.02em] text-muted">lifelog</p>
         <MonthGrid day={day} now={now} loadDays={fetchDays} onPick={setDay} />
 
         {/* Fills the space with something that removes interactions rather than
             adding them. Keys only, no controls. */}
-        <dl className="mt-8 space-y-1.5 border-t border-line pt-5 text-xs text-faint">
+        <dl className="mt-8 space-y-2 border-t border-line pt-5 text-xs text-faint">
           {[
             ['esc', 'leave the box'],
             ['← →', 'previous / next day'],
@@ -375,63 +467,92 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
           ))}
         </dl>
 
+        {/* Pushed to the foot of the column: an account is the least of what
+            this screen is for, and it is where the eye leaves rather than
+            where it lands. */}
         <button
           type="button"
           onClick={() => setProfileOpen(true)}
-          className="mt-8 flex h-11 w-full items-center gap-2 text-xs text-muted"
+          className="-mx-2 mt-auto flex h-11 w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 text-xs text-faint transition-colors hover:text-ink"
         >
-          <PersonIcon size={16} />
-          <span className="min-w-0 truncate">{email}</span>
+          <PersonIcon size={16} className="shrink-0" />
+          {/* A guest has no address, and an icon with an empty span beside it is
+              a button with no name — to a screen reader and to the eye alike. */}
+          <span className="min-w-0 truncate">{local ? 'Guest' : email}</span>
         </button>
       </aside>
 
       {/* Capped: across 900px the eye cannot connect a title on the left to its
           amount on the right. A reading measure, not the whole column. */}
       <main {...swipe} className="swipe-area mx-auto flex w-full min-w-0 max-w-2xl flex-col">
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <DayHeader
-              day={day}
-              now={now}
-              onChange={setDay}
-              onOpenCalendar={() => setCalendarOpen(true)}
-            />
-          </div>
-          {/* Only when there is something to show: a bell that is always
-              empty is a control that teaches you to ignore it. */}
-          {upcoming.length > 0 && (
-            <button
-              type="button"
-              aria-label={`What is coming — ${upcoming.length} ${
-                upcoming.length === 1 ? 'reminder' : 'reminders'
-              }`}
-              onClick={() => setAheadOpen(true)}
-              className="-mr-1 flex h-11 shrink-0 items-center gap-1 px-1 text-faint active:text-ink"
-            >
-              <BellIcon size={18} />
-              <span className="text-xs tabular-nums">{upcoming.length}</span>
-            </button>
-          )}
-
+        {/* The quietest row on the screen, and the only thing that names the
+            app on a phone. It carries what is *about* the app rather than about
+            the day — the wordmark and the account — so the day header below can
+            be the one thing the eye lands on. Hidden on `lg`, where the sidebar
+            already says both. */}
+        <div className="-mt-1 mb-1 flex h-9 items-center justify-between lg:hidden">
+          <span className="text-[0.8125rem] font-semibold tracking-[0.02em] text-faint">
+            lifelog
+          </span>
           <button
             type="button"
             aria-label="Profile and settings"
             onClick={() => setProfileOpen(true)}
-            className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center text-faint active:text-ink lg:hidden"
+            className="-my-1 -mr-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:text-ink active:text-ink"
           >
             <PersonIcon size={18} />
           </button>
         </div>
 
+        <DayHeader
+          day={day}
+          now={now}
+          onChange={setDay}
+          onOpenCalendar={() => setCalendarOpen(true)}
+          actions={
+            // Only when there is something to show: a bell that is always
+            // empty is a control that teaches you to ignore it.
+            upcoming.length > 0 ? (
+              <button
+                type="button"
+                aria-label={`What is coming — ${upcoming.length} ${
+                  upcoming.length === 1 ? 'reminder' : 'reminders'
+                }`}
+                onClick={() => setAheadOpen(true)}
+                className="mr-0.5 flex h-11 shrink-0 items-center gap-1 rounded-lg px-1.5 text-faint transition-colors hover:text-ink active:text-ink"
+              >
+                <BellIcon size={17} />
+                <span className="text-xs tabular-nums">{upcoming.length}</span>
+              </button>
+            ) : null
+          }
+        />
+
         {/* Under the header, above the box: navigation, not capture, so it
             scrolls away with the day rather than sitting over it. */}
-        <div className="mt-1">
+        <div className="mt-3">
           <WeekStrip day={day} now={now} loadDays={fetchDays} onPick={setDay} />
         </div>
 
-        {/* Sticky: on a long day the capture box must never scroll out of
-            reach, since capture is the whole product. */}
-        <div className="sticky top-0 z-10 mt-4 bg-surface pt-1 pb-2">
+        {/* Docked to the thumb on a phone, kept at the top on a wide screen.
+
+            Capture is the whole product, so the control must never scroll out of
+            reach — sticky either way. What changed is *which* edge: on a 6.4in
+            phone the top third is the hardest place to reach one-handed, and
+            this is the control the app exists for. It is also where the keyboard
+            comes from, so docked it rises with the keyboard instead of leaving a
+            gap between the two.
+
+            One render site and no `MobileQuickAdd`: `main` is a flex column, so
+            the order swaps in CSS. QuickAdd reverses its own two halves the same
+            way, which keeps the answer and the examples *above* the field rather
+            than off the bottom of the screen. On `lg` there is no reach problem
+            and the reading order is top-down, so nothing moves.
+
+            `pb` is a real number, not only the inset: `env(safe-area-inset-bottom)`
+            measures 0 in the Android WebView while the gesture bar is about 24px,
+            so an inset-only floor puts the send button underneath it. */}
+        <div className="order-last mt-4 sticky bottom-0 z-10 bg-surface pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:order-none lg:bottom-auto lg:top-0 lg:pt-1 lg:pb-2">
           <QuickAdd
             day={day}
             now={now}
@@ -450,14 +571,19 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
             revokes this, and a reminder that cannot fire is worse than no
             reminder because it was trusted. */}
         {notify === 'denied' && (
-          <div className="mt-3 flex items-center gap-3 rounded-lg border border-line bg-sunken px-3 py-2.5">
+          <div className="mt-4 flex items-center gap-3 rounded-xl border border-line bg-sunken px-3.5 py-2.5">
             <p className="min-w-0 flex-1 text-xs text-muted">
               Allow notifications, or reminders cannot reach you.
             </p>
+            {/* 44px like everything else. It was 36 to keep the banner short,
+                which is the one trade this app does not make — and it is the
+                only control on the screen the *native* app actually depends on,
+                since nothing rings without it. Negative margins keep the banner
+                the height it was. */}
             <button
               type="button"
               onClick={() => void allowReminders()}
-              className="h-9 shrink-0 rounded-md bg-ink px-3 text-xs font-medium text-surface"
+              className="-my-1 flex h-11 shrink-0 items-center rounded-lg bg-ink px-3.5 text-xs font-medium text-surface transition-opacity hover:opacity-90"
             >
               Allow
             </button>
@@ -472,17 +598,17 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
             `navigator.onLine` — on Android that reports a connection the device
             does not have. */}
         {!reachable ? (
-          <p className="mt-3 text-xs text-muted">
+          <p className="mt-4 text-xs text-faint">
             Offline
             {owed > 0
               ? ` · ${owed} ${owed === 1 ? 'entry' : 'entries'} saved here, waiting to sync`
               : ' · reading this device’s copy'}
           </p>
         ) : (
-          error !== null && <p className="mt-3 text-xs text-expense">{error}</p>
+          error !== null && <p className="mt-4 text-xs text-expense">{error}</p>
         )}
 
-        <div className="mt-3 flex-1" aria-busy={loading}>
+        <div className="mt-4 flex-1" aria-busy={loading}>
           {/* Placeholders, not a spinner: the rows land where these sat, so
               nothing jumps when the fetch resolves. */}
           {loading && shown.length === 0 && (
@@ -490,7 +616,10 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
               {[0, 1, 2].map((index) => (
                 <div key={index} className="flex items-center gap-3 border-b border-line py-4">
                   <span className="h-2 w-2 shrink-0 rounded-full bg-line" />
-                  <span className="h-3 flex-1 rounded bg-line" style={{ opacity: 1 - index * 0.3 }} />
+                  <span
+                    className="h-3 flex-1 rounded bg-line"
+                    style={{ opacity: 1 - index * 0.3 }}
+                  />
                 </div>
               ))}
             </div>
@@ -511,10 +640,10 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
               type="button"
               aria-expanded={showEarlier}
               onClick={() => setShowEarlier(true)}
-              className="flex h-11 w-full items-center gap-3 border-b border-line text-left text-xs text-muted active:text-ink"
+              className="-mx-2 flex h-11 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
             >
               <span aria-hidden="true" className="flex w-5 shrink-0 justify-center text-faint">
-                <Chevron dir="down" />
+                <Chevron dir="down" size={16} />
               </span>
               {folded} already passed
             </button>
@@ -525,7 +654,7 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
               key={row.id}
               row={row}
               now={now}
-              onOpen={() => setEditing(row)}
+              onOpen={() => setEditing(asStored(row))}
               onRetry={retry}
             />
           ))}
@@ -534,22 +663,35 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
               label for the box you were about to type into, when it is a
               summary of the day you have just finished reading. The last row's
               own border is the rule above it. */}
+          {/* The figures lead and their names sit back, the same way an answer's
+              extras read — as values with labels attached rather than as a
+              sentence. Flat 12px muted, this line was the quietest thing on the
+              screen while carrying the only number that sums the day: smaller
+              than the per-row amounts it totals, which is exactly backwards. The
+              count stays quiet, because it names the list rather than measuring
+              it. */}
           {shown.length > 0 && (
-            <p className="mt-2.5 text-xs text-muted">
-              {[
-                spent > 0 ? `${rupees(spent)} spent` : null,
-                logged > 0 ? `${minutes(logged)} logged` : null,
-                `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}`,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
+            <p className="mt-3.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-faint">
+              {/* Not `> 0`: a day whose only money is a refund has a total, and
+                  hiding it says the day carried none at all. */}
+              {spent !== 0 && (
+                <span>
+                  <span className="text-sm font-medium text-ink tabular-nums">{rupees(spent)}</span>{' '}
+                  spent
+                </span>
+              )}
+              {logged > 0 && (
+                <span>
+                  <span className="text-sm font-medium text-ink tabular-nums">
+                    {minutes(logged)}
+                  </span>{' '}
+                  logged
+                </span>
+              )}
+              <span className="text-faint tabular-nums">
+                {shown.length} {shown.length === 1 ? 'entry' : 'entries'}
+              </span>
             </p>
-          )}
-
-          {/* The examples above already say the day is empty and show what to
-              type. This adds only the thing they cannot: how to get elsewhere. */}
-          {!loading && shown.length === 0 && (
-            <p className="px-1 text-xs text-faint">Swipe sideways to move between days.</p>
           )}
 
           <OnThisDay found={recalled} onPick={setDay} />
@@ -586,8 +728,13 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
       {profileOpen && (
         <ProfileSheet
           email={email}
+          local={local}
           theme={theme}
           onTheme={onTheme}
+          onSignIn={() => {
+            setProfileOpen(false)
+            onSignIn()
+          }}
           onHelp={() => {
             setProfileOpen(false)
             setHelpOpen(true)
@@ -610,11 +757,13 @@ function Day({ email, userId, theme, onTheme }: DayProps) {
       {editing !== null && (
         <EntryEditor
           row={editing}
+          now={now}
           onSave={(patch) => {
             update(editing, patch)
             // Re-arm against the edited values, or the old time still fires.
-            const updated = { ...editing, ...patch }
-            void cancelReminder(updated).then(() => scheduleReminder(updated, now))
+            // Against the real clock, not the state one: `now` is refreshed on a
+            // 30-second tick, and `alarms` drops anything already due.
+            rearmRow({ ...editing, ...patch }, new Date())
             setEditing(null)
           }}
           onDelete={() => deleteRow(editing)}

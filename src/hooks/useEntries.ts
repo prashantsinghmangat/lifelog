@@ -51,8 +51,37 @@ export type WriteState = 'saving' | 'queued' | 'failed'
  * is therefore *observed* from what happened to the request rather than asked
  * of the browser: a request that never got an answer means no network, and an
  * error the server actually sent back means the server refused.
+ *
+ * **And a refusal is not always worth repeating.** `refused` is a server that
+ * said no this time — a token about to refresh, a rate limit, a bad minute —
+ * and waiting is exactly the right response. `rejected` is a server that will
+ * say no to this row for ever, because the objection is to the row rather than
+ * to the moment. Retrying that every thirty seconds for the life of the app
+ * achieves nothing and costs a request each time. Both are shown as `failed`
+ * with a Retry chip: the row is still visible, still editable, and an explicit
+ * Retry still sends it. Only the *automatic* retry knows the difference.
  */
-type Attempt = 'saving' | 'unreachable' | 'refused'
+type Attempt = 'saving' | 'unreachable' | 'refused' | 'rejected'
+
+/** The server answered with a refusal, of either kind. */
+function answered(attempt: Attempt | undefined): boolean {
+  return attempt === 'refused' || attempt === 'rejected'
+}
+
+/**
+ * Whether a refusal is one that waiting cannot fix.
+ *
+ * 401 and 403 come back once a token refreshes or the user signs in again; 408
+ * and 429 say "try again" outright; 5xx is the server having a bad minute. The
+ * rest of the 4xx range is about the row itself — a value out of range, a
+ * constraint, a request the server cannot parse — and will be refused
+ * identically for ever, however long the app keeps asking.
+ */
+function permanent(status: number | undefined): boolean {
+  if (status === undefined) return false
+  if (status === 401 || status === 403 || status === 408 || status === 429) return false
+  return status >= 400 && status < 500
+}
 
 export type Row = Entry & { status?: WriteState }
 
@@ -132,14 +161,26 @@ function byDayDescending(rows: Entry[]): Entry[] {
   )
 }
 
-export function useEntries(day: string, userId: string) {
+/**
+ * @param local A log with no account behind it, which nothing may try to sync.
+ *   Every request would be refused — there is no session and RLS answers to
+ *   nobody — so attempting them would put a Retry chip on every row and an
+ *   offline notice over a log that is working perfectly. The guest path is not a
+ *   degraded one: locally this is the same app, because locally it always was.
+ */
+/** This device's log for one user, or an empty one where there is no storage. */
+function read(userId: string): Stored {
+  return typeof localStorage === 'undefined' ? EMPTY : load(localStorage, userId)
+}
+
+export function useEntries(day: string, userId: string, local = false) {
   const online = useOnline()
-  const [stored, setStored] = useState<Stored>(() =>
-    typeof localStorage === 'undefined' ? EMPTY : load(localStorage, userId),
-  )
+  const [stored, setStored] = useState<Stored>(() => read(userId))
   // Last outcome of a sync attempt, per row. Absent means never attempted,
   // which is what a write made with no network looks like.
   const [attempts, setAttempts] = useState<Record<string, Attempt>>({})
+  /** Whose log `stored` currently holds. */
+  const [owner, setOwner] = useState(userId)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // Whether the last request got an answer of any kind. Observed, not asked —
@@ -168,6 +209,30 @@ export function useEntries(day: string, userId: string) {
     setStored(updated)
   }, [])
 
+  /**
+   * The user changed, so this device's log is a different log.
+   *
+   * The initial state is read once, which was fine while the id could not change
+   * under a mounted hook — and then a guest could sign in. `adopt` rewrites the
+   * account's key before this hook ever sees the new id, so keeping the previous
+   * user's state here meant the persist effect below wrote it straight back over
+   * the adopted log, taking the account's own unsynced writes with it. Silent,
+   * and only visible on the next launch.
+   *
+   * Adjusted during render rather than in an effect: `write` reads the ref in
+   * the same tick, so a log that is still the previous user's for one commit is
+   * a log an entry can be added to and lost from.
+   */
+  if (owner !== userId) {
+    const fresh = read(userId)
+    current.current = fresh
+    setOwner(userId)
+    setStored(fresh)
+    // Per-row sync outcomes belong to rows this log no longer contains.
+    setAttempts({})
+    setError(null)
+  }
+
   useEffect(() => {
     if (typeof localStorage === 'undefined') return
     save(localStorage, userId, stored)
@@ -180,6 +245,9 @@ export function useEntries(day: string, userId: string) {
    * row the server refuses is no reason to strand the rest.
    */
   const flush = useCallback(async (): Promise<void> => {
+    // Nobody to sync with. Not a failure and not offline — there is no account,
+    // and the rows are exactly where they are meant to be.
+    if (local) return
     // Already running. Noted rather than dropped: two entries logged in quick
     // succession put the second one's sync here, and returning without a mark
     // left it sitting until the app next came back to the front.
@@ -217,10 +285,10 @@ export function useEntries(day: string, userId: string) {
               setReachable(false)
               outcome = 'unreachable'
             } else {
-              // An answer, even a refusal, means the server was reached — and
-              // that this will not fix itself by waiting.
+              // An answer, even a refusal, means the server was reached. Which
+              // kind of refusal decides whether asking again can ever help.
               setReachable(true)
-              outcome = 'refused'
+              outcome = permanent(result.status) ? 'rejected' : 'refused'
             }
           } catch {
             setReachable(false)
@@ -246,7 +314,7 @@ export function useEntries(day: string, userId: string) {
       flushing.current = false
       again.current = false
     }
-  }, [apply])
+  }, [apply, local])
 
   // Launch, and every time the network comes back.
   useEffect(() => {
@@ -276,7 +344,20 @@ export function useEntries(day: string, userId: string) {
    * offline would sit unsynced indefinitely. Armed only while something is
    * owed, so a log with nothing pending makes no requests.
    */
-  const owing = stored.pending.length > 0
+  /**
+   * Whether anything owed could still land by being sent again.
+   *
+   * A row the server has *rejected* is excluded: it is owed, it is visible, it
+   * keeps its Retry chip and an edit re-sends it at once — but asking again on
+   * a timer cannot change an answer that is about the row rather than about the
+   * moment, so a single bad row otherwise made a request every thirty seconds
+   * for as long as the app was open.
+   */
+  const owing = useMemo(
+    () => !local && stored.pending.some((row) => attempts[row.id] !== 'rejected'),
+    [local, stored.pending, attempts],
+  )
+
   useEffect(() => {
     if (!owing) return
     const ticking = window.setInterval(() => void flush(), 30_000)
@@ -285,12 +366,24 @@ export function useEntries(day: string, userId: string) {
 
   useEffect(() => {
     let live = true
+
+    // Nothing to read from. The day is already on the device, so going through
+    // the loading state would flash placeholders over rows that are right there.
+    if (local) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
 
     // Wrapped rather than chained: a read that rejects instead of resolving with
     // an error must not become an unhandled rejection, and offline is the common
     // case for exactly that.
     const read = async (): Promise<void> => {
+      // Stamped before the request, not after: the reply describes the log as
+      // it was at this moment, so anything logged later is not missing from it
+      // — it is newer than it. See `reconcile`.
+      const since = new Date().toISOString()
       try {
         const result = await impatient(
           supabase.from('entries').select(COLUMNS).eq('occurred_on', day).is('deleted_at', null),
@@ -308,7 +401,7 @@ export function useEntries(day: string, userId: string) {
         if (readError === null) {
           setReachable(true)
           setError(null)
-          apply((prev) => reconcile(prev, (data ?? []) as Entry[], day))
+          apply((prev) => reconcile(prev, (data ?? []) as Entry[], day, since))
         } else if (unreachable(result)) {
           // No network. Not an error the user can act on, and the raw
           // "TypeError: Failed to fetch" is the opposite of an explanation —
@@ -333,9 +426,15 @@ export function useEntries(day: string, userId: string) {
     return () => {
       live = false
     }
-  }, [day, apply])
+  }, [day, apply, local])
 
   const rows = useMemo((): Row[] => {
+    // No account, so no row is owed to anybody and none carries a write state.
+    // `pending` still accumulates, because signing in later hands exactly that
+    // set to `adopt` — it simply says nothing on screen until there is a server
+    // for it to be behind.
+    if (local) return stored.entries
+
     const owed = new Set(stored.pending.map((row) => row.id))
 
     const held: Row[] = stored.entries.map((row) => {
@@ -345,7 +444,7 @@ export function useEntries(day: string, userId: string) {
       // server that answered and refused is a failure worth a Retry — and note
       // this asks what happened to the request, never `navigator.onLine`.
       if (attempt === 'saving') return { ...row, status: 'saving' }
-      if (attempt === 'refused') return { ...row, status: 'failed' }
+      if (answered(attempt)) return { ...row, status: 'failed' }
       return { ...row, status: 'queued' }
     })
 
@@ -354,14 +453,14 @@ export function useEntries(day: string, userId: string) {
     // delete that could not be sent stays gone, because it is going to land —
     // that is the whole point of holding it.
     const refused: Row[] = stored.pending
-      .filter((row) => row.deleted_at !== null && attempts[row.id] === 'refused')
+      .filter((row) => row.deleted_at !== null && answered(attempts[row.id]))
       .map(({ deleted_at: _deleted, queued_at: _queued, ...entry }) => ({
         ...entry,
         status: 'failed' as const,
       }))
 
     return [...held, ...refused]
-  }, [stored, attempts])
+  }, [stored, attempts, local])
 
   const write = useCallback(
     (next: (state: Stored, at: string) => Stored) => {
@@ -431,9 +530,11 @@ export function useEntries(day: string, userId: string) {
    * whose only entry has not synced yet still has an entry on it.
    */
   const fetchDays = useCallback(async (from: string, to: string): Promise<string[]> => {
-    const local = current.current.entries
+    const held = current.current.entries
       .filter((row) => row.occurred_on >= from && row.occurred_on <= to)
       .map((row) => row.occurred_on)
+
+    if (local) return [...new Set(held)]
 
     try {
       const result = await impatient(
@@ -446,13 +547,13 @@ export function useEntries(day: string, userId: string) {
         PATIENCE,
       )
 
-      if (result === 'timeout' || result.error) return [...new Set(local)]
+      if (result === 'timeout' || result.error) return [...new Set(held)]
       const found = (result.data ?? []) as { occurred_on: string }[]
-      return [...new Set([...found.map((row) => row.occurred_on), ...local])]
+      return [...new Set([...found.map((row) => row.occurred_on), ...held])]
     } catch {
-      return [...new Set(local)]
+      return [...new Set(held)]
     }
-  }, [])
+  }, [local])
 
   /**
    * The whole log: the export, the corpus a question is answered from, the
@@ -464,6 +565,10 @@ export function useEntries(day: string, userId: string) {
    * question must not ignore an entry typed a minute ago on a train.
    */
   const fetchAll = useCallback(async (): Promise<Entry[]> => {
+    // This device *is* the whole log. Same answer, one step shorter.
+    if (local) return byDayDescending(current.current.entries)
+
+    const since = new Date().toISOString()
     try {
       const result = await impatient(
         supabase
@@ -479,12 +584,12 @@ export function useEntries(day: string, userId: string) {
       // launch that never re-arms its reminders, are both silent failures.
       if (result === 'timeout' || result.error) return byDayDescending(current.current.entries)
 
-      apply((prev) => reconcile(prev, (result.data ?? []) as Entry[], null))
+      apply((prev) => reconcile(prev, (result.data ?? []) as Entry[], null, since))
       return byDayDescending(current.current.entries)
     } catch {
       return byDayDescending(current.current.entries)
     }
-  }, [apply])
+  }, [apply, local])
 
   const entries = useMemo(
     () => rows.filter((row) => row.occurred_on === day).sort(byClock),
@@ -497,8 +602,8 @@ export function useEntries(day: string, userId: string) {
     [rows, day],
   )
 
-  /** How far behind the server is, for saying so honestly. */
-  const owed = stored.pending.length
+  /** How far behind the server is, for saying so honestly — and zero with no server. */
+  const owed = local ? 0 : stored.pending.length
 
   return {
     entries,

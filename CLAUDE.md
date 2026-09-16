@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run android                    # build, then copy the web assets into android/
 npm run android:open               # open the native project in Android Studio
 npm run dev                        # vite dev server on :5173
-npm test                           # vitest run (446 tests)
+npm test                           # vitest run (568 tests)
 npm run test:watch                 # vitest watch
-npx vitest run -t "yesterday"      # tests whose name matches a substring (4 of 446)
+npx vitest run -t "yesterday"      # tests whose name matches a substring (4 of 568)
 npx tsc -b                         # typecheck only (add --force to ignore the build cache)
 npm run build                      # tsc -b && vite build
 npm run preview                    # serve dist — the only way to exercise the service worker locally
@@ -83,6 +83,16 @@ The cost is last-write-wins per row across devices, which for a single-user log 
 behaviour rather than a compromise. `queued_at` exists so `settle` can tell an acknowledgement
 apart from one describing a version the row has already moved past.
 
+**A read is evidence about the log as it was when it was sent, which is why `reconcile` takes
+`since`.** A read that returns without a row is normally proof the row is gone, and that is how a
+delete made on the laptop reaches the phone. But an entry typed while a read was in flight, whose
+own write then landed first, is absent from that reply and no longer pending — so it was dropped
+from the device, vanishing off the screen while sitting safely on the server until something
+happened to fetch it again. Arrowing to another day and typing straight away is enough to reach it.
+Both readers stamp `since` *before* the request, and a row created after it is kept whatever the
+reply says. Compared as moments rather than as text, because the server stamps `+05:30` and the
+client stamps `Z`.
+
 **`src/hooks/useEntries.ts` owns every Supabase call** and is the only writer of the store.
 Components never touch the client directly (except `Login`/`App` for auth). Rows enter local
 state synchronously with a `crypto.randomUUID()` id. Reads *fold into* the local log rather than
@@ -104,6 +114,45 @@ Conflating the two put a red Retry on every entry logged on a train. Same distin
 delete: a refused one puts the row back, because claiming it is gone when it is not is a lie the
 next full read undoes, while a queued one stays gone because it is going to land.
 `failedElsewhere` surfaces refusals belonging to *other* days, invisible after a backfill.
+
+**And a refusal is not always worth repeating.** `refused` is a server that said no *this time* —
+a token about to refresh, a rate limit, a bad minute — and waiting is the right response, which is
+what the 30-second retry exists for. `rejected` is a 4xx that objects to the *row* rather than to
+the moment, and no amount of asking will change it; a single such row otherwise made a request
+every thirty seconds for as long as the app was open. Both still read as `failed` with a Retry
+chip, because the row is still visible, still editable, and an explicit Retry still sends it — an
+edit re-attempts it immediately, which is the actual way out. Only the automatic timer knows the
+difference. 401, 403, 408 and 429 are deliberately *not* permanent: each of those does come back.
+
+**The app can be used with no account at all, because nothing it does needs one.** The auth gate
+was the last thing here that waited on a network it did not need: parsing, drawing a day,
+totalling it, answering a question and raising a reminder are all local, and yet the first screen
+demanded an email and a round trip before any of it could be seen. `guest()` in `identity.ts`
+mints a `local-…` id that keys this device's log exactly as a Supabase user id does, so every
+layer above `store.ts` is unchanged. `useEntries` takes a `local` flag and makes **no request at
+all** — no read, no flush, no retry timer — and reports no status on any row: with no server to be
+behind, labelling every entry `saved here, not synced` would be the app apologising for working
+as designed.
+
+**A changed `userId` reloads the log, and forgetting that undid the adoption.** `useEntries` read
+its initial state once, which was correct for as long as the id could not change under a mounted
+hook — and then a guest could sign in. `adopt` rewrites the account's key *before* the hook sees
+the new id, so keeping the previous user's state meant the persist effect wrote it straight back
+over the adopted log, taking the account's own unsynced writes with it. Silent, and only visible
+on the next launch. The swap is made **during render** rather than in an effect, for the same
+reason `apply` advances the ref and the state together: `write` reads the ref in the same tick, so
+a log that is still the previous user's for one commit is a log an entry can be added to and lost
+from.
+
+**Signing in later adopts the guest log rather than stranding it.** The key changes with the id,
+so without `adopt` in `store.ts` every entry made as a guest stays on the device and becomes
+unreachable — which reads exactly like the app threw them away, a worse first impression than the
+wall it replaces. Every adopted row is re-queued, since the server has never seen one and each
+write is a full-row upsert anyway. The guest's *pending* list is deliberately dropped: it records
+writes owed for rows the server never had, including deletes of entries that never reached it, and
+replaying those would ask the server to remove rows that do not exist. `ProfileSheet` offers an
+account instead of a sign-out, because a sign-out button beside the only copy of a log reads as
+"delete my log".
 
 **`src/lib/identity.ts` is why the auth gate does not lock you out of your own offline log.**
 Supabase access tokens last an hour. Log entries in airplane mode, come back more than an hour
@@ -150,6 +199,28 @@ separate rows. It is *not* the same as `!oneDay`: a date answer is ordered by ne
 a yearly birthday logged in 2010 sorts first while its date sorts last — group that and the same
 heading appears twice. Those answers carry the date on the row instead. There is one answer
 renderer and there should stay one; five would be five things `phrase()` does not know about.
+
+**`byClock` compares moments, not text.** `occurred_at` carries an offset and the writers do not
+agree on which: `occurrences.ts` built a derived occurrence with `toISOString()` (UTC), the parser
+writes the local offset, and PostgREST answers in UTC again. Compared as strings that is
+`04:30:00.000Z` against `06:30:00+05:30`, which put a ten o'clock standup above a half past six
+reminder on every day a repeat lands on — and, because the head of the day was then a repeat rather
+than a passed reminder, silently switched off the `N already passed` fold. A feature turned off by
+a sort. `movedTo` now stamps the same local format as everything else as well, so the shapes match
+even where nothing compares them.
+
+**`line-clamp-2` must not be written beside `block`.** Tailwind emits `.line-clamp-2{display:
+-webkit-box}` and `.block{display:block}` *later* in the sheet, so `block` won and the clamp did
+nothing: "a title gets two lines" was a rule the CSS had never once applied, and long notes ran to
+whatever height they liked. Verified in a browser, not inferred — the class was there the whole
+time.
+
+**A `Sheet` stacks above the toast, and that is load-bearing.** The toast is `fixed bottom-0` at
+`z-30`; a sheet's actions are sticky along its own bottom edge. At `z-20` a message still on screen
+sat squarely over Save, Cancel and Delete — `elementFromPoint` at the middle of Save returned the
+toast. The tap did not miss, it hit the wrong control, and on a toast carrying Undo that meant
+pressing Save restored the row you had just deleted. Logging something and editing an entry within
+the next few seconds is all it takes.
 
 **`src/lib/history.ts` is the look-back layer, and it costs no query.** `onThisDay()` filters the
 corpus `App` already fetches on launch to re-arm reminders — that result used to be discarded.
@@ -212,6 +283,65 @@ computed from the **stored** rows only, or a repeating entry would report five t
 It fixed yearly repeats in the same stroke: a birthday logged in 2010 was drawn in 2010 and nowhere
 else, so 13 February 2027 showed nothing while the reminder fired.
 
+**Reading may be derived; writing may not.** A derived occurrence carries the day it was *drawn*
+on, so handing one to anything that writes saves that day back onto the row. It did: opening
+Tuesday's standup and pressing Save moved the series start to Tuesday, and opening a birthday
+logged in 2010 from this year's view rewrote its year to this one — the original date gone, with
+nothing on screen to say so. Delete and Undo went the same way, since Undo restores whatever row it
+was handed. `App`'s `asStored` resolves an occurrence back to the row by id before the editor,
+`remove` or `restore` ever see it, which is what `isOccurrence` was always for.
+
+**`nextFireAt` is the one place a day becomes a moment, and the editor is the
+first thing that has to *say* it.** `nextOccurrence` answers with a day; gluing a
+clock onto that day (or 9am when the entry carries none) was being done
+separately in `ahead`, in the yearly branch of `alarms`, and would have been done
+a third time in the editor. Three readings of what an entry with no clock means
+is two too many — the one that disagreed would have been a reminder ringing at an
+hour the app had never shown anybody. It also owns the rule that **a moment that
+has gone is not a next one**: `nextOccurrence` hands back *today* for a reminder
+that rang this morning, which is right of a day and wrong of a moment, and both
+callers were separately remembering to drop it. It says nothing about whether
+anything is *armed* — a done entry still has a next occurrence, it just does not
+ring, and `fireAt` stays the single choke point for that.
+
+**The editor states when the entry next happens, because the row could only name
+the rule.** A repeat is stored once and expanded nowhere, so `weekdays` on the
+row was the *only* evidence one had taken effect — and that word says what the
+rule is, never that a moment is coming. Opening the entry and still not knowing
+when it next lands is exactly how a working standup reads as broken from inside
+the app. The line is worded as a fact about the calendar (`Next tomorrow at 5:00
+pm`), **not about a notification**: whether an alarm actually reaches you also
+depends on an OS permission the sheet knows nothing about, which `App` already
+reports in its own banner. Promising "rings" from here is the one class of claim
+this app must not make and then fail to keep. It reads from the form's *pending*
+values rather than the stored row, so a time edited under it cannot leave a
+confident sentence describing the moment Save is about to replace — which is why
+the repeat and `done` derivation moved out of `save` and above it, where one
+reading now serves both. Marking done replaces the line with `Done — no
+reminder`, since silencing is a documented consequence of that button that the
+button itself never mentioned.
+
+**A repeat can be switched off, and the thing that made that impossible was the yearly rule being
+re-read from the title on every save.** Clear a birthday's repeat and the word *birthday* put it
+straight back the next time Save was pressed, so no control could be built. The title is now read
+**only when a note becomes an event** — the one case that needs it, since a birthday whose date
+had passed parses as a note and must gain the rule when corrected. An existing event simply keeps
+whatever rule it has, which also retires the weekly special case: `weekdays` is typed as an
+instruction and survives nowhere in the title, so the old recompute deleted it and a save that
+merely marked a standup done silently unscheduled five alarms. One rule now covers both. The cost
+is that retitling an existing event to "deepak birthday" no longer makes it yearly by itself, and
+a repeat you can turn off is worth more than one that appears from a word. Only *yearly* can be
+switched back on from the sheet: a weekly rule needs its days, and the text box is where those
+are said.
+
+**A row says how long until something happens today.** `until` in `format.ts` gives `in 47m`
+beside the clock, never instead of it — the clock is the fact you repeat to somebody else, the
+countdown is the one you were reading the row for. Today only: beyond it `relativeDay` already
+says "tomorrow", which reads far better than "in 19h 20m". It is recomputed on the same
+30-second tick everything else uses rather than ticking per row, so it is a statement and not a
+countdown. `AheadSheet` prefers it over its own "today", which was only repeating what the sheet
+already said.
+
 **`repeatLabel` in `events.ts` is the only place a repeat is put into words** — `weekdays`,
 `every Mon, Wed`, `every year`. The row, the bell and the editor all read it. Because nothing is
 expanded in storage, that label on the row is the *only* evidence a repeat took effect; showing
@@ -227,6 +357,24 @@ weekday to the plain weekday matcher and files on *last* Monday. And `takeTime` 
 the day is resolved, because `standup 10am weekdays` typed at eight in the evening means
 tomorrow's standup — without the clock the row sat on today while `nextOccurrence` said tomorrow,
 and the two disagreed about the same entry.
+
+**Cancelling an alarm must never decide whether the new one is set.** `rearm` in `reminders.ts`
+owns the order, because `cancel().then(schedule)` in `App` meant a cancel that *rejected* skipped
+the schedule entirely — so the failure that merely might leave a spare notification instead
+reliably lost the reminder the user had just edited. Scheduling after a failed cancel is safe
+rather than noisy: the ids come from the entry, so each alarm is replaced in place, and only an id
+the *new* plan has dropped can survive until launch reconciliation clears it. `stale` is the one
+narrow case worth saying out loud — the entry schedules nothing now and the old alarms are still
+armed, so something really is going to ring for a row that should be silent.
+
+**A yearly repeat is armed for its next occurrence, not for the date on the row.** `fireAt`
+answers with the stored date, which for an anniversary is almost always in the past — so `alarms`
+returned nothing and a birthday was never scheduled at all. Everything *around* it worked, which is
+what kept it hidden: the bell listed it, the day it lands on drew it, the `.ics` carried
+`RRULE:FREQ=YEARLY`, and the README promised "9am on the day, every year". Only the notification was
+missing. It is a one-off at the next occurrence rather than a yearly cron, deliberately: `{ at }` is
+the mechanism already proven here, and `sync` re-arms it on every launch under the same id — the
+same converge-on-next-launch shape the held-back weekday crons use.
 
 **Sound comes from the channel, not the notification.** On Android 8+ the channel owns the sound
 and whether a notification pushes itself in front of you, and **its settings belong to the user
@@ -292,8 +440,14 @@ every timezone but one. `src/lib/deliver.ts` prefers the share sheet over a down
 downloads are unreliable inside a standalone iOS PWA.
 
 **`public/logo.svg` is the mark, and every other icon is derived from it.** A day's spine with
-three entries hanging off it, the nodes in the same expense / time / event colours the rows use, on
-the `ink` tile that is already the app's `theme-color`. Authored on a **24-unit grid**, and the
+three entries hanging off it, the nodes in expense / time / event colours on a near-black tile.
+
+Those are the palette as it stood when the mark was drawn, and they are **deliberately frozen**
+there. The PNGs, the Android drawables and any already-installed launcher icon are rendered from
+this file by a tool that is not in the repo, so a colour changed here and nowhere else is exactly
+how the launcher icon, the themed icon and the notification silhouette come to disagree — the one
+thing the shared geometry exists to prevent. `theme-color` no longer matches the tile and should
+not: that meta carries the *surface*, because the chrome is a continuation of the page. Authored on a **24-unit grid**, and the
 Android vector drawables carry those exact path strings — the launcher icon, the themed icon and
 the notification silhouette cannot drift apart because they are the same geometry.
 
@@ -325,11 +479,37 @@ and a `[data-theme='dark']` block swaps their values. Components write `text-mut
 would be one more block and no component changes. `useTheme` resolves `system` against
 `prefers-color-scheme` and stamps `data-theme` on `<html>`.
 
+**Both palettes are warm, and neither is the other inverted.** Light is off-white paper with a
+near-black warm ink; dark is warm charcoal with a warm off-white. This is not decoration: an app
+whose entire content is a person's own record of their week reads as a form to fill in on pure
+white with blue-grey text, and as something worth keeping on paper. The dark palette is built from
+the dark end rather than by flipping the light one, which is how a dark theme ends up looking like
+a lit screen instead of a dim room.
+
+Every *text* token clears 4.5:1 on the surface it is used over. `faint` did not — it sat at 2.9:1,
+which is what "tertiary" had quietly come to mean on a screen where 59 of the type sizes are 12px.
+`line` and `edge` stay below that deliberately: they separate, they do not inform, and nothing
+here is legible only because of a border. The `theme-color` meta, the manifest and `useTheme` all
+carry the *surface*, not the ink — drawn edge-to-edge the browser chrome is a continuation of the
+page, and a dark bar over a paper-coloured page reads as a header the app does not have.
+
+**The four kind colours are scanning accents, not four UI colours.** They are deep enough to read
+as ink with a hue rather than as a highlight, and the mark is 15px in a 20px gutter. At 16px in
+the old saturated hues, four of them down a column competed with the titles they were marking —
+the colour is there so the expenses in a day can be found at a glance, not so the row can be
+categorised by looking at it. `KIND_NAME` still carries the same fact in words, as it always did.
+
 **Tailwind classes are never interpolated.** ``className={`text-${kind}`}`` compiles to nothing,
 because Tailwind only emits classes it can literally see. Kind colours go through written-out
 `Record<Kind, string>` maps.
 
 ## UX rules that are architecture, not taste
+
+> **Building UI? Read [DESIGN.md](DESIGN.md) first.** It is the followable form of this section —
+> the tokens, the type scale, the row anatomy, the 44px targets, the `--dock` contract and a
+> checklist — written so a change can be made without reading the whole of this file. **This
+> section is the reasoning and stays the source of truth**; DESIGN.md is what to do, and if the two
+> ever disagree, this one is right and DESIGN.md needs updating.
 
 **Minimum interaction → maximum outcome.** Before adding a control, ask whether a default can
 remove it. Capture is the product: anything that adds a step to logging is a regression.
@@ -346,6 +526,14 @@ wide screen it would repeat what the sidebar already shows.
 like, and `WEEK_STARTS` is the one place the week begins on Monday; `useMarkedDays` is the one
 place dots are loaded. Two grids disagreeing about which day starts the week is a bug you can see
 from across the room, and it is exactly the kind that arrives by copy-paste.
+
+**The calendar is navigation, so only one state is allowed to be loud.** The selected day is a
+filled 28px disc; today is a ring; everything else is plain. It used to fill the whole 44px cell,
+which made the selected day a solid block the width of the column — the loudest thing on a surface
+whose only job is getting somewhere else, and in dark mode a slab of near-white. Two *filled*
+cells would read as two selections, which is why today is a ring rather than a second fill. The
+has-entries dot is neutral rather than a kind colour: a dot means something happened that day, not
+that a note happened.
 
 **Two ways a row is behind you, one treatment.** `passed()` is the clock's answer — a reminder
 whose moment has gone. `done()` is yours, set by hand, and it is the only piece of state in the
@@ -373,8 +561,22 @@ timeline and in an answer; the editor gives it a textarea, because editing a sen
 40-character window means scrolling sideways to read your own writing.
 
 **Every row draws the same way, wherever it appears.** Title on top; clock, category and anything
-else secondary on a quieter line beneath; the one number — money if the row has any, otherwise
-duration — right-aligned, `tabular-nums`, and in `muted` at regular weight. **The number is
+else secondary on a quieter line beneath — with the **clock one step forward of the rest of that
+line**, `muted` against `faint`. Where a row carries a time, that time is what anchors it in the
+day, and flattened in with the categories and repeat rules it read as one more tag. That
+emphasis-in-place is the answer to the time gutter rather than a compromise with it: the gutter
+stays out for the reason below, and the fact it would have carried is not lost. Then the one
+number — money if the row has any, otherwise duration —
+right-aligned, `tabular-nums`, and in `muted` at regular weight.
+
+**A row is directly manipulable and says so without an icon.** Its button is inset past the page
+gutter (`-mx-2 px-2 rounded-lg`) and takes `hover:bg-sunken active:bg-sunken`, so the feedback
+reads as the row lighting up rather than as a box appearing round the title. The *separator* stays
+on the wrapper: a rule that moved with the inset button would sit 8px wider than every other rule
+on the screen, which is why `AnswerCard` grew a wrapper it did not previously need. And `w-full`
+beside `-mx-2` is a bug rather than a shorthand — the box stays 100% wide and shifts 8px left, so
+the highlight overhangs one side and falls short on the other; `w-[calc(100%+1rem)]` is the fix
+wherever the button is not already a flex child. **The number is
 metadata, not the headline**: at medium weight in full-strength ink it competed with the title on
 every row, including the many rows where it is incidental. What the entry *is* comes first. That number comes from `rowValue` in `format.ts`,
 which used to be three copies of the same four lines in `EntryRow`, `AnswerCard` and a toast.
@@ -394,6 +596,48 @@ result.
 row's own border is the rule above them. Above the capture box they read as a label for what you
 are about to type instead of a summary of what you have just read.
 
+**The day is the biggest thing on the screen, and used to be the same size as a placeholder.**
+Every piece of text in the app sat between 12px and 16px, so `Today` in the header and `What
+happened?` inside the box were identical in weight — nothing claimed to be the subject of the
+screen. Size is the cheapest hierarchy there is and the header is one line, so it costs no
+density: the rows are untouched. `AnswerCard` had already proved this, putting its number at
+`text-3xl` over 12px working.
+
+**And it is said in two parts, because one string could only be one size.** `dayLabel` packs the
+relation and the date together — `Today`, `Sat, 30 Aug` — which is right for a tab title and for
+an accessible name, and wrong for the largest line on the screen: at one size the weekday, the
+date and the word "Today" all claim the same weight, so the header stated everything and
+emphasised nothing. `dayEyebrow` and `dayTitle` split it, and `dayLabel` is untouched — every
+control and every tab title that named a day still names it exactly as before.
+
+The chevrons moved with it. Centred between two 44px arrows, the widest part of the header was
+spent on the arrows and the date competed with them for the middle; paired on the right they are
+one place to aim rather than two screen edges to cross, and on a phone they sit under the thumb.
+The bell joins them, because what is coming is about the day and not about the app — which is what
+the quiet row above, holding only the wordmark and the account, is for.
+
+**The day's totals lead with the figures and let their names sit back**, the same shape an
+answer's extras use. Flat 12px muted, that line was the quietest thing on screen while carrying
+the only number that sums the day — *smaller than the per-row amounts it totals*, which is
+exactly backwards. The count stays quiet, because it names the list rather than measuring it.
+
+**The capture control is docked to the thumb on a phone and stays at the top on a wide screen.**
+Sticky either way — capture is the whole product and the control must never scroll out of reach —
+but on a 6.4in phone the top third is the hardest place to reach one-handed, and it is also where
+the keyboard is not. Docked, the control rides up with the keyboard instead of leaving several
+hundred pixels of dead space between the two; verified on the device. There is **one render site
+and no `MobileQuickAdd`**: `main` is a flex column, so `order-last lg:order-none` swaps it, and
+`QuickAdd` reverses its own two halves the same way so the answer and the examples stay *above*
+the field rather than below the screen edge. The `pb` floor is a real number because
+`env(safe-area-inset-bottom)` measures 0 in the Android WebView while the gesture bar is about
+24px.
+
+**The toast clears the docked control by a fixed offset, and that is only safe because the
+control's height is fixed by design.** A toast over the field is not a cosmetic overlap — `Undo`
+and `Save` once sat on top of each other and pressing one hit the other. The control is always the
+bottom-most thing on a compact screen whatever the answer above it is doing, so clearing its
+height clears it in every state. On `lg` both go back where they were.
+
 **The capture control is two rows, and its height never changes.** The parse preview lives
 *inside* the field — a rule beneath what you typed, then how it parsed, with the mic or send
 button on that same row. It used to sit outside and below, reserving its line whether or not it
@@ -401,6 +645,13 @@ had anything to say, which left about 90px of dead space above the first entry o
 populated day. It cannot simply collapse: it is a live region, and a line that changes height
 makes the timeline jump on every keystroke. Inside the control the height is fixed by the
 control, so nothing below it moves.
+
+**The control is raised off the page rather than drawn on it.** `bg-raised` on a `surface` page, a
+hairline `edge` and a 1px shadow — enough to be the strongest interactive thing on the screen and
+the only one that can be found without looking, and not enough to become a floating card, which is
+a thing this app has none of. Send fills once there is something to save: an outline arrow the
+same weight as the mic beside it said "there is a button here" without saying that pressing it is
+the thing you came to do.
 
 **That second row is also where the mode lives: `Log · Ask`, then the parse, then send.** Asking
 used to be reachable only by typing a leading `?`, which meant the box's second job was invisible
@@ -410,6 +661,21 @@ nothing to keep and it is faster than reaching for a control — the mode is how
 discovered, not the only way to reach it. The toggle sits *inside* the control rather than under
 it for two reasons: this row has to exist anyway, and an empty strip inside a bordered box reads
 as a rendering fault. 44px targets, so the row is 44px.
+
+**Switching to Ask shows what Ask can answer, because a placeholder names the job
+and not the capability.** The toggle made the second job discoverable and then
+handed over a blank field, so the half of the app that answers questions was
+reachable and unknowable at the same time. Three tappable questions sit under the
+control while Ask is selected and the box is empty — the same move the empty day
+makes for logging, the feature demonstrated rather than described. They are
+deliberately **subject-free** (a period and a measure, nothing else): a
+suggestion naming a merchant or a person answers "nothing found" on a log that
+has never mentioned them, which is the worst possible introduction to the thing
+being introduced. Tapping fills the box rather than submitting, exactly as the log
+examples do — but here that *is* asking, since the answer computes as you type,
+and the text stays put so the question can be edited into the next one. They are
+gone the moment there is any text, so they never sit under a result, and the log
+examples are held to Log mode so an empty day never shows two lists at once.
 
 **A mode can be the wrong one, and a prefix cannot** — that is the cost of the toggle, and it is
 paid in one place. Type `350 lunch swiggy` with Ask selected and the honest answer is "nothing
@@ -453,12 +719,33 @@ global `:focus-visible` outline so no component can forget it, `prefers-reduced-
 globally, and meaning is never carried by colour alone — the kind icon is `aria-hidden` and an
 `sr-only` kind name sits beside it.
 
+**The focus rule has exactly two exceptions and both live in `index.css` beside it**, so focus is
+still decided in one file rather than negotiated per component. A `[role="dialog"]` takes no ring:
+a sheet is focused so the keyboard starts inside it, not because it is something to act on, and
+the global rule matches any `[tabindex]` — so every sheet opened with a 2px outline drawn round
+the whole panel. And `#quick-add` hands its ring to `.capture`, the control it sits inside: the
+field fills the top row of a bordered box, so the ring drew a box inside a box, and because the
+field is autofocused that was the first thing anybody saw. Three rules do the handover, and their
+order is the fallback — the ring is on for any focus inside the control, then taken off again
+unless the field is what is keyboard-focused. Where `:has()` is unsupported the third rule is
+dropped whole and the ring simply shows more eagerly. Louder, never absent, which is the only
+direction this is allowed to degrade in.
+
+**Decoration never shrinks a target.** `Log · Ask` is a 28px pill inside a 44px button and a day
+cell is a 28px disc inside a 44px one — the same negative-margin trick the toast's buttons already
+used. Making the box you can see the box you can hit is how 44px quietly becomes 32px.
+
 ## Data model
 
 One table, `entries` ([supabase/migrations/0001_entries.sql](supabase/migrations/0001_entries.sql)).
 Four kinds — `expense`, `time`, `event`, `note`. Do not add a fifth.
 
-- **`amount_paise` is an integer. Money is never a float anywhere.** ₹347.50 is `34750`.
+- **`amount_paise` is an integer. Money is never a float anywhere.** ₹347.50 is `34750`. It is
+  *signed*, and that is not an accident: `rupees` prints a leading minus and `paiseFrom` reads one,
+  so a refund is an expense of −₹50 rather than a fifth kind. The parser used to be the only layer
+  that disagreed, dropping the sign and filing `-50 refund` as fifty rupees *spent* — the one
+  money reading here that could be wrong without looking wrong. A minus is read only at the start
+  of a word (`(?:^|\s)-`), or `covid-19 test 500` becomes minus nineteen rupees.
 - **`occurred_on`** (a local date) is what everything queries and groups by.
 - **`occurred_at`** is optional, used only to sort within a day and show a clock time.
 - **Deletes are soft** — set `deleted_at`, never `DELETE`. Every read filters `deleted_at is null`.
@@ -537,10 +824,59 @@ released, so *every later sync was blocked too*, including the one due when the 
 Hence `PATIENCE`: stop waiting after 10s and treat it as no network. Abandoning a request is safe
 here precisely because every write is an idempotent upsert.
 
-**`env(safe-area-inset-bottom)` is 0 in the Android WebView.** Measured, not assumed. A bottom
-sheet padded with `max(1rem, env(...))` therefore gets 16px, and Android's gesture bar is about
-24, so the sheet's own buttons sat underneath it. The floor has to be a real number — the inset
-adds nothing here and cannot be relied on to.
+**Android's back button reaches nothing unless a plugin hands it over, and the default is to
+dismiss the app.** Verified on a Pixel 7 emulator: with the editor open, BACK put the launcher in
+front and left the sheet exactly where it was — the app was still running with a modal on screen.
+Back is *the* dismiss gesture on Android, so this was the one platform convention the app broke.
+
+**A history entry does not fix it**, which was worth establishing before building on it:
+`targetSdkVersion` is 36, where `onBackPressed` is superseded by the predictive-back API and a bare
+`BridgeActivity` registers no handler, so `pushState` followed by BACK still backgrounded the app.
+`@capacitor/app` was added for its `backButton` event, and nothing else.
+
+`src/lib/back.ts` holds the whole of it. **It closes a sheet; it is not a navigation system** —
+there is no router here and nothing else back could mean. `Sheet` registers its *own* `onClose`,
+the same function the scrim, the close button and Escape already call, so there is one close path
+rather than a second copy of it — and `HelpSheet`, `MonthSheet`, `ProfileSheet`, `AheadSheet` and
+`EntryEditor` are all covered without knowing this exists. Registered against a **ref**, not the
+prop: every caller passes an inline `() => setEditing(null)`, which is a new function on each
+render, and the page re-renders on the 30-second clock tick.
+
+Adding a `backButton` listener **takes the default away from Capacitor**, so the no-sheet case has
+to be answered explicitly or back would do nothing at all on the timeline — a worse bug than the
+one being fixed. It minimises, never exits: the log is on the device either way, but killing the
+process is not what back means at the root of an Android app. `back()` is pure and exported for
+exactly one reason — a test that needs an emulator is a test that does not run.
+
+**Pressing back *asks* a sheet to close; it does not decide that it has.** The stack does not pop
+itself. Deregistering belongs to the unmount, or a close that is refused or merely re-rendered
+would leave a sheet on screen with nothing listening, which is the original bug one press later.
+
+Verified on device, whole lifecycle: each of the four sheets and the editor closes and the app
+stays foregrounded, focus returns to the control that opened it, the handler re-registers after a
+save-and-reopen, and with nothing open the app minimises. **With the keyboard up the first BACK
+closes the keyboard and the sheet stays** — the IME consumes it before the WebView ever sees it,
+which is what every Android app does and is not something to work around.
+
+**The Android status bar is not `theme-color`, and in light mode it does not match the page.**
+`theme-color` is a browser meta; the native bar is painted by `Theme.AppCompat.DayNight.NoActionBar`
+in `android/app/src/main/res/values/styles.xml`, and there is no `@capacitor/status-bar` plugin
+here. On the emulator the WebView gets 412×839 of a 411×914 screen — the system bars are opaque
+and outside it, which is also why both safe-area insets measure 0. The result is a dark band above
+a paper-coloured page in light mode; dark mode has no seam because the two happen to agree.
+Verified on a Pixel 7 / Android 16 emulator. Fixing it properly means following the *app's* theme
+choice rather than the OS's, since the profile sheet lets the two disagree — a `values-night`
+qualifier would get that backwards. Making the bar transparent instead is worse: the insets read
+0 here, so the header would sit under the clock, which is the exact bug the safe-area padding
+exists to prevent.
+
+**`env(safe-area-inset-bottom)` cannot be relied on either way in the Android WebView, so every
+floor is a real number.** It was measured as **0** on the emulator: a bottom sheet padded with
+`max(1rem, env(...))` got 16px against a gesture bar of about 24, and the sheet's own buttons sat
+underneath it. On a Galaxy S21 FE it reads **48px** — read out of the live WebView via CDP, not
+guessed — presumably because `targetSdk 35` draws edge-to-edge and the inset is now reported. Both
+numbers are real on real devices, which is the point: `max(<a real number>, env(...))` is correct
+in both worlds, and anything that trusts the inset alone is wrong on one of them.
 
 **Never `toISOString().slice(0, 10)`.** In IST that returns yesterday's date for the first five
 and a half hours of every day. Use `dayKey()` / `format(d, 'yyyy-MM-dd')`.
@@ -583,7 +919,7 @@ TypeScript strict with `noUncheckedIndexedAccess`. No `any`, no non-null asserti
 layout — no barrel files, no `index.ts` re-exports, no directory per component.
 
 **The runtime dependency list is `react`, `react-dom`, `@supabase/supabase-js`, `date-fns` and
-Capacitor. Ask before adding anything else.** The original "four dependencies only" rule was
+Capacitor (`core`, `android`, `local-notifications`, `app`). Ask before adding anything else.** The original "four dependencies only" rule was
 retired deliberately when the Android app was added, not broken by accident: Capacitor plugins
 are runtime dependencies. The bar is unchanged for everything else — no component library, no
 state manager, no data-fetching library, no icon package. No component library, no state manager, no data-fetching library, no icon package;
@@ -634,13 +970,17 @@ at the end of [README.md](README.md).
   does stringify the whole log, and IndexedDB would be the move if that ever mattered.
 - Signing out does not clear this device's log; it stays keyed by user id, so unsynced writes are
   still there on signing back in. Two accounts on one browser therefore each keep their own.
+- **A guest log lives on one device and nothing backs it up.** That is the honest trade for
+  opening straight into the text box, and the profile sheet says so in as many words — but losing
+  the phone loses the log, and there is no prompt nagging anyone to sign in. `adopt` runs once, on
+  the first sign-in; a guest who signs into a *second* account later has already had their log
+  moved to the first.
 - "On this day" is computed from the corpus fetched at launch, so backfilling an entry into a
   previous year does not appear there until the app is reloaded. Deliberate: refetching the whole
   log on every write would cost a round trip to keep a strip current that changes about never.
-- **There is no control to remove a repeat.** Typing `weekdays` sets one; nothing takes it off
-  again, so the only way out is to delete the row and retype it. An off switch has a wart worth
-  designing around rather than shipping blind: a *yearly* rule is re-derived from the title, so
-  turning off a birthday's repeat would resurrect it on the next save.
+- A repeat can be removed from the editor now, but **only a yearly one can be put back** — a
+  weekly rule needs its days and the parser is the only place those are expressed, so a standup
+  cleared by mistake has to be retyped. Cancel covers it within the sheet.
 - Deleting a row deletes the whole series, including from a derived occurrence on another day.
   Consistent with one-row storage, and undo covers a mistake, but nothing on the sheet says so.
 - A repeat whose start is more than a week out arms one-offs for its first week rather than
@@ -648,5 +988,15 @@ at the end of [README.md](README.md).
   first launch on or after the start date; Capacitor's cron has no start parameter.
 - Dictation uses the Web Speech API, which iOS Safari does not implement. `useDictation` reports
   `supported: false` there and `QuickAdd` hides the mic rather than offering a dead button.
+- **The ceiling is ₹21,474,836.47, and it is refused rather than owed.** `amount_paise` and
+  `duration_minutes` are Postgres `integer`, so a bigger number would be stored here, counted into
+  the day and refused by the server for ever with `22003`. `format.ts` owns the bound
+  (`amountFits` / `minutesFit`); the parser declines to read such a number as an amount, so the
+  digits stay in the title as they do for any other number it cannot use, and the editor says why
+  and will not save. Raising the ceiling is a `bigint` migration, not a change in either place.
+- **A leap-day anniversary reminds you every four years.** That is what the date means and what
+  the exported `FREQ=YEARLY` already does, and it is what `occurrencesOn` and `onThisDay` have
+  always said. It is a limitation, not a bug — but the alternative would have been a clamping rule
+  the `.ics` export would then contradict.
 - The session lives in `localStorage`, so it is per-browser. Opening the magic link in a different
   browser than the one that requested it leaves the original signed out. This is not a bug.
