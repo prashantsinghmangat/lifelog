@@ -4,6 +4,7 @@ import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
 import { AheadSheet } from './components/AheadSheet'
+import { BottomNav } from './components/BottomNav'
 import { HelpSheet } from './components/HelpSheet'
 import { BellIcon, Chevron, PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
@@ -41,6 +42,18 @@ import {
 import { supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
 import type { Entry } from './types'
+
+/**
+ * The bottom edge, held off the gesture bar.
+ *
+ * A real number and not only the inset: `env(safe-area-inset-bottom)` measures 0
+ * in the Android WebView on one handset and 48px on another, and both readings
+ * are real. Written once and used by whatever is *last* in the bottom block —
+ * the nav when it is up, the capture control when it has stood down — so the
+ * floor belongs to the thing standing on it rather than to a constant two files
+ * have to keep agreeing about.
+ */
+const FLOOR = 'pb-[max(0.75rem,env(safe-area-inset-bottom))]'
 
 /** Whatever was thrown, as something a person can read. */
 function message(failure: unknown): string {
@@ -564,7 +577,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
             had to remember to change that number too, and it was wrong by two
             paddings the first time. As siblings, clearing each other is not
             something either of them has to do. */}
-        <div className="order-last mt-4 sticky bottom-0 z-10 bg-surface pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:order-none lg:bottom-auto lg:top-0 lg:pt-1 lg:pb-2">
+        <div className="order-last mt-4 sticky bottom-0 z-10 bg-surface pt-2 lg:order-none lg:bottom-auto lg:top-0 lg:pt-1 lg:pb-2">
           {/* First in the block, so it is a sibling *above* the control rather
               than a fixed layer over it. See `Toast` and `index.css`. */}
           {toast !== null && <Toast toast={toast} onDismiss={() => setToast(null)} />}
@@ -581,6 +594,11 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
             onHelp={() => setHelpOpen(true)}
             onGoToDay={setDay}
           />
+
+          {/* Last in the block, so it carries the floor and its own background
+              reaches the bottom edge — a bar floating a centimetre above the
+              gesture bar reads as a rendering fault. */}
+          <BottomNav view="today" onGo={() => undefined} className={FLOOR} />
         </div>
 
         {/* Asked for in the app, not left to the OS: a reinstall silently

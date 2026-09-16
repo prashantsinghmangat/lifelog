@@ -2,9 +2,12 @@
 // parent's text colour drives them. No icon package.
 import type { ReactNode } from 'react'
 
-type Props = { size?: number; className?: string }
+// `stroke` is here for the bottom nav, whose four icons sit at 20px under an
+// 11px label: at the standard weight they read as four heavy blocks in a row
+// rather than as a set of labels with marks above them.
+type Props = { size?: number; stroke?: number; className?: string }
 
-function Svg({ size = 20, className, children }: Props & { children: ReactNode }) {
+function Svg({ size = 20, stroke = 2, className, children }: Props & { children: ReactNode }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -12,7 +15,7 @@ function Svg({ size = 20, className, children }: Props & { children: ReactNode }
       height={size}
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={stroke}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -111,6 +114,26 @@ export function ArrowUpIcon(props: Props) {
   return (
     <Svg {...props}>
       <path d="M12 20V5M6 11l6-6 6 6" />
+    </Svg>
+  )
+}
+
+/** A day: one spine with entries hanging off it, which is what the timeline is. */
+export function TodayIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M6 4v16" />
+      <path d="M6 8h12M6 13h8M6 18h10" />
+    </Svg>
+  )
+}
+
+export function AskIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.4 9.2a2.7 2.7 0 1 1 3.4 2.6c-.6.2-.8.7-.8 1.3v.4" />
+      <path d="M12 17.2h.01" />
     </Svg>
   )
 }

@@ -858,7 +858,13 @@ describe('using the app without an account', () => {
     who = { id: 'local-guest', email: '', local: true }
     const box = await open()
     await userEvent.type(box, '350 lunch swiggy{Enter}')
-    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    // The control's own toggle, not the nav's destination: both say "Ask", and
+    // this test is about the box answering rather than about getting there.
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'What the box does' })).getByRole('button', {
+        name: 'Ask',
+      }),
+    )
     await userEvent.type(box, 'how much today')
 
     await waitFor(() => expect(screen.getByText(/₹350 · 1 entry/)).toBeTruthy())
