@@ -5,6 +5,7 @@ import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
 import { AheadSheet } from './components/AheadSheet'
 import { BottomNav, type View } from './components/BottomNav'
+import { Calendar } from './components/Calendar'
 import { HelpSheet } from './components/HelpSheet'
 import { BellIcon, Chevron, PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
@@ -55,8 +56,9 @@ import type { Entry } from './types'
  */
 const FLOOR = 'pb-[max(0.75rem,env(safe-area-inset-bottom))]'
 
-/** What the three destinations that are not a day call themselves. */
-const TITLES: Record<Exclude<View, 'today'>, string> = {
+/** What each destination calls itself, on the screen and out loud. */
+const TITLES: Record<View, string> = {
+  today: 'Today',
   calendar: 'Calendar',
   ask: 'Ask',
   you: 'You',
@@ -572,7 +574,11 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
             </div>
           </>
         ) : (
-          <h2 className="truncate text-[1.375rem] leading-tight font-semibold tracking-tight sm:text-2xl">
+          // An eyebrow, not a headline: the nav already says which destination
+          // is live, and each of these screens has something of its own that
+          // deserves the size — the month's spend, an answer's number, the name
+          // on the account. Two big things on one screen is one too many.
+          <h2 className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
             {TITLES[view]}
           </h2>
         )}
@@ -784,12 +790,11 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
           </>
         )}
 
-        {/* The same grid the sidebar holds, with nothing else on the screen to
-            compete with it. Picking a day is asking to read it, so it lands on
-            Today — the calendar is navigation and never a place to stay. */}
+        {/* Picking a day is asking to read it, so it lands on Today — the
+            calendar is navigation and never a place to stay. */}
         {view === 'calendar' && (
           <div className="mt-4 flex-1">
-            <MonthGrid day={day} now={now} loadDays={fetchDays} onPick={pick} />
+            <Calendar day={day} now={now} all={all} loadDays={fetchDays} onPick={pick} />
           </div>
         )}
 
