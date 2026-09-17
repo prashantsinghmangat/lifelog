@@ -187,8 +187,26 @@ intelligence on top will save it.
 
 ## Held behind the freeze
 
-The interface is frozen for the release candidate. One idea survived the review and is worth
+The interface is frozen for the release candidate. Two ideas survived review and are worth
 doing **after** it, not instead of it.
+
+**Monthly repeats (`FREQ=MONTHLY`), pending evidence from real use.** Warranty expiries and
+one-off bill due dates already work as plain events — `fridge warranty expires 12 mar 2027` files
+an event on that day and the phone rings at 9am, verified against the parser out to 2028. What
+does *not* work is a recurring bill: the repeat grammar knows yearly and weekly and nothing else,
+so `water bill every month` is honestly kept as a note (the same rule that keeps `every 2 weeks`
+from becoming ₹2) and a monthly bill has to be retyped each month.
+
+The fix fits the architecture without strain — one more branch in the repeat grammar, `alarms()`,
+`repeatLabel` and `occurrences.ts`; storage stays one row per repeat, and monthly is a cron the OS
+can express directly (`on: { day, hour, minute }`), so it needs none of the weekly start-date
+hold-back machinery. It is held anyway, because the seven-day trial below exists precisely to rank
+wants like this one: if "I keep retyping the electricity bill" shows up in the friction notes, it
+has earned its place as the first feature after the freeze. Two edges to decide at build time: a
+repeat on the 31st (clamp or skip short months — whichever is chosen, the `.ics` export must say
+the same), and whether "due on the 1st" wants the reminder a day or two *before*, which is the
+adjacent gap — a reminder always fires on the day, never in advance, and "remind me early" is a
+different feature from "repeat monthly".
 
 **Kind marks become small kind-coloured dots.** Today each row carries a 15px glyph — the rupee
 sign, a clock, a calendar, a note. A dot is quieter, and it is the one thing here that could grow
