@@ -622,6 +622,60 @@ describe('the four destinations', () => {
   })
 })
 
+/**
+ * An export that silently does not export.
+ *
+ * On a phone this button did nothing at all: `navigator.canShare` is undefined
+ * in the Capacitor WebView, so it fell through to a blob `<a download>`, which
+ * an Android WebView swallows unless the app registers a DownloadListener. No
+ * file, no error, no toast — and this is the only manual backup there is, which
+ * for a guest log is the only backup at all. The fix is a native route; the
+ * guard is that the outcome is always said out loud.
+ */
+describe('taking a copy of the log', () => {
+  it('says how much was exported rather than appearing to do nothing', async () => {
+    // jsdom implements neither, and the download path needs both.
+    const made: string[] = []
+    vi.stubGlobal('URL', {
+      ...globalThis.URL,
+      createObjectURL: () => {
+        made.push('blob:x')
+        return 'blob:x'
+      },
+      revokeObjectURL: () => undefined,
+    })
+    HTMLAnchorElement.prototype.click = () => undefined
+
+    rowsOnServer = [
+      {
+        id: 'server-1',
+        kind: 'expense',
+        occurred_on: dayKey(new Date()),
+        occurred_at: null,
+        title: 'lunch swiggy',
+        note: null,
+        amount_paise: 35000,
+        duration_minutes: null,
+        category: 'food',
+        data: {},
+        created_at: '2026-09-05T09:00:00+05:30',
+      },
+    ]
+    await open()
+    await screen.findByText('lunch swiggy')
+
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Export JSON' }))
+
+    await waitFor(() => expect(screen.getByText('1 entry exported')).toBeTruthy())
+    expect(made.length).toBe(1)
+  })
+})
+
 describe('a sheet with a toast still on screen', () => {
   /** The nearest stacking level above a node, since the toast no longer sets its own. */
   function level(from: Element | null): number | null {

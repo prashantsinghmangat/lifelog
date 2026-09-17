@@ -15,10 +15,10 @@ is a regression.
 | Web | https://lifelog-timeline.netlify.app, auto-deployed from `main` |
 | Android | Capacitor shell, installed by `npm run android:install` |
 | iOS | the web app, installable as a PWA — **never tested** |
-| Tests | 602, across the pure libraries plus component journeys for the app, the editor, the capture box, the sheets and the four destinations |
+| Tests | 603, across the pure libraries plus component journeys for the app, the editor, the capture box, the sheets and the four destinations |
 | Bundle | 147.5 KB gzipped across everything the page fetches, against a 150 KB budget |
 | Data | one `entries` table, RLS verified, soft deletes, nightly backups off-site |
-| Runtime deps | react, react-dom, supabase-js, date-fns, Capacitor (core, android, local-notifications, app), @netlify/blobs |
+| Runtime deps | react, react-dom, supabase-js, date-fns, Capacitor (core, android, local-notifications, app, filesystem, share), @netlify/blobs |
 
 ---
 
@@ -69,6 +69,14 @@ editorial day header, quieter kind marks, a calendar demoted to navigation, a ca
 is the one raised object on the page, and an answer whose conclusion leads. Verified at 320 / 375 /
 430 / 768 / 1024 / 1440 in both themes and at 200% zoom. Every text token clears 4.5:1; `faint` had
 been sitting at 2.9:1.
+
+**Both exports, which did nothing at all in the Android app.** `navigator.share` is undefined in a
+WebView and an `<a download>` is swallowed without a `DownloadListener`, so Export JSON — the only
+manual backup there is, and a guest log's only backup of any kind — produced no file, no error and
+no toast. `@capacitor/filesystem` and `@capacitor/share` give native its own route, and every path
+now reports what happened. "Send events to calendar" was removed from native instead of fixed: the
+app already schedules those reminders itself, which is the rule the per-entry "Add to calendar"
+has always followed.
 
 **Four destinations.** Today, Calendar, Ask and You in a bottom nav, reversing a rule the design
 held for a long time. What earned it is that three of the four already existed and were reachable
@@ -252,17 +260,19 @@ Each of these has already resisted a plausible reason to break it.
   an authentication system behaving like a public SaaS for a product that is single-user by
   design.
 - **Alarms and reminders** permission on the phone, or Android downgrades reminders to inexact.
-- The `.ics` share sheet has only been proved on Android.
 - **The light-mode status bar does not match the page on Android.** The native bar is painted by
   `Theme.AppCompat.DayNight.NoActionBar`, not by `theme-color`, so a paper-coloured page sits under
   a dark band; dark mode has no seam because the two happen to agree. Fixing it properly means
   following the *app's* theme rather than the OS's — the You screen lets the two disagree, so a
   `values-night` qualifier would get it backwards — which needs `@capacitor/status-bar` or native
   work. Making the bar transparent instead is worse: the header would land under the clock.
-- **The bundle has 2.5 KB of headroom.** 147.5 KB gzipped across everything the page fetches,
-  against a 150 KB budget. The main chunk alone reads a comfortable 138.6 KB, which is how the
-  margin came to be overstated — the CSS and the lazy Capacitor chunks are the rest. The bottom
-  nav cost 0.9 KB of it.
+- **The bundle budget needs a decision: the total is now 151.8 KB against 150.** That figure is
+  everything the build emits, which is how README has always counted it — but it includes the
+  Capacitor plugins' *web* shims, and those are fetched by nobody: on native the plugin proxies go
+  straight to the bridge, and on the web `deliver.ts` and `reminders.ts` return before importing
+  them at all. **What a browser actually downloads is 145.6 KB** (main chunk, CSS, HTML), which has
+  4.4 KB of headroom. Two honest numbers that disagree, and the accounting should say which one the
+  budget is about before anything else is added.
 
 ---
 

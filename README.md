@@ -32,8 +32,9 @@ Single user. No sharing, no onboarding, no settings.
 
 The browser bundle has exactly four dependencies: `react`, `react-dom`,
 `@supabase/supabase-js`, `date-fns`. Capacitor (`@capacitor/core`, `@capacitor/android`,
-`@capacitor/local-notifications`, `@capacitor/app`) was added with the Android app and reaches
-the web bundle only through the dynamic imports in `reminders.ts` and `back.ts`; `@netlify/blobs` is used by the backup
+`@capacitor/local-notifications`, `@capacitor/app`, `@capacitor/filesystem`, `@capacitor/share`)
+was added with the Android app and reaches the web bundle only through the dynamic imports in
+`reminders.ts`, `back.ts` and `deliver.ts`; `@netlify/blobs` is used by the backup
 functions and never by the app. No component library, no state manager, no data-fetching
 library, no icon package. The handful of icons are inline SVG.
 
@@ -197,7 +198,7 @@ that is what actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 602 tests
+npm test           # vitest run — 603 tests
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -575,16 +576,23 @@ Measured with `npm run build`:
 
 | File | Raw | Gzipped |
 | --- | --- | --- |
-| `assets/index-*.js` | 476.64 kB | **138.62 kB** |
+| `assets/index-*.js` | 477.65 kB | **138.94 kB** |
 | `assets/index-*.css` | 25.05 kB | 5.99 kB |
-| `assets/web-*.js` (×2) | 5.28 kB | 1.68 kB |
-| `assets/esm-*.js` (×2) | 0.89 kB | 0.57 kB |
 | `index.html` | 1.21 kB | 0.63 kB |
-| **Total** | | **147.49 kB** |
+| **What a browser fetches** | | **145.56 kB** |
+| `assets/web-*.js` (×4) | 14.11 kB | 4.75 kB |
+| `assets/esm-*.js` (×4) | 2.59 kB | 1.51 kB |
+| **Everything the build emits** | | **151.82 kB** |
 
-Against a 150 KB budget, with **2.5 KB of headroom** — the figure to watch, since the main chunk
-alone reads a comfortable 138.62 kB and the CSS and the two lazy Capacitor chunks account for the
-rest. The bottom nav and its two new screens cost 0.9 kB of that. The four small chunks are the dynamic imports in `reminders.ts` and `back.ts`, fetched only
+Against a 150 KB budget. **The two figures disagree and it matters which one the budget is
+about.** A browser downloads 145.56 kB and has 4.4 KB of headroom: the eight small chunks are the
+Capacitor plugins, and nothing fetches them on the web — `reminders.ts`, `back.ts` and
+`deliver.ts` all check `isNative()` and return *before* the dynamic import, and inside the native
+shell the plugin proxies talk to the bridge rather than to these web shims. Counting them, as this
+table always has, the total is 151.82 kB and over budget. The conservative number is the safer one
+to hold, so treat it as over until the accounting is settled. If it needs bringing down, importing
+`@supabase/auth-js` and `@supabase/postgrest-js` directly drops the unused half of the SDK, which
+is worth far more than these chunks. The four small chunks are the dynamic imports in `reminders.ts` and `back.ts`, fetched only
 inside the native shell. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
 `postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and
 postgrest are used. If the budget ever gets tight, importing `@supabase/auth-js` and

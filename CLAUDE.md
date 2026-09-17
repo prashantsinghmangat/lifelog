@@ -450,12 +450,38 @@ silently go wrong, not that a component renders.
 outcome (`scheduled` / `blocked` / `skipped`) or a caught message, because three separate bugs here
 were invisible for exactly as long as their promises rejected into nothing.
 
-**`src/lib/ics.ts`** is the web's answer: the OS calendar raises the alarm, because no
-web API can while the app is closed. Pure and `now`-injected like the parser, so it is tested
+**`src/lib/ics.ts`** is the web's answer, and only the web's: the OS calendar raises the alarm,
+because no web API can while the app is closed. Pure and `now`-injected like the parser, so it is tested
 rather than hoped at. An all-day alarm is a *relative* trigger (`PT9H` past local midnight), which
 is why nothing stores a timezone — change that to an absolute time and yearly birthdays break in
 every timezone but one. `src/lib/deliver.ts` prefers the share sheet over a download, since
 downloads are unreliable inside a standalone iOS PWA.
+
+**Neither of those exists inside the native shell, and for months that meant both exports did
+nothing at all.** `navigator.share` and `navigator.canShare` are `undefined` in the Capacitor
+Android WebView — Web Share is a Chrome feature, not a WebView one — so every export fell through
+to the blob download, where an `<a download>` is swallowed unless the app registers a
+`DownloadListener`, which neither `MainActivity` nor `@capacitor/android` does. `click()` returned
+without throwing, so nothing was caught and nothing was said: on a phone, Export JSON produced no
+file, no error and no toast. The only evidence was an empty `/sdcard/Download`. Found by pressing
+the button on a Galaxy S21 FE and watching logcat record nothing whatsoever.
+
+So native has its own route: `@capacitor/filesystem` writes the file to the app's **Cache**, and
+`@capacitor/share` hands that URI to the system chooser. Cache rather than Documents because
+Documents is shared storage and wants a permission on older API levels, while the file only has to
+live long enough for the chooser to copy it somewhere real. `save()` is for a file the reader is
+keeping — the web downloads it, because a backup belongs on disk rather than in a share sheet, and
+native has no disk route at all, so there the sheet *is* how it reaches Files, Drive or a mail
+draft. **Every path returns what happened** (`shared` / `downloaded` / `cancelled`) and the caller
+says so, because an export that silently does not export is the worst thing this button can be:
+the entire point of it is having a copy when the device is gone. Dismissing the chooser is a
+choice and not a failure, so it reports nothing — Android rejects with a plain "Share canceled"
+rather than a DOMException named `AbortError`, so the message is what there is to match on.
+
+**And "Send events to calendar" is offered on the web alone**, for the same reason the per-entry
+"Add to calendar" always was: natively the reminder is already scheduled, so handing the same
+events to the calendar is asking for a step the app has taken. The bulk button in `You` had simply
+never been given that rule, so it sat there natively and did nothing when pressed.
 
 **`public/logo.svg` is the mark, and every other icon is derived from it.** A day's spine with
 three entries hanging off it, the nodes in expense / time / event colours on a near-black tile.
@@ -1009,12 +1035,14 @@ TypeScript strict with `noUncheckedIndexedAccess`. No `any`, no non-null asserti
 layout — no barrel files, no `index.ts` re-exports, no directory per component.
 
 **The runtime dependency list is `react`, `react-dom`, `@supabase/supabase-js`, `date-fns` and
-Capacitor (`core`, `android`, `local-notifications`, `app`). Ask before adding anything else.**
+Capacitor (`core`, `android`, `local-notifications`, `app`, `filesystem`, `share`). Ask before
+adding anything else.**
 The original "four dependencies only" rule was retired deliberately when the Android app was
 added, not broken by accident: Capacitor plugins are runtime dependencies, and each one was argued
 for on its own — `local-notifications` because no web API can raise an alarm with the app closed,
-`app` because Android's back button reaches nothing without it. The bar is unchanged for
-everything else: no component library, no state manager, no data-fetching library, no icon
+`app` because Android's back button reaches nothing without it, and `filesystem` + `share`
+because a WebView has neither a download nor a share sheet, so without them the only manual backup
+this app has did nothing on a phone. The bar is unchanged for everything else: no component library, no state manager, no data-fetching library, no icon
 package; icons are inline SVG. Comments only where the *why* is unobvious. Plain, dense, fast UI: system
 fonts, one 100ms fade on new rows, nothing else animated.
 

@@ -241,17 +241,28 @@ export function You({
       </>
     )}
 
-    <button
-      type="button"
-      onClick={onExportCalendar}
-      className="mt-6 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
-    >
-      Send events to calendar
-    </button>
-    <p className="mt-1.5 text-xs text-faint">
-      Upcoming events and birthdays, each with its own reminder. Birthdays repeat yearly and
-      alarm at 9am.
-    </p>
+    {/* The web's answer only, and it is offered nowhere else for the same
+        reason the per-entry "Add to calendar" is not: on the web no API can
+        raise an alarm with the app closed, so the OS calendar has to; in the
+        native app the reminder is already scheduled, and handing the same
+        events to the calendar as well is asking for a step the app has taken.
+        It was shown here on native regardless — and did nothing when pressed,
+        because there is no share sheet in a WebView to hand an .ics to. */}
+    {!isNative() && (
+      <>
+        <button
+          type="button"
+          onClick={onExportCalendar}
+          className="mt-6 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
+        >
+          Send events to calendar
+        </button>
+        <p className="mt-1.5 text-xs text-faint">
+          Upcoming events and birthdays, each with its own reminder. Birthdays repeat yearly and
+          alarm at 9am.
+        </p>
+      </>
+    )}
 
     {/* The things you leave by, set apart from the things you come here to
         change. A rule and a quieter row, rather than three more full-width

@@ -23,7 +23,7 @@ import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { ahead } from './lib/ahead'
 import { arm as armBack, onHome } from './lib/back'
-import { download, shareOrDownload } from './lib/deliver'
+import { save, shareOrDownload } from './lib/deliver'
 import { passed } from './lib/events'
 import { clock, dayKey, dayLabel, minutes, relativeDay, rowValue, rupees } from './lib/format'
 import { byClock, onThisDay } from './lib/history'
@@ -482,12 +482,27 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     })
   }
 
+  /**
+   * The only manual backup there is, and on a phone it did nothing at all.
+   *
+   * It went through a blob `<a download>`, which an Android WebView swallows —
+   * no file, no error, no toast. `save` gives native its own route, and the
+   * outcome is reported either way: an export that silently does not export is
+   * the worst thing this button could be, because the whole point of it is
+   * having a copy when the device is gone.
+   */
   async function exportJson() {
     try {
       const all = await fetchAll()
-      // A download, not a share: a backup belongs on disk, not in a share sheet.
-      download(`lifelog-${dayKey(new Date())}.json`, 'application/json', JSON.stringify(all, null, 2))
+      const where = await save(
+        `lifelog-${dayKey(new Date())}.json`,
+        'application/json',
+        JSON.stringify(all, null, 2),
+      )
       setProfileOpen(false)
+      if (where !== 'cancelled') {
+        setToast({ text: `${all.length} ${all.length === 1 ? 'entry' : 'entries'} exported` })
+      }
     } catch (failure) {
       setToast({ text: failure instanceof Error ? failure.message : 'Export failed' })
     }
