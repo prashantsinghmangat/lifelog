@@ -525,7 +525,14 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     // Safe-area padding, not decoration: Android draws the WebView edge-to-edge
     // from targetSdk 35, and an installed iOS PWA has no browser chrome either,
     // so without this the day header sits underneath the status bar.
-    <div className="mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] lg:grid-cols-[17rem_minmax(0,42rem)] lg:justify-center lg:px-8 lg:pt-8">
+    //
+    // The *bottom* padding is `lg:` only, and that was found on the emulator:
+    // the bottom block is sticky inside this container, so a padding here is
+    // floor the block cannot reach past — the nav sat 24px above the screen
+    // edge with page colour under it, which reads as a rendering fault rather
+    // than as a bar. On compact the block owns the bottom edge and `FLOOR` is
+    // the only thing holding it off the gesture bar.
+    <div className="mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] lg:pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] lg:grid-cols-[17rem_minmax(0,42rem)] lg:justify-center lg:px-8 lg:pt-8">
       {/* The only h1. The sidebar wordmark below is hidden on compact, where
           display:none would take the page's heading with it. */}
       <h1 className="sr-only">lifelog</h1>

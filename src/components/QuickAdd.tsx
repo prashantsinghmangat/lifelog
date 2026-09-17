@@ -305,8 +305,17 @@ export function QuickAdd({
             what you typed, then the way to send it. The mode lives here rather
             than under the control because this row has to exist anyway — it is
             what keeps the height fixed — and an empty strip inside a bordered
-            box reads as a rendering fault. 44px targets, so the row is 44px. */}
-        <div className="flex items-center border-t border-line px-2">
+            box reads as a rendering fault. 44px targets, so the row is 44px.
+
+            That 44 is **stated here rather than inherited from whatever is in
+            the row**, and the difference was worth a device to find: the height
+            used to come from the toggle's own `h-11` buttons, so hiding the
+            toggle on compact — where the mode is a destination now — collapsed
+            the row to 1px and took the control's fixed height with it. Nothing
+            else in the row has a height of its own. The preview is empty until
+            you type, and the send button only appears once there is something
+            to save, with no mic beside it on native. */}
+        <div className="flex h-11 items-center border-t border-line px-2">
           {/* Two words, and which one is live has to be obvious at a glance:
               weight alone was doing that job, and weight alone is what a
               disabled control also looks like. The selected word now sits in a
