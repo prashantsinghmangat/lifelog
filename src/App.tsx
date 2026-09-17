@@ -141,6 +141,15 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
    * sets it, so the wide layout is exactly what it was.
    */
   const [view, setView] = useState<View>('today')
+  /**
+   * Whether the capture field has anything in it.
+   *
+   * The nav stands down the moment it does, and that is what lets a bottom bar
+   * and a five-second capture share one edge: mid-entry the control takes the
+   * whole bottom edge back, so nothing has been added to the one act the app
+   * exists for. Reported by `QuickAdd`, which owns the text.
+   */
+  const [typing, setTyping] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [aheadOpen, setAheadOpen] = useState(false)
@@ -634,175 +643,184 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
               than a fixed layer over it. See `Toast` and `index.css`. */}
           {toast !== null && <Toast toast={toast} onDismiss={() => setToast(null)} />}
 
-          <QuickAdd
-            day={day}
-            now={now}
-            ask={view === 'ask'}
-            onLeaveAsk={() => setView('today')}
-            showExamples={view === 'today' && !loading && shown.length === 0}
-            onSubmit={submit}
-            corpus={corpus}
-            onNeedCorpus={loadCorpus}
-            prefill={prefill}
-            onPrefilled={() => setPrefill(null)}
-            onHelp={() => setHelpOpen(true)}
-            onGoToDay={setDay}
-          />
+          {/* Absent on You alone: that screen is about the account, and a
+              capture box under it would be an invitation to log the settings.
+              The floor moves onto the control whenever the nav is not there to
+              hold it — on `lg` the block is at the top and neither does. */}
+          {view !== 'you' && (
+            <div className={typing ? `${FLOOR} lg:pb-0` : undefined}>
+              <QuickAdd
+                day={day}
+                now={now}
+                ask={view === 'ask'}
+                onLeaveAsk={() => setView('today')}
+                onTyping={setTyping}
+                showExamples={view === 'today' && !loading && shown.length === 0}
+                onSubmit={submit}
+                corpus={corpus}
+                onNeedCorpus={loadCorpus}
+                prefill={prefill}
+                onPrefilled={() => setPrefill(null)}
+                onHelp={() => setHelpOpen(true)}
+                onGoToDay={setDay}
+              />
+            </div>
+          )}
 
           {/* Last in the block, so it carries the floor and its own background
               reaches the bottom edge — a bar floating a centimetre above the
               gesture bar reads as a rendering fault. */}
-          <BottomNav view={view} onGo={setView} className={FLOOR} />
+          {!typing && <BottomNav view={view} onGo={setView} className={FLOOR} />}
         </div>
 
         {view === 'today' && (
           <>
-          {/* Asked for in the app, not left to the OS: a reinstall silently
-              revokes this, and a reminder that cannot fire is worse than no
-              reminder because it was trusted. */}
-          {notify === 'denied' && (
-            <div className="mt-4 flex items-center gap-3 rounded-xl border border-line bg-sunken px-3.5 py-2.5">
-              <p className="min-w-0 flex-1 text-xs text-muted">
-                Allow notifications, or reminders cannot reach you.
+            {/* Asked for in the app, not left to the OS: a reinstall silently
+                revokes this, and a reminder that cannot fire is worse than no
+                reminder because it was trusted. */}
+            {notify === 'denied' && (
+              <div className="mt-4 flex items-center gap-3 rounded-xl border border-line bg-sunken px-3.5 py-2.5">
+                <p className="min-w-0 flex-1 text-xs text-muted">
+                  Allow notifications, or reminders cannot reach you.
+                </p>
+                {/* 44px like everything else. It was 36 to keep the banner short,
+                    which is the one trade this app does not make — and it is the
+                    only control on the screen the *native* app actually depends on,
+                    since nothing rings without it. Negative margins keep the banner
+                    the height it was. */}
+                <button
+                  type="button"
+                  onClick={() => void allowReminders()}
+                  className="-my-1 flex h-11 shrink-0 items-center rounded-lg bg-ink px-3.5 text-xs font-medium text-surface transition-opacity hover:opacity-90"
+                >
+                  Allow
+                </button>
+              </div>
+            )}
+
+            {/* Offline is a state, not an error: everything still works, so it is
+                said quietly and the raw fetch failure behind it is not shown. What
+                does need saying is how much this device is still holding, because
+                an entry that exists nowhere else is the one thing worth knowing.
+                Driven by whether a request got an answer, never by
+                `navigator.onLine` — on Android that reports a connection the device
+                does not have. */}
+            {!reachable ? (
+              <p className="mt-4 text-xs text-faint">
+                Offline
+                {owed > 0
+                  ? ` · ${owed} ${owed === 1 ? 'entry' : 'entries'} saved here, waiting to sync`
+                  : ' · reading this device’s copy'}
               </p>
-              {/* 44px like everything else. It was 36 to keep the banner short,
-                  which is the one trade this app does not make — and it is the
-                  only control on the screen the *native* app actually depends on,
-                  since nothing rings without it. Negative margins keep the banner
-                  the height it was. */}
-              <button
-                type="button"
-                onClick={() => void allowReminders()}
-                className="-my-1 flex h-11 shrink-0 items-center rounded-lg bg-ink px-3.5 text-xs font-medium text-surface transition-opacity hover:opacity-90"
-              >
-                Allow
-              </button>
-            </div>
-          )}
+            ) : (
+              error !== null && <p className="mt-4 text-xs text-expense">{error}</p>
+            )}
 
-          {/* Offline is a state, not an error: everything still works, so it is
-              said quietly and the raw fetch failure behind it is not shown. What
-              does need saying is how much this device is still holding, because
-              an entry that exists nowhere else is the one thing worth knowing.
-              Driven by whether a request got an answer, never by
-              `navigator.onLine` — on Android that reports a connection the device
-              does not have. */}
-          {!reachable ? (
-            <p className="mt-4 text-xs text-faint">
-              Offline
-              {owed > 0
-                ? ` · ${owed} ${owed === 1 ? 'entry' : 'entries'} saved here, waiting to sync`
-                : ' · reading this device’s copy'}
-            </p>
-          ) : (
-            error !== null && <p className="mt-4 text-xs text-expense">{error}</p>
-          )}
+            <div className="mt-4 flex-1" aria-busy={loading}>
+              {/* Placeholders, not a spinner: the rows land where these sat, so
+                  nothing jumps when the fetch resolves. */}
+              {loading && shown.length === 0 && (
+                <div aria-hidden="true">
+                  {[0, 1, 2].map((index) => (
+                    <div key={index} className="flex items-center gap-3 border-b border-line py-4">
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-line" />
+                      <span
+                        className="h-3 flex-1 rounded bg-line"
+                        style={{ opacity: 1 - index * 0.3 }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
 
-          <div className="mt-4 flex-1" aria-busy={loading}>
-            {/* Placeholders, not a spinner: the rows land where these sat, so
-                nothing jumps when the fetch resolves. */}
-            {loading && shown.length === 0 && (
-              <div aria-hidden="true">
-                {[0, 1, 2].map((index) => (
-                  <div key={index} className="flex items-center gap-3 border-b border-line py-4">
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-line" />
-                    <span
-                      className="h-3 flex-1 rounded bg-line"
-                      style={{ opacity: 1 - index * 0.3 }}
+              {/* The day opened on what was already over: struck-through reminders
+                  keep full size and position, so the loudest thing at the top was
+                  frequently the part that no longer matters. Folded into one line,
+                  the day opens on what is still live.
+
+                  Only a *leading run* of them, so nothing is reordered — a passed
+                  reminder later in the day stays where it happened. And only from
+                  two upwards: hiding a single row behind a tap costs a row and
+                  saves none. `passed` is true of events alone, so nothing carrying
+                  money or time is ever inside the fold. */}
+              {folded > 0 && (
+                <button
+                  type="button"
+                  aria-expanded={showEarlier}
+                  onClick={() => setShowEarlier(true)}
+                  className="-mx-2 flex h-11 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
+                >
+                  <span aria-hidden="true" className="flex w-5 shrink-0 justify-center text-faint">
+                    <Chevron dir="down" size={16} />
+                  </span>
+                  {folded} already passed
+                </button>
+              )}
+
+              {shownEntries.map((row) => (
+                <EntryRow
+                  key={row.id}
+                  row={row}
+                  now={now}
+                  onOpen={() => setEditing(asStored(row))}
+                  onRetry={retry}
+                />
+              ))}
+
+              {/* Under the rows, not over them: read as a header it looked like a
+                  label for the box you were about to type into, when it is a
+                  summary of the day you have just finished reading. The last row's
+                  own border is the rule above it. */}
+              {/* The figures lead and their names sit back, the same way an answer's
+                  extras read — as values with labels attached rather than as a
+                  sentence. Flat 12px muted, this line was the quietest thing on the
+                  screen while carrying the only number that sums the day: smaller
+                  than the per-row amounts it totals, which is exactly backwards. The
+                  count stays quiet, because it names the list rather than measuring
+                  it. */}
+              {shown.length > 0 && (
+                <p className="mt-3.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-faint">
+                  {/* Not `> 0`: a day whose only money is a refund has a total, and
+                      hiding it says the day carried none at all. */}
+                  {spent !== 0 && (
+                    <span>
+                      <span className="text-sm font-medium text-ink tabular-nums">{rupees(spent)}</span>{' '}
+                      spent
+                    </span>
+                  )}
+                  {logged > 0 && (
+                    <span>
+                      <span className="text-sm font-medium text-ink tabular-nums">
+                        {minutes(logged)}
+                      </span>{' '}
+                      logged
+                    </span>
+                  )}
+                  <span className="text-faint tabular-nums">
+                    {shown.length} {shown.length === 1 ? 'entry' : 'entries'}
+                  </span>
+                </p>
+              )}
+
+              <OnThisDay found={recalled} onPick={setDay} />
+
+
+              {failedElsewhere.length > 0 && (
+                <div className="mt-6">
+                  <p className="mb-1 text-xs font-medium text-expense">Did not save</p>
+                  {failedElsewhere.map((row) => (
+                    <EntryRow
+                      key={row.id}
+                      row={row}
+                      now={now}
+                      offDay
+                      onOpen={() => setDay(row.occurred_on)}
+                      onRetry={retry}
                     />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* The day opened on what was already over: struck-through reminders
-                keep full size and position, so the loudest thing at the top was
-                frequently the part that no longer matters. Folded into one line,
-                the day opens on what is still live.
-
-                Only a *leading run* of them, so nothing is reordered — a passed
-                reminder later in the day stays where it happened. And only from
-                two upwards: hiding a single row behind a tap costs a row and
-                saves none. `passed` is true of events alone, so nothing carrying
-                money or time is ever inside the fold. */}
-            {folded > 0 && (
-              <button
-                type="button"
-                aria-expanded={showEarlier}
-                onClick={() => setShowEarlier(true)}
-                className="-mx-2 flex h-11 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
-              >
-                <span aria-hidden="true" className="flex w-5 shrink-0 justify-center text-faint">
-                  <Chevron dir="down" size={16} />
-                </span>
-                {folded} already passed
-              </button>
-            )}
-
-            {shownEntries.map((row) => (
-              <EntryRow
-                key={row.id}
-                row={row}
-                now={now}
-                onOpen={() => setEditing(asStored(row))}
-                onRetry={retry}
-              />
-            ))}
-
-            {/* Under the rows, not over them: read as a header it looked like a
-                label for the box you were about to type into, when it is a
-                summary of the day you have just finished reading. The last row's
-                own border is the rule above it. */}
-            {/* The figures lead and their names sit back, the same way an answer's
-                extras read — as values with labels attached rather than as a
-                sentence. Flat 12px muted, this line was the quietest thing on the
-                screen while carrying the only number that sums the day: smaller
-                than the per-row amounts it totals, which is exactly backwards. The
-                count stays quiet, because it names the list rather than measuring
-                it. */}
-            {shown.length > 0 && (
-              <p className="mt-3.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-faint">
-                {/* Not `> 0`: a day whose only money is a refund has a total, and
-                    hiding it says the day carried none at all. */}
-                {spent !== 0 && (
-                  <span>
-                    <span className="text-sm font-medium text-ink tabular-nums">{rupees(spent)}</span>{' '}
-                    spent
-                  </span>
-                )}
-                {logged > 0 && (
-                  <span>
-                    <span className="text-sm font-medium text-ink tabular-nums">
-                      {minutes(logged)}
-                    </span>{' '}
-                    logged
-                  </span>
-                )}
-                <span className="text-faint tabular-nums">
-                  {shown.length} {shown.length === 1 ? 'entry' : 'entries'}
-                </span>
-              </p>
-            )}
-
-            <OnThisDay found={recalled} onPick={setDay} />
-
-
-            {failedElsewhere.length > 0 && (
-              <div className="mt-6">
-                <p className="mb-1 text-xs font-medium text-expense">Did not save</p>
-                {failedElsewhere.map((row) => (
-                  <EntryRow
-                    key={row.id}
-                    row={row}
-                    now={now}
-                    offDay
-                    onOpen={() => setDay(row.occurred_on)}
-                    onRetry={retry}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
 

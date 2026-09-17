@@ -77,6 +77,12 @@ type Props = {
   ask: boolean
   /** Ask was left from inside the box — Escape — so the destination has to follow. */
   onLeaveAsk: () => void
+  /**
+   * Whether there is anything in the field, which is what makes the bottom nav
+   * stand down. Told rather than read: the text lives here, and a nav that went
+   * looking for it through the DOM would be one more thing to keep in step.
+   */
+  onTyping: (typing: boolean) => void
   showExamples: boolean
   onSubmit: (parsed: ParsedEntry) => void
   /** Every entry, for answering questions. Null until asked for. */
@@ -106,6 +112,7 @@ export function QuickAdd({
   now,
   ask,
   onLeaveAsk,
+  onTyping,
   showExamples,
   onSubmit,
   corpus,
@@ -151,6 +158,16 @@ export function QuickAdd({
   }
 
   const trimmed = text.trim()
+
+  // Mid-entry the control takes the whole bottom edge back. Reset on the way
+  // out as well, or leaving this screen with something half-typed would leave
+  // the nav hidden on a screen that has no field to clear.
+  useEffect(() => {
+    onTyping(text !== '')
+  }, [text, onTyping])
+  useEffect(() => {
+    return () => onTyping(false)
+  }, [onTyping])
 
   /**
    * Asking is a mode *and* a prefix.

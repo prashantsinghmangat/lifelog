@@ -51,6 +51,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
     // tests drive the control's own toggle instead, as `lg` does.
     ask: false,
     onLeaveAsk,
+    onTyping: () => undefined,
     showExamples: false,
     onSubmit,
     corpus: null,
