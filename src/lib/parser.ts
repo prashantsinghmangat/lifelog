@@ -312,11 +312,43 @@ function takeRepeat(input: string): Cut<number[]> | null {
   return (
     bare ??
     cut(input, /\bevery\s+weekdays?\b/i, () => [1, 2, 3, 4, 5]) ??
-    cut(input, new RegExp(`\\bevery\\s+(${WEEKDAY})s?\\b`, 'i'), (m) => {
-      const day = WEEKDAYS[(m[1] ?? '').toLowerCase()]
-      return day === undefined ? null : [day]
+    cut(input, new RegExp(String.raw`\bevery\s+(${DAY_RUN})\b`, 'i'), (m) => {
+      const days = readDays(m[1] ?? '')
+      return days.length === 0 ? null : days
     })
   )
+}
+
+/**
+ * One or more weekday names after `every`, however they are joined.
+ *
+ * `every tuesday and thursday` used to keep the Tuesday and lose the Thursday —
+ * and worse, the orphaned `thursday` was then read by `takeDate` as a plain
+ * weekday, which files on the *last* one. So a line asking for two days a week
+ * produced a single repeat starting in the past, with `and` left sitting in the
+ * title, and nothing on screen said so.
+ *
+ * The rest of the app was always ready for this: `BYDAY=TU,TH` is what
+ * `weeklyRule` already writes, `repeatLabel` already reads "every Tue, Thu", and
+ * `alarms` already schedules one cron per weekday. Only the grammar could not
+ * say it.
+ *
+ * Separators are a comma, `and`, `&`, or nothing at all — `every mon wed fri` is
+ * how people type it. A bare space is safe here because the run only continues
+ * while the next word *is* a weekday: `every friday gym` stops at Friday and
+ * leaves `gym` to be the title.
+ */
+const DAY_SEPARATOR = String.raw`(?:\s*,\s*|\s+and\s+|\s*&\s*|\s+)`
+const DAY_RUN = `(?:${WEEKDAY})s?(?:${DAY_SEPARATOR}(?:${WEEKDAY})s?)*`
+
+/** Every weekday named in a matched run. Order is irrelevant; `weeklyRule` sorts. */
+function readDays(run: string): number[] {
+  const days: number[] = []
+  for (const word of run.toLowerCase().split(/[\s,&]+|\band\b/)) {
+    const day = WEEKDAYS[word] ?? WEEKDAYS[word.replace(/s$/, '')]
+    if (day !== undefined) days.push(day)
+  }
+  return days
 }
 
 /** `[1,2,3,4,5]` becomes `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR`. */
@@ -401,6 +433,15 @@ function takeAmount(input: string, currencyOnly: boolean): Cut<number> | null {
     // boundary between `0` and `r`, which is exactly the case this has to catch.
     cut(input, new RegExp(`\\b${AMOUNT}\\s*${SUFFIX}`, 'i'), toPaise)
   if (marked || currencyOnly) return marked
+
+  // `every 2 weeks` is a repeat this app cannot express — it is not two rupees.
+  // The bare-number branch below was reading that 2 as money, so a line about a
+  // fortnightly gym session became a ₹2 expense titled "gym every weeks": the
+  // wrong kind, an invented amount, and the user's own words mangled in the
+  // title. A number directly after `every` is a quantity in somebody's
+  // recurrence grammar, whatever the grammar happens to be, and never a price.
+  // Currency-marked amounts above are untouched: `₹2` says money outright.
+  if (/\bevery\s+\d/i.test(input)) return null
 
   return (
     cut(input, new RegExp(`${MINUS}${AMOUNT}`), negated) ??

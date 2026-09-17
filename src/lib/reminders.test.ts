@@ -181,6 +181,32 @@ describe('when a weekly repeat has not begun yet', () => {
     expect(oneOffs(armed)).toEqual(['Fri Sep 18 2026'])
   })
 
+  /**
+   * A two-day repeat rings twice a week, not once.
+   *
+   * The parser could not express `every tuesday and thursday` until now — it
+   * kept one day and dropped the other — so this scheduling path had never been
+   * exercised with anything but a five-day rule or a single day. It arms one
+   * cron per named weekday, which is the whole reason the fix was a parser
+   * change and nothing more.
+   */
+  it('arms one alarm for each named weekday, not one for the entry', () => {
+    const row = entry({
+      id: 'r-two-day',
+      occurred_on: '2026-09-15',
+      occurred_at: ten('2026-09-15'),
+      data: { rrule: 'FREQ=WEEKLY;BYDAY=TU,TH' },
+    })
+    const armed = alarms(row, NOW)
+
+    expect(armed).toHaveLength(2)
+    // Tuesday and Thursday, as `Date.getDay()` numbers.
+    expect(crons(armed).sort()).toEqual([2, 4])
+    expect(oneOffs(armed)).toEqual([])
+    // Distinct ids, or the second weekday would replace the first.
+    expect(new Set(armed.map((a) => a.id)).size).toBe(2)
+  })
+
   it('leaves the ordinary case as five standing crons', () => {
     // Typed today, landing on tomorrow: nothing would fire early, so nothing
     // is held back. Turning these into one-offs would stop the repeat after a

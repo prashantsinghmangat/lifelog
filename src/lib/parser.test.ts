@@ -997,6 +997,93 @@ describe('a reminder that comes round again', () => {
     expect(r?.occurredOn).toBe('2026-09-14')
   })
 
+  /**
+   * Several weekdays in one line.
+   *
+   * `every tuesday and thursday 7pm` kept the Tuesday and lost the Thursday —
+   * and the orphaned `thursday` was then read as a plain weekday, which files on
+   * the *last* one. So the line asked for twice a week and produced one repeat
+   * starting in the past, with `and` sitting in the title. Nothing said so.
+   *
+   * Storage, `repeatLabel` and `alarms` all handled several days already; only
+   * the grammar could not say it. The invariant these hold to: **every weekday
+   * the line names survives into the stored rule.**
+   */
+  describe('several days in one line', () => {
+    const forms: [string, string][] = [
+      ['gym every tuesday and thursday 7pm', 'FREQ=WEEKLY;BYDAY=TU,TH'],
+      ['gym every tue, thu 7pm', 'FREQ=WEEKLY;BYDAY=TU,TH'],
+      ['gym every monday wednesday friday 7pm', 'FREQ=WEEKLY;BYDAY=MO,WE,FR'],
+      ['gym every mon & wed 7pm', 'FREQ=WEEKLY;BYDAY=MO,WE'],
+      ['gym every tuesdays and thursdays 7pm', 'FREQ=WEEKLY;BYDAY=TU,TH'],
+    ]
+
+    for (const [text, rule] of forms) {
+      it(`reads "${text}"`, () => {
+        const r = on(text)
+        expect(r?.kind).toBe('event')
+        expect(r?.data.rrule).toBe(rule)
+        // Every named day is gone from the title, and so is the word joining them.
+        expect(r?.title).toBe('gym')
+      })
+    }
+
+    it('does not care what order the days are typed in', () => {
+      expect(on('gym every thursday and tuesday 7pm')?.data.rrule).toBe(
+        'FREQ=WEEKLY;BYDAY=TU,TH',
+      )
+    })
+
+    it('starts on the soonest of the days, never in the past', () => {
+      // Typed on Saturday the 12th: the next Tuesday-or-Thursday is Tuesday the
+      // 15th. The old reading filed this on the 10th — two days before it was
+      // even typed.
+      const r = on('gym every tuesday and thursday 7pm')
+      expect(r?.occurredOn).toBe('2026-09-15')
+      expect(r?.occurredAt?.startsWith('2026-09-15T19:00')).toBe(true)
+    })
+
+    it('stops the run at the first word that is not a weekday', () => {
+      // `every friday gym` names one day; `gym` is the title, not a sixth
+      // weekday, and the space-separated form must not swallow it.
+      const r = on('every friday gym 6pm')
+      expect(r?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=FR')
+      expect(r?.title).toBe('gym')
+    })
+
+    it('leaves the single-day and weekdays readings exactly as they were', () => {
+      expect(on('gym 7am every monday')?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=MO')
+      expect(on('call mum every sunday')?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=SU')
+      expect(on('standup 10am weekdays')?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')
+    })
+  })
+
+  /**
+   * `every 2 weeks` is a repeat this app cannot express. What it must not do is
+   * invent something else: the bare number was read as money, so a fortnightly
+   * gym session became a ₹2 expense titled "gym every weeks" — wrong kind,
+   * invented amount, and the typed words mangled. Recording the line as written
+   * is the honest answer until the grammar can say it.
+   */
+  describe('an interval the grammar cannot express', () => {
+    for (const text of ['gym every 2 weeks', 'gym every 3 weeks', 'gym every week']) {
+      it(`keeps "${text}" as what was typed`, () => {
+        const r = on(text)
+        expect(r?.amountPaise).toBeUndefined()
+        expect(r?.kind).toBe('note')
+        expect(r?.title).toBe(text)
+      })
+    }
+
+    it('still reads an ordinary amount', () => {
+      expect(on('gym 2')?.amountPaise).toBe(200)
+      expect(on('gym ₹2')?.amountPaise).toBe(200)
+      expect(on('bought 2 things')?.amountPaise).toBe(200)
+      expect(on('350 lunch swiggy')?.amountPaise).toBe(35000)
+      expect(on('-50 refund')?.amountPaise).toBe(-5000)
+    })
+  })
+
   it('accepts "every weekday" without a time, where "weekdays" alone would not', () => {
     expect(on('standup every weekday')?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')
   })
