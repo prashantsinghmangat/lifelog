@@ -30,7 +30,13 @@ type Props = {
 
 const LABEL = 'mb-1.5 block text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase'
 const FIELD =
-  'w-full rounded-lg border border-edge bg-surface px-3 py-2.5 text-base text-ink outline-none transition-colors focus:border-muted'
+  'w-full rounded-lg border border-edge bg-surface px-3 text-base text-ink outline-none transition-colors focus:border-muted'
+// 44px, like everything else. `text-base` with `py-2.5` measured 42 on a Galaxy
+// S21 FE — the app's own rule, missed by two pixels in the one place an entry is
+// corrected. The height is set rather than the padding, because the same base is
+// also the title's textarea, which is sized by its rows.
+const INPUT = `${FIELD} h-11`
+const AREA = `${FIELD} min-h-20 resize-y py-2.5 leading-relaxed`
 
 // Short, because four of these share a row on a 375px screen.
 const KIND_NAME = { expense: 'Expense', time: 'Time', event: 'Event', note: 'Note' }
@@ -244,7 +250,10 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
               type="button"
               aria-pressed={kind === option}
               onClick={() => setKind(option)}
-              className={`h-9 flex-1 rounded-lg text-xs transition-colors ${
+              // 44px, not 36: four of these share a row, and shrinking the
+              // target to fit the row is how 44 quietly becomes 36. The track
+              // grows instead, exactly as the theme control's already does.
+              className={`h-11 flex-1 rounded-lg text-xs transition-colors ${
                 kind === option
                   ? `bg-raised font-medium shadow-[0_1px_2px_rgb(0_0_0/0.06)] ${KIND_TINT[option]}`
                   : 'text-muted hover:text-ink'
@@ -289,7 +298,7 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
             rows={3}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            className={`${FIELD} min-h-20 resize-y leading-relaxed`}
+            className={AREA}
           />
         </div>
 
@@ -307,7 +316,7 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
               onChange={(event) => {
                 if (event.target.value) setDay(event.target.value)
               }}
-              className={FIELD}
+              className={INPUT}
             />
           </div>
 
@@ -322,7 +331,7 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
               type="time"
               value={time}
               onChange={(event) => setTime(event.target.value)}
-              className={FIELD}
+              className={INPUT}
             />
           </div>
 
@@ -337,7 +346,7 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
                 inputMode="decimal"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
-                className={FIELD}
+                className={INPUT}
               />
             </div>
           )}
@@ -353,7 +362,7 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
                 inputMode="numeric"
                 value={duration}
                 onChange={(event) => setDuration(event.target.value)}
-                className={FIELD}
+                className={INPUT}
               />
             </div>
           )}

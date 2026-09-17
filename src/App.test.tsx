@@ -7,11 +7,13 @@ import {
   format,
   startOfMonth,
   startOfWeek,
+  subDays,
   subMonths,
   subYears,
 } from 'date-fns'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { back } from './lib/back'
 import { dayKey } from './lib/format'
 import { load } from './lib/store'
 import type { RearmResult, ScheduleResult } from './lib/reminders'
@@ -494,6 +496,129 @@ describe('every control can be named out loud', () => {
     await userEvent.click(within(nav).getByRole('button', { name: 'Today' }))
     await userEvent.click(screen.getByLabelText(/open calendar/))
     expect(nameless()).toEqual([])
+  })
+})
+
+/**
+ * The four destinations, and what each of them must not cost.
+ *
+ * Every one of these is wiring — a day lost on the way to a screen and back, a
+ * question filed away as an entry, a bar that stays up over the box it is meant
+ * to stand down for. That is where every recent bug in this app has been, and
+ * none of them is visible from reading one component.
+ *
+ * jsdom applies no CSS, so the `lg` sidebar renders here alongside the compact
+ * nav. Everything below is scoped to one or the other deliberately.
+ */
+describe('the four destinations', () => {
+  const nav = () => screen.getByRole('navigation', { name: 'Destinations' })
+  const go = (to: string) => userEvent.click(within(nav()).getByRole('button', { name: to }))
+  const main = () => document.querySelector('main') as HTMLElement
+
+  it('lands on Today with the day picked in the calendar', async () => {
+    await open()
+    const wanted = subDays(new Date(), 3)
+
+    await go('Calendar')
+    await userEvent.click(
+      within(main()).getByLabelText(new RegExp(`^${format(wanted, 'EEEE d MMMM yyyy')}`)),
+    )
+
+    // Back on the day, reading it — the calendar is navigation, never a place
+    // to stay.
+    expect(within(main()).getByRole('button', { name: 'Previous day' })).toBeTruthy()
+    expect(document.title).toContain(format(wanted, 'd MMM'))
+  })
+
+  it('keeps the day being read across a trip to You', async () => {
+    await open()
+    await userEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+    const reading = document.title
+
+    await go('You')
+    expect(screen.getByText('Signed in')).toBeTruthy()
+
+    await go('Today')
+    // The log is not refetched and the day is not reset: `view` is state beside
+    // `day`, so `useEntries` never remounts under it.
+    expect(document.title).toBe(reading)
+  })
+
+  it('stands the bar down while there is something to log, and puts it back', async () => {
+    const box = await open()
+    expect(nav()).toBeTruthy()
+
+    await userEvent.type(box, '350 lunch')
+    expect(screen.queryByRole('navigation', { name: 'Destinations' })).toBeNull()
+
+    await userEvent.clear(box)
+    expect(screen.getByRole('navigation', { name: 'Destinations' })).toBeTruthy()
+  })
+
+  it('answers from Ask without filing the question away as an entry', async () => {
+    // Ask used to be reachable only through a leading `?`, and the one failure
+    // that has actually happened here is a question becoming a note — the send
+    // button is hidden while asking, but the keyboard's own Enter still reaches
+    // the form.
+    rowsOnServer = [
+      {
+        id: 'a',
+        kind: 'expense',
+        occurred_on: dayKey(new Date()),
+        occurred_at: null,
+        title: 'lunch swiggy',
+        note: null,
+        amount_paise: 35000,
+        duration_minutes: null,
+        category: 'food',
+        data: {},
+        created_at: '2026-09-05T09:00:00+05:30',
+      },
+    ]
+    await open()
+    await screen.findByText('lunch swiggy')
+
+    await go('Ask')
+    const asking = screen.getByLabelText('What do you want to know?')
+    await userEvent.type(asking, 'how much today{Enter}')
+
+    // The sentence the live region announces, which is one node and therefore
+    // unambiguous — the card's own lead and the row beneath it both say ₹350.
+    await waitFor(() => expect(screen.getByText(/₹350 · 1 entry/)).toBeTruthy())
+    // Answered, not logged: nothing is on the timeline titled with the question.
+    expect(screen.queryByText('how much today')).toBeNull()
+  })
+
+  /**
+   * Back closes what is open before it leaves where you are.
+   *
+   * Walked from Ask rather than from Calendar, which is where the brief put it:
+   * the calendar screen is the grid and the month's figures, so there is no row
+   * on it to open an editor from. The layering is the same either way — a sheet
+   * opened *from* a destination has to close onto that destination.
+   */
+  it('closes a sheet onto the destination it was opened from', async () => {
+    await open()
+    await go('Ask')
+    await userEvent.click(screen.getByRole('button', { name: 'all examples' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+
+    expect(back()).toBe('closed')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // Still on Ask, not dropped home with the sheet.
+    expect(screen.getByLabelText('What do you want to know?')).toBeTruthy()
+
+    expect(back()).toBe('home')
+    await waitFor(() => expect(screen.getByLabelText('What happened?')).toBeTruthy())
+  })
+
+  it('minimises from Today rather than changing what is on screen', async () => {
+    await open()
+    // `root` is what `arm` turns into minimizeApp. Killing the process is not
+    // what back means at the root of an Android app, and neither is silently
+    // doing nothing.
+    expect(back()).toBe('root')
+    expect(screen.getByLabelText('What happened?')).toBeTruthy()
   })
 })
 
