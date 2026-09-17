@@ -21,8 +21,8 @@ it. Before adding a screen, ask whether the thing can be derived onto a screen t
 exists. Two of this app's features — the memories strip and the repeat occurrences — cost no
 query, no page and no control, and that is why they were allowed in.
 
-A corollary that comes up constantly: **do not add a fifth kind, a second editor, a settings page,
-a chart, or a bottom nav.** See §10.
+A corollary that comes up constantly: **do not add a fifth kind, a second editor, a chart, or a
+search field.** The bottom nav came off that list once, on evidence; see §10 for what it cost.
 
 ---
 
@@ -60,7 +60,7 @@ separate, they do not inform, and nothing in the app is legible only because of 
 with a hue rather than as a highlight, at 15px in a 20px gutter. They mark a row so the expenses
 can be found at a glance; they are not allowed to compete with the title they are marking.
 
-Usage in the code today: `text-faint` 46, `text-muted` 43, `text-ink` 26. **Most text in this app
+Usage in the code today: `text-faint` 57, `text-muted` 41, `text-ink` 41. **Most text in this app
 is not full-strength ink**, and that is deliberate — the hierarchy is carried by how far back
 things sit.
 
@@ -75,8 +75,8 @@ Tailwind only emits classes it can literally see. Kind colours go through a writ
 
 ## 3. Type
 
-The scale is narrow on purpose. `text-xs` and `text-sm` are 102 of the 113 sizes in use; the large
-sizes are single occurrences, and that is what makes them read as emphasis.
+The scale is narrow on purpose. `text-xs` and `text-sm` are the overwhelming majority of the sizes
+in use; the large ones are single occurrences, and that is what makes them read as emphasis.
 
 | Size | Where |
 | --- | --- |
@@ -100,7 +100,9 @@ text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase
 ```
 
 `TODAY` over the date, `ON THIS DAY`, `COMING UP`, `TRY ASKING`, an answer's caption, a day
-heading inside an answer. 11px with the letters opened up reads as a label rather than as small
+heading inside an answer, and the name each destination that is not a day gives itself. **The one
+exception is the bottom nav's four labels**, which are 11px sentence-case rather than eyebrows —
+confined to that bar and nowhere else. 11px with the letters opened up reads as a label rather than as small
 body text, which is what stops a caption being mistaken for the first line of the thing it
 captions. Field labels in a sheet use `tracking-[0.08em]`, since they sit directly on their input.
 
@@ -128,11 +130,64 @@ with labels attached rather than as a sentence:
 component changes presentation:
 
 - `Sheet` is a bottom sheet on compact, a centred dialog from `sm`.
-- `MonthGrid` is the calendar; `MonthSheet` is that same grid inside a `Sheet` for narrow screens,
-  while the wide layout renders `MonthGrid` straight into the sidebar.
-- `WeekStrip` is `lg:hidden`, because on a wide screen the sidebar already shows the month.
+- `MonthGrid` is the calendar; `Calendar` is that grid plus the month's own figures as a
+  destination, while the wide layout renders `MonthGrid` straight into the sidebar.
+- `You` is the account screen. It is a destination on compact and the same component inside a
+  `Sheet` on `lg`, opened from the sidebar — one component, two surfaces.
+- `BottomNav` is `lg:hidden`, and `WeekStrip` is too, because on a wide screen the sidebar already
+  shows the month.
 - The capture control docks to the bottom on compact and sits at the top on `lg` — **via flex
   `order`, one render site**. See §6.
+
+### The four destinations
+
+`view` in `App` is `'today' | 'calendar' | 'ask' | 'you'`. **State, not a route** — there is no
+router here and nothing to put in one. It lives inside `Day`, beside `day`, so that switching
+destination cannot remount `useEntries`: going to You and back must not refetch the log and must
+not lose the day being read.
+
+| Destination | Capture control | What is on it |
+| --- | --- | --- |
+| Today | yes, Log | the day header, the week strip, the timeline, the totals, the memories |
+| Calendar | yes, Log | `MonthGrid`, and the shown month's spend, hours and days |
+| Ask | yes, **Ask** | whatever the control draws — the answer, or `TRY ASKING` |
+| You | **no** | the account, theme, prompts, permission, exports, the manual |
+
+- **The control is on three of the four**, which is what keeps the nav from costing anything:
+  logging is one tap from anywhere but You.
+- **The bar stands down whenever the field has text.** `QuickAdd` reports it through `onTyping`;
+  the nav unmounts and the control takes the whole bottom edge back. This is the rule that lets a
+  nav and a five-second capture share one edge — do not weaken it.
+- **On `lg` the view never leaves `today`**, because nothing visible there can change it. The nav
+  is hidden, the sidebar owns the calendar and the account, and the control keeps its own
+  `Log · Ask` toggle (`hidden lg:flex`). The wide layout gained no destinations.
+- The three that are not a day name themselves in an **eyebrow**, not a headline. The nav already
+  says which one is live, and each screen has something of its own that deserves the size.
+- The live item carries `aria-current="page"`, and an `sr-only` live region announces the
+  destination on a change. Colour and weight alone do not say which one you are on.
+
+### The header
+
+One row on a phone, one on a wide screen.
+
+```
+TODAY                                    [bell] [<] [>]
+15 September
+```
+
+The eyebrow says which day relative to now, the date below it is the thing itself — `dayEyebrow`
+and `dayTitle` in `format.ts`. `dayLabel` still packs both into one string for the tab title and
+the date's accessible name, and must keep doing so. The chevrons are paired at the right: stepping
+a day is a repeated gesture, and two targets side by side are one place to aim rather than two
+screen edges to cross.
+
+**The quiet row above it is gone, and that is what paid for the nav.** It held the wordmark and a
+20px account glyph: it named the app on a screen nobody reaches without opening the app, and hid
+the account in the least looked-at corner there is. Both belong to the nav now.
+
+**On a phone the date opens the Calendar destination; on `lg` it is a label and nothing else.**
+The sidebar has held the whole month at no taps since long before the nav existed, and a second
+route to something already on screen is a control that has to be explained.
 
 **Every date grid draws the same cell.** `DayCell` owns what selected / today / has-entries look
 like. `WEEK_STARTS` is the one place the week begins on Monday. `useMarkedDays` is the one place
@@ -145,22 +200,6 @@ navigation, and in dark mode a slab of near-white. Three states, three strengths
 filled: selected is `bg-ink`, today is a `border-edge` ring, everything else is plain. Two filled
 cells read as two selections. The has-entries dot is neutral (`bg-faint`), not a kind colour — a
 dot means something happened, not that a *note* happened.
-
-### The header
-
-Two rows on a phone, one on a wide screen.
-
-```
-lifelog                                         [person]   ← lg:hidden, the quietest row there is
-TODAY                                    [bell] [<] [>]
-15 September
-```
-
-The eyebrow says which day relative to now, the date below it is the thing itself, and the date is
-the way into the calendar — `dayEyebrow` and `dayTitle` in `format.ts`. `dayLabel` still packs both
-into one string for the tab title and the calendar button's accessible name, and must keep doing
-so. The chevrons are paired at the right: stepping a day is a repeated gesture, and two targets
-side by side are one place to aim rather than two screen edges to cross.
 
 ---
 
@@ -221,9 +260,12 @@ than reimplementing an overlay.
 - **Back is wired in `Sheet`, not per sheet.** It registers the sheet's own `onClose` with
   `lib/back.ts`, so there is one close path and every sheet gets it for free. Registered against a
   ref rather than the prop, because `onClose` is an inline arrow at every call site and the page
-  re-renders on the clock tick. With no sheet open the app minimises — adding the listener takes
-  the default away from Capacitor, so that case has to be answered rather than left to fall
-  through. Do not add a second back handler anywhere.
+  re-renders on the clock tick. **Beneath the sheets sits one more layer**: away from Today, back
+  returns to Today, registered by `App` through `onHome` only while there is somewhere to come back
+  from. Sheets first, then home, then minimise — so the sheet opened from a destination closes
+  *onto* that destination. Adding the listener takes the default away from Capacitor, so the root
+  case has to be answered rather than left to fall through. Do not add a second back handler
+  anywhere.
 
 - Focus lands on the **dialog**, not its first control. Focusing the first button draws a focus
   ring on `Expense` every time the editor opens, which reads as a claim about the entry.
@@ -240,43 +282,67 @@ and offer `Undo`. Do not add "are you sure?" to a normal delete.
 
 ---
 
-## 6. The docked capture control
+## 6. The bottom block
 
-On compact the capture control is docked to the bottom edge; on `lg` it is sticky at the top.
+On compact the bottom edge of the screen is **one block, in flow, in this order**:
 
-**This is the one layout rule with a cross-file contract.** `--dock` in `index.css` is how much of
-the bottom edge the control occupies, and the toast reads it to stay clear:
-
-```css
-:root { --dock: calc(8rem + env(safe-area-inset-bottom, 0px)); }
-@media (min-width: 1024px) { :root { --dock: 0px; } }
+```
+toast            ← when there is one
+capture control  ← fixed height, absent on You
+bottom nav       ← lg:hidden, absent while the field has text
 ```
 
-If you change the control's height, the dock's padding, or the page's bottom padding, **change
-`--dock` too** — otherwise the toast lands on the input, and `Undo` sits where the send button is.
-That exact overlap has shipped twice in this app.
+On `lg` the block collapses to the top of the column via flex `order` and the nav is hidden.
+
+**There is no `--dock`, and re-introducing one is the wrong fix.** The toast used to be `fixed` at
+the bottom and subtract a constant from `index.css` to clear the control, because a message over
+that control put `Undo` where `Save` is and the tap hit the wrong one. The constant had to be
+re-derived every time the bottom edge changed, it was wrong by two paddings the first time, and
+once the nav could come and go mid-entry one value could no longer describe the edge at all. As
+siblings the two cannot overlap, and nothing has to be kept in agreement.
+
+**The floor belongs to whatever is last in the block.** `FLOOR` in `App` is one written value —
+`pb-[max(0.75rem,env(safe-area-inset-bottom))]` — and it goes on the nav normally, on the control
+while the nav is down. Two elements both carrying it would stack two safe-area insets on the
+handset that reports 48px; one `pb` on the block itself would sit *under* the bar's own background
+and leave it floating a centimetre off the gesture bar.
 
 Other invariants here:
 
 - **The control's height never changes.** The parse preview lives *inside* the field precisely so
-  that a live region changing height cannot make the timeline jump on every keystroke.
+  that a live region changing height cannot make the timeline jump on every keystroke. If nav work
+  ever makes the control taller, shorter or variable, the work is wrong.
 - **It is `bg-raised` on a `surface` page, with a hairline `edge` and a 1px shadow.** This is the
   strongest interactive thing on the screen and the only one that has to be found without looking.
-  A bigger shadow would make it a floating card; the app has none of those.
+  A bigger shadow would make it a floating card; the app has none of those. **The nav takes no
+  shadow at all** for the same reason — a second raised object competing with the control is
+  exactly what a floating bar would be.
 - **The control carries `class="capture"`, which `index.css` reads.** The focus ring goes round the
   control, not round the field nested inside it — see §7.
 - **Send is filled once it is live** (`bg-ink` disc), the mic is not. An outline arrow the same
   weight as the mic beside it said "there is a button here"; it did not say that pressing it is
   the thing you came to do.
-- **`Log · Ask` is a 28px pill inside a 44px button.** Weight alone was carrying which mode is
-  live, and weight alone is also what a disabled control looks like. The target does not shrink to
-  fit the decoration — the same negative-margin trick the toast's buttons use.
+- **`Log · Ask` is a 28px pill inside a 44px button, and it is `hidden lg:flex`.** On a phone the
+  mode is a destination; the toggle survives for `lg`, where there is no nav and it is the only
+  thing that can say the box has a second job. `QuickAdd` takes `ask` as a prop and the two can
+  never disagree, because `ask` is only ever true on a screen that has a nav.
 - **The extras render above the field on compact**, below it on `lg` — again by flex `order`, so
   the answer and the examples are never pushed off the bottom of the screen.
 - **`pb` floors are real numbers, not bare `env()`.** `env(safe-area-inset-bottom)` measures 0 on
   some Android WebViews and 48px on others. `max(0.75rem, env(...))` is correct in both.
 
----
+### The bottom nav
+
+60px tall plus the floor. `bg-raised`, `border-t border-line`, no shadow.
+
+- Four items, each a `<button>` filling a quarter of the bar: a 20px inline SVG at stroke 1.8, a
+  3px gap, then an 11px label. At 60 by roughly 97 they clear 44px in both directions comfortably.
+- **The live item** is `font-medium text-ink` behind a 60×30 `bg-sunken` pill; the rest are
+  `text-faint`. The pill is decoration inside the target, never instead of it — the same discipline
+  as the day cell's 28px disc inside its 44px cell.
+- 11px (`text-[0.6875rem]`) is used here as a plain label rather than as an eyebrow. It is the one
+  exception to §3's rule, and it is confined to this bar.
+- No per-component focus styles. The one global `:focus-visible` rule covers it.
 
 ## 7. Targets, motion, accessibility
 
@@ -333,7 +399,8 @@ suggest something that can come back empty.*
 4. Does anything else on the screen already claim the largest size?
 5. 44px targets, `sr-only` text beside any icon carrying meaning.
 6. One component, `sm:`/`lg:` variants — not a second component.
-7. If it touches the bottom edge on compact, does `--dock` still hold?
+7. If it touches the bottom edge on compact: is it inside the bottom block, and does exactly one
+   element still carry `FLOOR`?
 8. `npx tsc -b` and `npm test` both clean. There is no linter; `tsc` is the gate.
 9. If the change is visual, **look at it on a device**. Three of this app's UI bugs were invisible
    in tests and obvious in a screenshot.
@@ -346,8 +413,17 @@ No component library, no state manager, no data-fetching library, no icon packag
 inline SVG on a 24-box stroked with `currentColor`. Runtime dependencies are `react`, `react-dom`,
 `@supabase/supabase-js`, `date-fns` and Capacitor. **Ask before adding anything else.**
 
-No charts, no dashboard, no bottom nav, no tabs, no search field, no tag UI, no category manager,
-no multi-day view, no second editor, no fifth kind, no "are you sure?" dialog, no onboarding
-carousel, no skeleton spinner where placeholders will do.
+No charts, no dashboard, no tabs, no search field, no tag UI, no category manager, no multi-day
+view, no second editor, no fifth kind, no "are you sure?" dialog, no onboarding carousel, no
+skeleton spinner where placeholders will do.
 
-The app is one screen and one text box. Most UI work here is deciding what *not* to put on it.
+**"No bottom nav" was on that list and came off it.** What earned the exception is that three of
+the four destinations already existed and were reachable only by knowing something: the month was
+a sheet behind the date, the account was a 20px glyph in the quietest row on the screen, and Ask
+was a mode you had to be told about. Nothing new was added; three things stopped hiding. What it
+cost is 60px of the bottom edge and the header's quiet first row, which is where the wordmark and
+the account used to live. What it did **not** cost is a step added to logging — the control is on
+three of the four destinations and the bar stands down the moment the field has text. That last
+clause is the whole licence. A nav that stayed up over the box would not have earned it.
+
+The app is still one text box. Most UI work here is deciding what *not* to put on it.

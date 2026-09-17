@@ -3,7 +3,8 @@
 Live: **https://lifelog-timeline.netlify.app** — installable to an Android home screen.
 
 A personal life timeline. Expenses, work hours, events and notes are the same thing —
-something that happened, or will happen, on a date. One table, one screen, one text box.
+something that happened, or will happen, on a date. One table, one text box, and four places to
+stand — three of which are the same log seen differently.
 
 The entire value is that logging takes under five seconds:
 
@@ -31,8 +32,8 @@ Single user. No sharing, no onboarding, no settings.
 
 The browser bundle has exactly four dependencies: `react`, `react-dom`,
 `@supabase/supabase-js`, `date-fns`. Capacitor (`@capacitor/core`, `@capacitor/android`,
-`@capacitor/local-notifications`) was added with the Android app and reaches the web bundle
-only through the dynamic import in `reminders.ts`; `@netlify/blobs` is used by the backup
+`@capacitor/local-notifications`, `@capacitor/app`) was added with the Android app and reaches
+the web bundle only through the dynamic imports in `reminders.ts` and `back.ts`; `@netlify/blobs` is used by the backup
 functions and never by the app. No component library, no state manager, no data-fetching
 library, no icon package. The handful of icons are inline SVG.
 
@@ -196,7 +197,7 @@ that is what actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 568 tests
+npm test           # vitest run — 602 tests
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -213,7 +214,7 @@ existed. Order matters: duration is read before amount, or `2h client work` beco
 | Times | `5pm`, `5:30pm`, `17:30`, `9am` |
 | Durations | `2h`, `90m`, `2.5h`, `1h30m`, `2h30`, `45 min`, `2 hrs` |
 | Amounts | `350`, `₹350`, `rs 350`, `Rs.350`, `350rs`, `100 rupees`, `2,499`, `350.50`, `-50` |
-| Repeats | `weekdays`, `every weekday`, `every monday`, `every tue` |
+| Repeats | `weekdays`, `every weekday`, `every monday`, `every tue`, `every tue and thu` |
 | Filler stripped | `spent`, `paid`, `bought`, `for`, `on`, `at`, `worked`, `did` |
 
 Rules worth knowing:
@@ -231,6 +232,12 @@ Rules worth knowing:
 - **`weekdays` on its own needs a clock time beside it**, because it is also an ordinary English
   word: without that rule `weekdays are busy` became a reminder ringing five times a week titled
   *are busy*. `every weekday` works with no time, since `every` says a repeat outright.
+- **A repeat can name several days**: `gym every tue and thu 7pm` sets `BYDAY=TU,TH` and arms two
+  alarms a week. Commas, `and`, `&` or plain spaces all join them, and the order does not matter.
+  The run stops at the first word that is not a weekday, so `every friday gym` keeps `gym` as the
+  title.
+- **`every 2 weeks` is not two rupees.** The app cannot express an interval repeat, so the line is
+  kept as a note exactly as typed rather than being filed as a ₹2 expense.
 - Nothing recognised at all → `note`, with the input kept untouched as the title.
 - Money is an integer number of paise everywhere. ₹347.50 is `34750`. It becomes a string in
   exactly one place, [`src/lib/format.ts`](src/lib/format.ts).
@@ -466,7 +473,7 @@ means muting the prompts in Android's settings does not also mute a reminder you
 `9am` asks what is coming, `9pm` asks what happened and what you want waiting for tomorrow. They
 are notifications, not entries, and they are daily crons, so the phone raises them for ever with
 the app closed and nothing on a server involved. On by default — a log nobody is reminded to keep
-is a log that stops after a fortnight — and the switch in the profile sheet states the times.
+is a log that stops after a fortnight — and the switch on the You screen states the times.
 Stored per device, since the same account on a laptop has no business raising a 9am notification
 on a phone.
 
@@ -492,7 +499,7 @@ working with the app shut, the phone offline and the Supabase project paused, an
 notification permission.
 
 Log an event and the toast offers **Add to calendar**. Any event can be added later from its
-entry sheet, and **Send events to calendar** in the profile sheet exports everything upcoming at
+entry sheet, and **Send events to calendar** on the You screen exports everything upcoming at
 once. On a phone this opens the share sheet, so the file goes straight to Calendar; on a desktop
 it downloads.
 
@@ -568,14 +575,17 @@ Measured with `npm run build`:
 
 | File | Raw | Gzipped |
 | --- | --- | --- |
-| `assets/index-*.js` | 463.01 kB | **135.23 kB** |
-| `assets/web-*.js` | 4.44 kB | 1.29 kB |
-| `assets/index-*.css` | 19.83 kB | 5.10 kB |
-| `assets/esm-*.js` | 0.57 kB | 0.34 kB |
-| `index.html` | 1.06 kB | 0.55 kB |
-| **Total** | | **142.51 kB** |
+| `assets/index-*.js` | 476.64 kB | **138.62 kB** |
+| `assets/index-*.css` | 25.05 kB | 5.99 kB |
+| `assets/web-*.js` (×2) | 5.28 kB | 1.68 kB |
+| `assets/esm-*.js` (×2) | 0.89 kB | 0.57 kB |
+| `index.html` | 1.21 kB | 0.63 kB |
+| **Total** | | **147.49 kB** |
 
-Against a 150 KB budget, with 7 KB of headroom. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
+Against a 150 KB budget, with **2.5 KB of headroom** — the figure to watch, since the main chunk
+alone reads a comfortable 138.62 kB and the CSS and the two lazy Capacitor chunks account for the
+rest. The bottom nav and its two new screens cost 0.9 kB of that. The four small chunks are the dynamic imports in `reminders.ts` and `back.ts`, fetched only
+inside the native shell. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
 `postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and
 postgrest are used. If the budget ever gets tight, importing `@supabase/auth-js` and
 `@supabase/postgrest-js` directly drops the rest.
@@ -643,7 +653,7 @@ src/
   hooks/      useEntries.ts  useSession.ts  useTheme.ts  useSwipe.ts  useDictation.ts
               useMarkedDays.ts  useOnline.ts  useNudges.ts
   components/ Login.tsx  DayHeader.tsx  WeekStrip.tsx  DayCell.tsx  MonthGrid.tsx
-              MonthSheet.tsx  ProfileSheet.tsx  QuickAdd.tsx  AnswerCard.tsx
+              BottomNav.tsx  Calendar.tsx  You.tsx  QuickAdd.tsx  AnswerCard.tsx
               OnThisDay.tsx  AheadSheet.tsx  EntryRow.tsx  KindMark.tsx
               EntryEditor.tsx  HelpSheet.tsx  Sheet.tsx  Toast.tsx  Icons.tsx
   types.ts  App.tsx  main.tsx
@@ -683,22 +693,34 @@ set, rows are never removed.
 - **`parse()` takes an optional third argument**, `defaultDay`, so an entry with no date token
   files on the day being viewed. Without it, arrowing back a day and logging there silently saved
   to today, which broke a stated requirement.
-- **A month calendar sheet exists.** Requested after the spec was frozen, replacing the invisible
-  native `<input type="date">` on the date label. Costs 1.23 KB gzipped.
+- **A month calendar exists.** Requested after the spec was frozen, replacing the invisible
+  native `<input type="date">` on the date label. It began as a sheet behind the date and is now a
+  destination, with the shown month's spend, hours and days under the grid.
 - **`created_at` is read into the `Entry` type** — untimed entries need a stable tiebreak within a
   day, and the export wants it. It was already a column.
 - **`App.tsx` holds an inner `Day` component**, because `useEntries` cannot be called before the
   auth gate returns.
-- **There is a settings surface after all** — a profile sheet with theme (System / Light / Dark),
-  Export JSON and Sign out. Dark mode needs somewhere to live, and the footer was already carrying
-  export and sign-out.
+- **There is a settings surface after all** — the **You** screen, with theme (System / Light /
+  Dark), daily prompts, notification permission, Export JSON, the calendar export and Sign out.
+  Dark mode needs somewhere to live, and the footer was already carrying export and sign-out.
+- **There is a bottom nav**, which the design rules said there would not be: Today, Calendar, Ask
+  and You. Three of those already existed and were reachable only by knowing something — the month
+  behind the date, the account behind a 20px glyph in the quietest row on the screen, and Ask
+  behind a leading `?` and then behind a pill inside the capture control. Nothing new was added;
+  three things stopped hiding, and the header gave up its own quiet first row to pay for the space.
+  **The capture control is on three of the four, and the bar stands down the moment the field has
+  text**, so logging still costs exactly what it did — which is the condition the exception was
+  granted on.
 - **Swipe left or right** changes day, alongside the arrows. Ignores gestures that start on a
   field, inside an open sheet, or within 24px of a screen edge, where Android's back gesture lives.
 - **A week strip sits under the day header** on compact and medium. Arrows and swiping move one
-  day at a time, which is fine for yesterday and useless for Tuesday — the calendar sheet was the
-  only way there, at a tap to open and a tap to dismiss. Not rendered on wide screens, where the
+  day at a time, which is fine for yesterday and useless for Tuesday — the calendar was the only
+  way there. Not rendered on wide screens, where the
   sidebar already shows the whole month for no taps at all.
-- **Dictation** via the Web Speech API. Unsupported in iOS Safari, where the mic button is hidden.
+- **Dictation** via the Web Speech API, on the web. The mic button is hidden where the API is
+  absent or inert — iOS Safari, and the Android WebView, which exposes it but never answers.
+  **On Android, use your keyboard's microphone to dictate into the capture box**: it types
+  into the field like any other input, and needs nothing from the app.
 - **"On this day"** shows the same calendar date in earlier years, below the day's own entries.
   The nearest thing here to a multi-day view, which the spec ruled out. It is allowed because it
   adds no page, no control, no setting and no query: it filters the log already fetched at launch
@@ -716,11 +738,12 @@ set, rows are never removed.
 ## Not built, on purpose
 
 No AI or LLM calls, no SMS parsing, no notification listeners, no push notifications, no charts,
-no category management UI, no search, no tags, no settings screen. No multi-day view beyond the
+no category management UI, no search, no tags. No multi-day view beyond the
 "on this day" strip and the bell's fortnight. **Still no recurring event expansion** — a repeat
 is one row that schedules several alarms, never several entries, so there stays one thing to
 edit and one to delete. The days it lands on are *derived* for the view, which is not the same
 thing: nothing extra is stored, and deleting the row deletes the series. (Capacitor and the native Android app were on this list and came off it
-deliberately, along with the settings sheet; the deviations are listed above.)
+deliberately, along with the settings screen and the bottom nav; the deviations are listed
+above.)
 The service worker still precaches the app shell only and never caches API responses — offline
 reads come from the app's own log, not from an invisible cache of stale JSON.

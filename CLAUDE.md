@@ -8,9 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run android                    # build, then copy the web assets into android/
 npm run android:open               # open the native project in Android Studio
 npm run dev                        # vite dev server on :5173
-npm test                           # vitest run (568 tests)
+npm test                           # vitest run (602 tests)
 npm run test:watch                 # vitest watch
-npx vitest run -t "yesterday"      # tests whose name matches a substring (4 of 568)
+npx vitest run -t "yesterday"      # tests whose name matches a substring (4 of 602)
 npx tsc -b                         # typecheck only (add --force to ignore the build cache)
 npm run build                      # tsc -b && vite build
 npm run preview                    # serve dist — the only way to exercise the service worker locally
@@ -150,8 +150,8 @@ unreachable — which reads exactly like the app threw them away, a worse first 
 wall it replaces. Every adopted row is re-queued, since the server has never seen one and each
 write is a full-row upsert anyway. The guest's *pending* list is deliberately dropped: it records
 writes owed for rows the server never had, including deletes of entries that never reached it, and
-replaying those would ask the server to remove rows that do not exist. `ProfileSheet` offers an
-account instead of a sign-out, because a sign-out button beside the only copy of a log reads as
+replaying those would ask the server to remove rows that do not exist. `You` offers an account
+instead of a sign-out, because a sign-out button beside the only copy of a log reads as
 "delete my log".
 
 **`src/lib/identity.ts` is why the auth gate does not lock you out of your own offline log.**
@@ -358,6 +358,24 @@ the day is resolved, because `standup 10am weekdays` typed at eight in the eveni
 tomorrow's standup — without the clock the row sat on today while `nextOccurrence` said tomorrow,
 and the two disagreed about the same entry.
 
+**A repeat may name several days, and dropping one was the worst thing this parser did.** `every
+tuesday and thursday 7pm` kept the Tuesday and lost the Thursday — and the orphaned `thursday` was
+then read by `takeDate` as a plain weekday, which files on the *last* one. So a line asking for
+twice a week produced one repeat starting **in the past**, with `and` left in the title, and
+nothing on screen said any of it. `takeRepeat` now reads a *run* of weekday names after `every`,
+joined by a comma, `and`, `&` or nothing at all — `every mon wed fri` is how people type it. A bare
+space is safe as a separator because the run only continues while the next word *is* a weekday, so
+`every friday gym` stops at Friday and leaves `gym` to be the title. The invariant is that **every
+weekday the line names survives into the stored rule**. Nothing downstream changed: `BYDAY=TU,TH`
+is what `weeklyRule` always wrote, `repeatLabel` already said "every Tue, Thu", and `alarms`
+already armed one cron per weekday — only the grammar could not say it.
+
+**A number straight after `every` is never money.** `gym every 2 weeks` is an interval this app
+cannot express, and the bare-number branch of `takeAmount` was reading that `2` as ₹2 — so the line
+became an expense titled "gym every weeks": wrong kind, invented amount, and the typed words
+mangled. It is recorded as a note with the line intact instead, which is honest about what the app
+can and cannot do. Currency-marked amounts are untouched, because `₹2` says money outright.
+
 **Cancelling an alarm must never decide whether the new one is set.** `rearm` in `reminders.ts`
 owns the order, because `cancel().then(schedule)` in `App` meant a cancel that *rejected* skipped
 the schedule entirely — so the failure that merely might leave a spare notification instead
@@ -404,7 +422,7 @@ nothing on a server involved — verified on the emulator by winding the clock: 
 fired and re-armed itself for the next day. They hold **ids 1 and 2**, and `notificationId` was
 moved to start at 8 so a row can never hash onto one and silently replace it. On by default,
 because a log nobody is reminded to keep is a log that stops after a fortnight; the switch is in
-the profile sheet and states the times, because a daily notification is also the fastest way to
+the You screen and states the times, because a daily notification is also the fastest way to
 get an app muted. Stored per device (`lifelog.nudges`) rather than in the log — the same account
 on a laptop has no business raising a 9am notification on a phone.
 
@@ -487,7 +505,7 @@ the dark end rather than by flipping the light one, which is how a dark theme en
 a lit screen instead of a dim room.
 
 Every *text* token clears 4.5:1 on the surface it is used over. `faint` did not — it sat at 2.9:1,
-which is what "tertiary" had quietly come to mean on a screen where 59 of the type sizes are 12px.
+which is what "tertiary" had quietly come to mean on a screen where most of the type is 12px.
 `line` and `edge` stay below that deliberately: they separate, they do not inform, and nothing
 here is legible only because of a border. The `theme-color` meta, the manifest and `useTheme` all
 carry the *surface*, not the ink — drawn edge-to-edge the browser chrome is a continuation of the
@@ -506,7 +524,7 @@ because Tailwind only emits classes it can literally see. Kind colours go throug
 ## UX rules that are architecture, not taste
 
 > **Building UI? Read [DESIGN.md](DESIGN.md) first.** It is the followable form of this section —
-> the tokens, the type scale, the row anatomy, the 44px targets, the `--dock` contract and a
+> the tokens, the type scale, the row anatomy, the 44px targets, the bottom block and a
 > checklist — written so a change can be made without reading the whole of this file. **This
 > section is the reasoning and stays the source of truth**; DESIGN.md is what to do, and if the two
 > ever disagree, this one is right and DESIGN.md needs updating.
@@ -517,10 +535,11 @@ remove it. Capture is the product: anything that adds a step to logging is a reg
 **One component tree, three layouts.** Breakpoints are compact (`<640`), medium, wide (`lg`,
 `≥1024`) — never device-specific. **Never create `MobileX.tsx` / `DesktopX.tsx`.** Where the
 interaction genuinely differs, one component changes presentation: `Sheet` is a bottom sheet on
-compact and a centred dialog from `sm` up. `MonthGrid` is the calendar; `MonthSheet` is that same
-grid in a `Sheet` for narrow screens, while the wide layout renders `MonthGrid` straight into the
-sidebar where navigation costs no taps at all. `WeekStrip` is `lg:hidden` for that reason — on a
-wide screen it would repeat what the sidebar already shows.
+compact and a centred dialog from `sm` up. `MonthGrid` is the calendar; `Calendar` is that grid
+plus the month's own figures as a destination, while the wide layout renders `MonthGrid` straight
+into the sidebar where navigation costs no taps at all. `You` is the account screen, a destination
+on compact and the same component inside a `Sheet` on `lg`. `BottomNav` and `WeekStrip` are both
+`lg:hidden` for that reason — on a wide screen they would repeat what the sidebar already shows.
 
 **Every date grid draws the same cell.** `DayCell` owns what selected, today and has-entries look
 like, and `WEEK_STARTS` is the one place the week begins on Monday; `useMarkedDays` is the one
@@ -632,11 +651,40 @@ the field rather than below the screen edge. The `pb` floor is a real number bec
 `env(safe-area-inset-bottom)` measures 0 in the Android WebView while the gesture bar is about
 24px.
 
-**The toast clears the docked control by a fixed offset, and that is only safe because the
-control's height is fixed by design.** A toast over the field is not a cosmetic overlap — `Undo`
-and `Save` once sat on top of each other and pressing one hit the other. The control is always the
-bottom-most thing on a compact screen whatever the answer above it is doing, so clearing its
-height clears it in every state. On `lg` both go back where they were.
+**Three destinations were already there and two of them were hiding, which is what bought the
+bottom nav.** This app held "no bottom nav" as a rule for a long time and the rule was right while
+there was one screen. There were not: the month was a sheet behind the date, the account was a
+20px glyph in the quietest row on the phone, and Ask was a mode nobody finds without being told —
+first behind a leading `?`, then behind a pill inside the capture control. `BottomNav` adds no
+screen that did not exist; it stops three of them hiding, and gives the account a destination
+instead of the least looked-at corner there is. The header pays for it by giving up that quiet
+first row, which held a wordmark nobody needs on a screen they had to open the app to reach.
+
+**What makes it affordable is that the bar stands down the moment there is something to log.** A
+nav sitting over the box while you type would have cost a step in the one act this app exists for,
+and no amount of discoverability buys that back. `QuickAdd` reports through `onTyping` whether the
+field has anything in it; the nav unmounts and the control takes the whole bottom edge back. The
+control is also present on three of the four destinations, so a line can be typed from anywhere
+but You — which has no box deliberately, since a capture field under the settings is an invitation
+to log the settings. This is the clause the exception rests on: weaken it and the nav stops being
+worth its 60px.
+
+**The toast, the control and the nav are one block in flow, and that is what retired `--dock`.**
+A toast over the control is not a cosmetic overlap — `Undo` and `Save` sat on top of each other
+once and pressing one hit the other — and the answer for a while was a constant in `index.css`
+that the toast subtracted from the bottom edge. The constant was the bug. It had to be re-derived
+every time the bottom edge changed, it was wrong by exactly the two paddings holding the control
+off the gesture bar the first time, and once the nav could come and go mid-entry no single value
+could describe the edge at all: the honest version needed two numbers and a rule for which
+applied, and that rule is the thing that keeps being got wrong. As siblings in one block — toast,
+control, nav, in that order — clearing each other is not arithmetic anybody has to do. A sheet
+still stacks above the toast: the overlay is `fixed z-40` and the block is `z-10`.
+
+**The floor belongs to whatever is last in that block.** `FLOOR` in `App` is one written value and
+it goes on the nav normally, on the control while the nav is down. One `pb` on the block itself
+would sit *under* the bar's own background and leave it floating a centimetre above the gesture
+bar; both of them carrying it would stack two safe-area insets on the handset that reports 48px.
+Neither failure is visible from reading either component.
 
 **The capture control is two rows, and its height never changes.** The parse preview lives
 *inside* the field — a rule beneath what you typed, then how it parsed, with the mic or send
@@ -653,14 +701,16 @@ a thing this app has none of. Send fills once there is something to save: an out
 same weight as the mic beside it said "there is a button here" without saying that pressing it is
 the thing you came to do.
 
-**That second row is also where the mode lives: `Log · Ask`, then the parse, then send.** Asking
-used to be reachable only by typing a leading `?`, which meant the box's second job was invisible
-unless somebody told you the syntax. The toggle says it out loud, changes the placeholder to
-*What do you want to know?*, and needs no prefix. **`?` still works from Log**, because it costs
-nothing to keep and it is faster than reaching for a control — the mode is how the behaviour is
-discovered, not the only way to reach it. The toggle sits *inside* the control rather than under
-it for two reasons: this row has to exist anyway, and an empty strip inside a bordered box reads
-as a rendering fault. 44px targets, so the row is 44px.
+**Asking is a destination on a phone and a toggle on `lg`, and one of those had to go where the
+other could not.** It was reachable only by typing a leading `?`, which meant the box's second job
+was invisible unless somebody told you the syntax; the `Log · Ask` pill inside the control said it
+out loud, and then the nav said it louder still. So the pill is `hidden lg:flex` — on a wide
+screen there is no nav and it is the only thing that can say the box has a second job, and it sits
+*inside* the control because that row has to exist anyway and an empty strip inside a bordered box
+reads as a rendering fault. `QuickAdd` takes `ask` as a prop and falls back to its own toggle; the
+two can never disagree, because `ask` is only ever true on a screen that has a nav. **`?` still
+works from Log** on both, because it costs nothing to keep and it is faster than reaching for a
+control — the mode is how the behaviour is discovered, not the only way to reach it.
 
 **Switching to Ask shows what Ask can answer, because a placeholder names the job
 and not the capability.** The toggle made the second job discoverable and then
@@ -794,7 +844,9 @@ one — it has to be removed and re-added.
 **Bundle size must be measured with `.env.local` present.** Without it,
 [src/lib/supabase.ts](src/lib/supabase.ts) throws at module scope, the bundler proves the throw
 unconditional and tree-shakes the entire Supabase SDK away — producing a ~49 KB bundle that
-cannot run. The honest figure is ~130 KB gzipped against a 150 KB budget.
+cannot run. The honest figure is ~138.6 KB gzipped for the main chunk, and **147.5 KB across
+everything the page fetches**, against a 150 KB budget. The headroom is 2.5 KB, not the
+comfortable margin the raw JS figure suggests — count the CSS and the lazy Capacitor chunks.
 
 **Every column of `Entry` must stay in `COLUMNS`.** A write is a full-row upsert now, so a column
 that is read into the type but missing from the select would be sent back as `undefined` and
@@ -834,13 +886,26 @@ Back is *the* dismiss gesture on Android, so this was the one platform conventio
 `BridgeActivity` registers no handler, so `pushState` followed by BACK still backgrounded the app.
 `@capacitor/app` was added for its `backButton` event, and nothing else.
 
-`src/lib/back.ts` holds the whole of it. **It closes a sheet; it is not a navigation system** —
-there is no router here and nothing else back could mean. `Sheet` registers its *own* `onClose`,
-the same function the scrim, the close button and Escape already call, so there is one close path
-rather than a second copy of it — and `HelpSheet`, `MonthSheet`, `ProfileSheet`, `AheadSheet` and
-`EntryEditor` are all covered without knowing this exists. Registered against a **ref**, not the
-prop: every caller passes an inline `() => setEditing(null)`, which is a new function on each
-render, and the page re-renders on the 30-second clock tick.
+`src/lib/back.ts` holds the whole of it, and it now has three layers rather than two: **it closes
+a sheet, then it comes home, then it minimises.** There is still no router here and nothing else
+back could mean. `Sheet` registers its *own* `onClose`, the same function the scrim, the close
+button and Escape already call, so there is one close path rather than a second copy of it — and
+`HelpSheet`, `AheadSheet` and `EntryEditor` are all covered without knowing this exists.
+Registered against a **ref**, not the prop: every caller passes an inline `() => setEditing(null)`,
+which is a new function on each render, and the page re-renders on the 30-second clock tick.
+
+**The middle layer arrived with the bottom nav, and without it leaving You would have dismissed
+the app.** Three destinations became reachable in one tap, and back is how an Android reader
+leaves any of them — the launcher in front of a still-running log is precisely the bug
+`@capacitor/app` was added to fix, one screen further in. `onHome` is **one slot rather than a
+stack**: there is exactly one home and the destinations do not nest. `App` registers it only while
+`view` is not `today`, so what back means is decided by whether that slot is set and never by a
+listener reading a `view` it closed over — the same failure the sheet stack avoids by splicing on
+function identity rather than index, and the removal here is identity-guarded for the same reason.
+
+**The order is what makes two presses read correctly.** Sheets stay on top, so the editor opened
+from the calendar closes *onto* the calendar and only the next press comes home. Coming home first
+would leave a sheet on screen over a screen it was never opened from.
 
 Adding a `backButton` listener **takes the default away from Capacitor**, so the no-sheet case has
 to be answered explicitly or back would do nothing at all on the timeline — a worse bug than the
@@ -865,10 +930,26 @@ here. On the emulator the WebView gets 412×839 of a 411×914 screen — the sys
 and outside it, which is also why both safe-area insets measure 0. The result is a dark band above
 a paper-coloured page in light mode; dark mode has no seam because the two happen to agree.
 Verified on a Pixel 7 / Android 16 emulator. Fixing it properly means following the *app's* theme
-choice rather than the OS's, since the profile sheet lets the two disagree — a `values-night`
+choice rather than the OS's, since the You screen lets the two disagree — a `values-night`
 qualifier would get that backwards. Making the bar transparent instead is worse: the insets read
 0 here, so the header would sit under the clock, which is the exact bug the safe-area padding
 exists to prevent.
+
+**A `sticky` element cannot reach past its container's padding, which is how a bottom bar comes to
+float.** The page container carried `pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]` and the
+bottom block is sticky *inside* it, so the nav sat 24px above the screen edge with page colour
+underneath — a bar that does not touch the edge reads as a rendering fault rather than as a bar.
+That padding is `lg:` only now, where the block is at the top and the timeline really does need it.
+On compact the block owns the bottom edge and `FLOOR` is the only thing holding it off the gesture
+bar. Found on the emulator; invisible in jsdom, which lays nothing out.
+
+**A row whose height came from its contents loses it when the contents go.** The capture control's
+second row was 44px because the `Log · Ask` buttons in it were `h-11`. Hiding the toggle on
+compact — where the mode is a destination now — collapsed that row to 1px and took the control's
+fixed height with it, 46px instead of 90: nothing else in the row has a height of its own, since
+the preview is empty until you type and the send button only appears once there is something to
+save, with no mic beside it on native. The row states `h-11` itself now. The control's height is
+load-bearing enough to be written down rather than inherited.
 
 **`env(safe-area-inset-bottom)` cannot be relied on either way in the Android WebView, so every
 floor is a real number.** It was measured as **0** on the emulator: a bottom sheet padded with
@@ -896,7 +977,7 @@ Configuration makes the magic link bounce with no error shown anywhere.
 
 - **Password** is the default and the only route that touches no email. Normally unusable here,
   because creating a password account needs a confirmation email this project cannot send — so
-  the password is set instead from `ProfileSheet` via `updateUser`, from inside a session that
+  the password is set instead from the You screen via `updateUser`, from inside a session that
   already exists.
 - **Six-digit code** needs `{{ .Token }}` in the email template, which requires custom SMTP:
   Supabase locked template editing for free projects created after 3 June 2026.
@@ -919,11 +1000,13 @@ TypeScript strict with `noUncheckedIndexedAccess`. No `any`, no non-null asserti
 layout — no barrel files, no `index.ts` re-exports, no directory per component.
 
 **The runtime dependency list is `react`, `react-dom`, `@supabase/supabase-js`, `date-fns` and
-Capacitor (`core`, `android`, `local-notifications`, `app`). Ask before adding anything else.** The original "four dependencies only" rule was
-retired deliberately when the Android app was added, not broken by accident: Capacitor plugins
-are runtime dependencies. The bar is unchanged for everything else — no component library, no
-state manager, no data-fetching library, no icon package. No component library, no state manager, no data-fetching library, no icon package;
-icons are inline SVG. Comments only where the *why* is unobvious. Plain, dense, fast UI: system
+Capacitor (`core`, `android`, `local-notifications`, `app`). Ask before adding anything else.**
+The original "four dependencies only" rule was retired deliberately when the Android app was
+added, not broken by accident: Capacitor plugins are runtime dependencies, and each one was argued
+for on its own — `local-notifications` because no web API can raise an alarm with the app closed,
+`app` because Android's back button reaches nothing without it. The bar is unchanged for
+everything else: no component library, no state manager, no data-fetching library, no icon
+package; icons are inline SVG. Comments only where the *why* is unobvious. Plain, dense, fast UI: system
 fonts, one 100ms fade on new rows, nothing else animated.
 
 ## Deliberately not built
@@ -946,9 +1029,11 @@ upsert queue. The reasoning that retired the rule is that none of this app needs
 the only thing that ever failed offline was that a logged row lived in React state and was thrown
 away on reload — while its reminder still fired, so the alarm outlived the entry.
 
-Added after the spec froze, on the owner's request: the month calendar sheet (replacing an
-invisible native date input), a **profile sheet** holding theme, export and sign out — which is
-the settings screen the spec said not to build — swipe-to-change-day, dictation, and **On this
+Added after the spec froze, on the owner's request: the month calendar (replacing an
+invisible native date input), a **You screen** holding theme, export and sign out — which is
+the settings screen the spec said not to build, and which is now one of four destinations in a
+**bottom nav**, itself a reversal of a rule this file held for a long time — swipe-to-change-day,
+dictation, and **On this
 day**, which is the closest thing here to a multi-day view. It earns the exception by costing no
 query, no page, no control and no fifth kind: it is a filter over rows already in memory, sitting
 at the bottom of the timeline where you arrive by scrolling rather than by navigating. A photo
@@ -971,7 +1056,7 @@ at the end of [README.md](README.md).
 - Signing out does not clear this device's log; it stays keyed by user id, so unsynced writes are
   still there on signing back in. Two accounts on one browser therefore each keep their own.
 - **A guest log lives on one device and nothing backs it up.** That is the honest trade for
-  opening straight into the text box, and the profile sheet says so in as many words — but losing
+  opening straight into the text box, and the You screen says so in as many words — but losing
   the phone loses the log, and there is no prompt nagging anyone to sign in. `adopt` runs once, on
   the first sign-in; a guest who signs into a *second* account later has already had their log
   moved to the first.
@@ -986,8 +1071,15 @@ at the end of [README.md](README.md).
 - A repeat whose start is more than a week out arms one-offs for its first week rather than
   standing crons, because every weekday's cron would otherwise fire early. It converges on the
   first launch on or after the start date; Capacitor's cron has no start parameter.
-- Dictation uses the Web Speech API, which iOS Safari does not implement. `useDictation` reports
-  `supported: false` there and `QuickAdd` hides the mic rather than offering a dead button.
+- **Dictation is web-only, and that is the settled answer rather than a gap.** It uses the Web
+  Speech API, which iOS Safari does not implement — and which Android's System WebView *exposes
+  without implementing*: the constructor is there, and calling `start()` fails `not-allowed`
+  whatever permissions are granted. Verified on a Galaxy S21 FE running Android 16, on the shipped
+  build. So `useDictation` returns `supported: false` for anything native and `QuickAdd` hides the
+  mic rather than offering a dead button. On Android the **keyboard's own microphone** already
+  dictates into the capture box, which is the platform's way of doing this and costs no
+  dependency, no `RECORD_AUDIO`, and no second permission state. A native speech plugin was
+  considered and declined for exactly that reason.
 - **The ceiling is ₹21,474,836.47, and it is refused rather than owed.** `amount_paise` and
   `duration_minutes` are Postgres `integer`, so a bigger number would be stored here, counted into
   the day and refused by the server for ever with `22003`. `format.ts` owns the bound
