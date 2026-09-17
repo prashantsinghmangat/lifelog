@@ -235,6 +235,30 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     return onHome(() => setView('today'))
   }, [view])
 
+  /**
+   * A wide screen is always on Today, and has to be *put* there rather than
+   * assumed there.
+   *
+   * The nav is `lg:hidden`, so nothing visible on a wide screen can change the
+   * destination — which is why the view never leaves Today there. What it does
+   * not cover is *arriving*: a window dragged wider while on Calendar or You, or
+   * a tablet rotated into the wide layout, strands the reader on a screen with
+   * no nav to leave it and the sidebar's own calendar sitting beside it. Seen at
+   * 1440px in the device's WebView, not reasoned about.
+   *
+   * Watched rather than read once, because crossing the breakpoint is the only
+   * way in.
+   */
+  useEffect(() => {
+    const wide = window.matchMedia('(min-width: 1024px)')
+    const settle = () => {
+      if (wide.matches) setView('today')
+    }
+    settle()
+    wide.addEventListener('change', settle)
+    return () => wide.removeEventListener('change', settle)
+  }, [])
+
   // Every day opens folded: unfolding one is about that day, not a preference.
   useEffect(() => setShowEarlier(false), [day])
 

@@ -669,6 +669,15 @@ but You — which has no box deliberately, since a capture field under the setti
 to log the settings. This is the clause the exception rests on: weaken it and the nav stops being
 worth its 60px.
 
+**A wide screen has to be *put* on Today, not assumed to be there.** The nav is `lg:hidden`, so
+nothing visible on `lg` can change the destination — which is exactly why the view never leaves
+Today there, and exactly why *arriving* is a different question. A window dragged past 1024px
+while on Calendar or You strands the reader on a screen with no nav to leave it, next to a sidebar
+showing the same calendar. `App` watches the breakpoint with `matchMedia` and settles the view
+back on Today whenever it matches. Found by emulating 1440px in the device's own WebView, which is
+the only reason it was found at all: the unit tests stub `matchMedia` to `matches: false` and the
+phone never crosses the breakpoint.
+
 **The toast, the control and the nav are one block in flow, and that is what retired `--dock`.**
 A toast over the control is not a cosmetic overlap — `Undo` and `Save` sat on top of each other
 once and pressing one hit the other — and the answer for a while was a constant in `index.css`

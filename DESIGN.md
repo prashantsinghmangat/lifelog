@@ -161,6 +161,10 @@ not lose the day being read.
 - **On `lg` the view never leaves `today`**, because nothing visible there can change it. The nav
   is hidden, the sidebar owns the calendar and the account, and the control keeps its own
   `Log · Ask` toggle (`hidden lg:flex`). The wide layout gained no destinations.
+- **Arriving wide is a different question from being wide**, and it needs a `matchMedia` watcher.
+  A window dragged past 1024px while on Calendar or You strands the reader on a screen with no nav
+  to leave it, beside a sidebar showing the same calendar. `App` watches the breakpoint and puts
+  the view back on Today when it matches. Seen at 1440px, not reasoned about.
 - The three that are not a day name themselves in an **eyebrow**, not a headline. The nav already
   says which one is live, and each screen has something of its own that deserves the size.
 - The live item carries `aria-current="page"`, and an `sr-only` live region announces the
