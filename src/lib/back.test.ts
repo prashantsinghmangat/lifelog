@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { back, onBack } from './back'
+import { back, onBack, onHome } from './back'
 
 /**
  * The Android back button, which was dismissing the whole app while a sheet sat
@@ -9,6 +9,74 @@ import { back, onBack } from './back'
  */
 describe('what back does', () => {
   it('is the app\'s own business when nothing is open', () => {
+    expect(back()).toBe('root')
+  })
+
+  /**
+   * The layer the bottom nav added. Three destinations became reachable in one
+   * tap, and back is how an Android reader leaves any of them — without this,
+   * leaving You put the launcher in front of a log that was still running,
+   * which is the same class of bug `@capacitor/app` was added to fix.
+   */
+  it('comes home from a destination rather than dismissing the app', () => {
+    const go = vi.fn()
+    const off = onHome(go)
+
+    expect(back()).toBe('home')
+    expect(go).toHaveBeenCalledTimes(1)
+    off()
+  })
+
+  it('minimises once it is already home', () => {
+    const go = vi.fn()
+    onHome(go)()
+
+    expect(back()).toBe('root')
+    expect(go).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Order is what makes two presses read correctly: the editor opened from the
+   * calendar closes *onto* the calendar, and only the next press comes home.
+   * Coming home first would leave a sheet on screen over a screen it was never
+   * opened from.
+   */
+  it('closes the sheet before it leaves the destination', () => {
+    const close = vi.fn()
+    const go = vi.fn()
+    const offHome = onHome(go)
+    const offSheet = onBack(close)
+
+    expect(back()).toBe('closed')
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(go).not.toHaveBeenCalled()
+
+    offSheet()
+    expect(back()).toBe('home')
+    expect(go).toHaveBeenCalledTimes(1)
+
+    offHome()
+    expect(back()).toBe('root')
+  })
+
+  /**
+   * One home, not a stack of them: the destinations do not nest, so a second
+   * registration replaces the first rather than piling up behind it. The guard
+   * is on identity, so the replaced handler's cleanup cannot clear a slot that
+   * is no longer its own — the same reason `onBack` splices by function.
+   */
+  it('keeps one way home, and the newest one', () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const offFirst = onHome(first)
+    const offSecond = onHome(second)
+
+    offFirst()
+    expect(back()).toBe('home')
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(first).not.toHaveBeenCalled()
+
+    offSecond()
     expect(back()).toBe('root')
   })
 

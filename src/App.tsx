@@ -22,7 +22,7 @@ import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { ahead } from './lib/ahead'
-import { arm as armBack } from './lib/back'
+import { arm as armBack, onHome } from './lib/back'
 import { download, shareOrDownload } from './lib/deliver'
 import { passed } from './lib/events'
 import { clock, dayKey, dayLabel, minutes, relativeDay, rowValue, rupees } from './lib/format'
@@ -221,6 +221,19 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
   useEffect(() => {
     document.title = `${dayLabel(day, now)} · lifelog`
   }, [day, now])
+
+  /**
+   * Away from Today, Android's back button comes home before it minimises.
+   *
+   * Registered only while there is somewhere to come back *from*, which is what
+   * keeps the decision in `back()` rather than in a listener holding a `view`
+   * that has since changed. Below the sheets, so the editor opened from the
+   * calendar closes onto the calendar.
+   */
+  useEffect(() => {
+    if (view === 'today') return
+    return onHome(() => setView('today'))
+  }, [view])
 
   // Every day opens folded: unfolding one is about that day, not a preference.
   useEffect(() => setShowEarlier(false), [day])
