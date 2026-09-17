@@ -473,7 +473,7 @@ describe('every control can be named out loud', () => {
     created_at: '2026-09-05T09:00:00+05:30',
   }
 
-  it('on the day, in the editor, in the profile sheet and in the calendar', async () => {
+  it('on the day, in the editor, on You and in the calendar', async () => {
     rowsOnServer = [row]
     await open()
 
@@ -484,10 +484,14 @@ describe('every control can be named out loud', () => {
     expect(nameless()).toEqual([])
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    await userEvent.click(screen.getByRole('button', { name: 'Profile and settings' }))
+    const nav = screen.getByRole('navigation', { name: 'Destinations' })
+    await userEvent.click(within(nav).getByRole('button', { name: 'You' }))
     expect(nameless()).toEqual([])
-    await userEvent.keyboard('{Escape}')
 
+    await userEvent.click(within(nav).getByRole('button', { name: 'Calendar' }))
+    expect(nameless()).toEqual([])
+
+    await userEvent.click(within(nav).getByRole('button', { name: 'Today' }))
     await userEvent.click(screen.getByLabelText(/open calendar/))
     expect(nameless()).toEqual([])
   })
@@ -558,7 +562,9 @@ describe('a sheet behaving like a dialog', () => {
   it('closes on Escape and hands focus back to what opened it', async () => {
     await open()
 
-    const trigger = screen.getByRole('button', { name: 'Profile and settings' })
+    // The sidebar's account button: on `lg` there is no nav, so this is the
+    // one route left that opens `You` as a sheet.
+    const trigger = screen.getByRole('button', { name: 'you@example.com' })
     await userEvent.click(trigger)
     expect(screen.getByRole('dialog')).toBeTruthy()
 
@@ -569,7 +575,7 @@ describe('a sheet behaving like a dialog', () => {
 
   it('keeps Tab inside it', async () => {
     await open()
-    await userEvent.click(screen.getByRole('button', { name: 'Profile and settings' }))
+    await userEvent.click(screen.getByRole('button', { name: 'you@example.com' }))
 
     const dialog = screen.getByRole('dialog')
     const focusable = [...dialog.querySelectorAll<HTMLElement>('button, input, textarea')]
@@ -873,7 +879,11 @@ describe('using the app without an account', () => {
   it('offers an account rather than a sign-out, which would read as "delete my log"', async () => {
     who = { id: 'local-guest', email: '', local: true }
     await open()
-    await userEvent.click(screen.getByLabelText('Profile and settings'))
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
 
     expect(screen.getByText('No account')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign in to sync' })).toBeTruthy()
@@ -886,7 +896,11 @@ describe('using the app without an account', () => {
     await userEvent.type(box, '350 lunch swiggy{Enter}')
     await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
 
-    await userEvent.click(screen.getByLabelText('Profile and settings'))
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Sign in to sync' }))
 
     // A way back matters: reaching sign-in must not be a one-way door out of a
@@ -899,7 +913,11 @@ describe('using the app without an account', () => {
   it('does not offer a second empty log to somebody who already has one', async () => {
     who = { id: 'local-guest', email: '', local: true }
     await open()
-    await userEvent.click(screen.getByLabelText('Profile and settings'))
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Sign in to sync' }))
 
     await screen.findByRole('button', { name: 'Back to the log' })
@@ -924,7 +942,11 @@ describe('the way in for somebody with no account', () => {
   it('tells a guest what signing in does to the log they already have', async () => {
     who = { id: 'local-guest', email: '', local: true }
     await open()
-    await userEvent.click(screen.getByLabelText('Profile and settings'))
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Sign in to sync' }))
 
     await screen.findByRole('button', { name: 'Back to the log' })

@@ -11,8 +11,8 @@ import { BellIcon, Chevron, PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { OnThisDay } from './components/OnThisDay'
-import { ProfileSheet } from './components/ProfileSheet'
 import { QuickAdd } from './components/QuickAdd'
+import { Sheet } from './components/Sheet'
 import { You } from './components/You'
 import { Toast, type ToastState } from './components/Toast'
 import { WeekStrip } from './components/WeekStrip'
@@ -462,6 +462,35 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     }
   }
 
+  /**
+   * The account screen's props, shared by its two surfaces.
+   *
+   * A destination in the bottom nav on a phone; the same component inside a
+   * `Sheet` on `lg`, where there is no nav and the sidebar is what carries the
+   * account. One component and one set of props either way — the alternative
+   * was two copies of this list, which is how two screens that are supposed to
+   * be the same come to differ.
+   */
+  const youProps = {
+    email,
+    local,
+    theme,
+    onTheme,
+    onSignIn,
+    onHelp: () => setHelpOpen(true),
+    onExport: () => void exportJson(),
+    nudges,
+    onNudges: chooseNudges,
+    onExportCalendar: () => void exportCalendar(),
+    // Forgotten here as well as on the event, because signing out with no
+    // network never reaches Supabase — and an offline sign-out that does not
+    // sign you out is worse than no button at all.
+    onSignOut: () => {
+      forget(localStorage)
+      void supabase.auth.signOut()
+    },
+  }
+
   /** Picking a day in the calendar is asking to read it, so it lands on Today. */
   const pick = (picked: string) => {
     setDay(picked)
@@ -524,25 +553,12 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
             the one thing on it allowed to be big. */}
         {view === 'today' ? (
           <>
-            {/* The quietest row on the screen, and the only thing that names the
-                app on a phone. It carries what is *about* the app rather than about
-                the day — the wordmark and the account — so the day header below can
-                be the one thing the eye lands on. Hidden on `lg`, where the sidebar
-                already says both. */}
-            <div className="-mt-1 mb-1 flex h-9 items-center justify-between lg:hidden">
-              <span className="text-[0.8125rem] font-semibold tracking-[0.02em] text-faint">
-                lifelog
-              </span>
-              <button
-                type="button"
-                aria-label="Profile and settings"
-                onClick={() => setProfileOpen(true)}
-                className="-my-1 -mr-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:text-ink active:text-ink"
-              >
-                <PersonIcon size={18} />
-              </button>
-            </div>
-
+            {/* The quiet row that used to sit here — the wordmark and a 20px
+                account glyph — is what paid for the bar along the bottom. It
+                named the app on a screen nobody reaches without opening the app,
+                and it hid the account in the least looked-at corner there is.
+                Both of those are the nav's now, and the day header is the first
+                thing on the screen. */}
             <DayHeader
               day={day}
               now={now}
@@ -805,56 +821,19 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
 
         {view === 'you' && (
           <div className="mt-4 flex-1">
-            <You
-              email={email}
-              local={local}
-              theme={theme}
-              onTheme={onTheme}
-              onSignIn={onSignIn}
-              onHelp={() => setHelpOpen(true)}
-              onExport={() => void exportJson()}
-              nudges={nudges}
-              onNudges={chooseNudges}
-              onExportCalendar={() => void exportCalendar()}
-              // Forgotten here as well as on the event, because signing out with
-              // no network never reaches Supabase — and an offline sign-out that
-              // does not sign you out is worse than no button at all.
-              onSignOut={() => {
-                forget(localStorage)
-                void supabase.auth.signOut()
-              }}
-            />
+            <You {...youProps} />
           </div>
         )}
       </main>
 
+      {/* `lg` has no nav to hold a destination, and the sidebar is where the
+          account already lives — so on a wide screen the same component is a
+          sheet opened from there. One component, two surfaces; there is no
+          `ProfileSheet` any more, because it was only ever this. */}
       {profileOpen && (
-        <ProfileSheet
-          email={email}
-          local={local}
-          theme={theme}
-          onTheme={onTheme}
-          onSignIn={() => {
-            setProfileOpen(false)
-            onSignIn()
-          }}
-          onHelp={() => {
-            setProfileOpen(false)
-            setHelpOpen(true)
-          }}
-          onExport={() => void exportJson()}
-          nudges={nudges}
-          onNudges={chooseNudges}
-          onExportCalendar={() => void exportCalendar()}
-          // Forgotten here as well as on the event, because signing out with no
-          // network never reaches Supabase — and an offline sign-out that does
-          // not sign you out is worse than no button at all.
-          onSignOut={() => {
-            forget(localStorage)
-            void supabase.auth.signOut()
-          }}
-          onClose={() => setProfileOpen(false)}
-        />
+        <Sheet label="Profile and settings" onClose={() => setProfileOpen(false)}>
+          <You {...youProps} />
+        </Sheet>
       )}
 
       {editing !== null && (
