@@ -42,10 +42,15 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   const onPrefilled = vi.fn()
   const onHelp = vi.fn()
   const onGoToDay = vi.fn<(day: string) => void>()
+  const onLeaveAsk = vi.fn()
 
   const props = {
     day: TODAY,
     now: NOW,
+    // The destination, which on a phone is what says the box is asking. These
+    // tests drive the control's own toggle instead, as `lg` does.
+    ask: false,
+    onLeaveAsk,
     showExamples: false,
     onSubmit,
     corpus: null,
@@ -61,7 +66,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   // Plain DOM assertions throughout, rather than pulling in jest-dom for
   // sugar: one less dependency, and `.value` reads no worse than a matcher.
   const box = screen.getByLabelText('What happened?') as HTMLInputElement
-  return { view, box, onSubmit, onNeedCorpus, onPrefilled, onHelp, onGoToDay, props }
+  return { view, box, onSubmit, onNeedCorpus, onPrefilled, onHelp, onGoToDay, onLeaveAsk, props }
 }
 
 describe('capturing an entry', () => {

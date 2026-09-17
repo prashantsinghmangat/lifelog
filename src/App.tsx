@@ -4,15 +4,15 @@ import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
 import { AheadSheet } from './components/AheadSheet'
-import { BottomNav } from './components/BottomNav'
+import { BottomNav, type View } from './components/BottomNav'
 import { HelpSheet } from './components/HelpSheet'
 import { BellIcon, Chevron, PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
-import { MonthSheet } from './components/MonthSheet'
 import { OnThisDay } from './components/OnThisDay'
 import { ProfileSheet } from './components/ProfileSheet'
 import { QuickAdd } from './components/QuickAdd'
+import { You } from './components/You'
 import { Toast, type ToastState } from './components/Toast'
 import { WeekStrip } from './components/WeekStrip'
 import { useEntries, type Row } from './hooks/useEntries'
@@ -54,6 +54,13 @@ import type { Entry } from './types'
  * have to keep agreeing about.
  */
 const FLOOR = 'pb-[max(0.75rem,env(safe-area-inset-bottom))]'
+
+/** What the three destinations that are not a day call themselves. */
+const TITLES: Record<Exclude<View, 'today'>, string> = {
+  calendar: 'Calendar',
+  ask: 'Ask',
+  you: 'You',
+}
 
 /** Whatever was thrown, as something a person can read. */
 function message(failure: unknown): string {
@@ -120,7 +127,18 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
   const [day, setDay] = useState(() => dayKey(new Date()))
   const [editing, setEditing] = useState<Row | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
-  const [calendarOpen, setCalendarOpen] = useState(false)
+  /**
+   * Which of the four destinations is on screen.
+   *
+   * State, not a route: there is no router here and nothing to put in one. It
+   * lives beside `day` rather than above `Day` so that switching destination
+   * cannot remount `useEntries` — going to You and back must not refetch the
+   * log, and must certainly not lose the day being looked at.
+   *
+   * On `lg` it never leaves `today`: the nav is hidden there and nothing else
+   * sets it, so the wide layout is exactly what it was.
+   */
+  const [view, setView] = useState<View>('today')
   const [profileOpen, setProfileOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [aheadOpen, setAheadOpen] = useState(false)
@@ -196,7 +214,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
   // Every day opens folded: unfolding one is about that day, not a preference.
   useEffect(() => setShowEarlier(false), [day])
 
-  const sheetOpen = calendarOpen || profileOpen || aheadOpen || editing !== null
+  const sheetOpen = profileOpen || aheadOpen || editing !== null
 
   // Desktop navigation without reaching for the mouse. Deliberately inert while
   // typing or while a sheet is open, where these keys already mean something.
@@ -442,9 +460,10 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     }
   }
 
+  /** Picking a day in the calendar is asking to read it, so it lands on Today. */
   const pick = (picked: string) => {
     setDay(picked)
-    setCalendarOpen(false)
+    setView('today')
   }
 
   return (
@@ -497,55 +516,66 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
 
       {/* Capped: across 900px the eye cannot connect a title on the left to its
           amount on the right. A reading measure, not the whole column. */}
-      <main {...swipe} className="swipe-area mx-auto flex w-full min-w-0 max-w-2xl flex-col">
-        {/* The quietest row on the screen, and the only thing that names the
-            app on a phone. It carries what is *about* the app rather than about
-            the day — the wordmark and the account — so the day header below can
-            be the one thing the eye lands on. Hidden on `lg`, where the sidebar
-            already says both. */}
-        <div className="-mt-1 mb-1 flex h-9 items-center justify-between lg:hidden">
-          <span className="text-[0.8125rem] font-semibold tracking-[0.02em] text-faint">
-            lifelog
-          </span>
-          <button
-            type="button"
-            aria-label="Profile and settings"
-            onClick={() => setProfileOpen(true)}
-            className="-my-1 -mr-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:text-ink active:text-ink"
-          >
-            <PersonIcon size={18} />
-          </button>
-        </div>
-
-        <DayHeader
-          day={day}
-          now={now}
-          onChange={setDay}
-          onOpenCalendar={() => setCalendarOpen(true)}
-          actions={
-            // Only when there is something to show: a bell that is always
-            // empty is a control that teaches you to ignore it.
-            upcoming.length > 0 ? (
+      <main {...(view === 'today' ? swipe : {})} className="swipe-area mx-auto flex w-full min-w-0 max-w-2xl flex-col">
+        {/* The day's own header belongs to the day. The other three name
+            themselves at the same size, because whatever the screen is about is
+            the one thing on it allowed to be big. */}
+        {view === 'today' ? (
+          <>
+            {/* The quietest row on the screen, and the only thing that names the
+                app on a phone. It carries what is *about* the app rather than about
+                the day — the wordmark and the account — so the day header below can
+                be the one thing the eye lands on. Hidden on `lg`, where the sidebar
+                already says both. */}
+            <div className="-mt-1 mb-1 flex h-9 items-center justify-between lg:hidden">
+              <span className="text-[0.8125rem] font-semibold tracking-[0.02em] text-faint">
+                lifelog
+              </span>
               <button
                 type="button"
-                aria-label={`What is coming — ${upcoming.length} ${
-                  upcoming.length === 1 ? 'reminder' : 'reminders'
-                }`}
-                onClick={() => setAheadOpen(true)}
-                className="mr-0.5 flex h-11 shrink-0 items-center gap-1 rounded-lg px-1.5 text-faint transition-colors hover:text-ink active:text-ink"
+                aria-label="Profile and settings"
+                onClick={() => setProfileOpen(true)}
+                className="-my-1 -mr-2.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:text-ink active:text-ink"
               >
-                <BellIcon size={17} />
-                <span className="text-xs tabular-nums">{upcoming.length}</span>
+                <PersonIcon size={18} />
               </button>
-            ) : null
-          }
-        />
+            </div>
 
-        {/* Under the header, above the box: navigation, not capture, so it
-            scrolls away with the day rather than sitting over it. */}
-        <div className="mt-3">
-          <WeekStrip day={day} now={now} loadDays={fetchDays} onPick={setDay} />
-        </div>
+            <DayHeader
+              day={day}
+              now={now}
+              onChange={setDay}
+              onOpenCalendar={() => setView('calendar')}
+              actions={
+                // Only when there is something to show: a bell that is always
+                // empty is a control that teaches you to ignore it.
+                upcoming.length > 0 ? (
+                  <button
+                    type="button"
+                    aria-label={`What is coming — ${upcoming.length} ${
+                      upcoming.length === 1 ? 'reminder' : 'reminders'
+                    }`}
+                    onClick={() => setAheadOpen(true)}
+                    className="mr-0.5 flex h-11 shrink-0 items-center gap-1 rounded-lg px-1.5 text-faint transition-colors hover:text-ink active:text-ink"
+                  >
+                    <BellIcon size={17} />
+                    <span className="text-xs tabular-nums">{upcoming.length}</span>
+                  </button>
+                ) : null
+              }
+            />
+
+            {/* Under the header, above the box: navigation, not capture, so it
+                scrolls away with the day rather than sitting over it. */}
+            <div className="mt-3">
+              <WeekStrip day={day} now={now} loadDays={fetchDays} onPick={setDay} />
+            </div>
+          </>
+        ) : (
+          <h2 className="truncate text-[1.375rem] leading-tight font-semibold tracking-tight sm:text-2xl">
+            {TITLES[view]}
+          </h2>
+        )}
 
         {/* The bottom block: the toast, then the capture control — in flow, in
             that order, with nothing fixed.
@@ -585,7 +615,9 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
           <QuickAdd
             day={day}
             now={now}
-            showExamples={!loading && shown.length === 0}
+            ask={view === 'ask'}
+            onLeaveAsk={() => setView('today')}
+            showExamples={view === 'today' && !loading && shown.length === 0}
             onSubmit={submit}
             corpus={corpus}
             onNeedCorpus={loadCorpus}
@@ -598,166 +630,198 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
           {/* Last in the block, so it carries the floor and its own background
               reaches the bottom edge — a bar floating a centimetre above the
               gesture bar reads as a rendering fault. */}
-          <BottomNav view="today" onGo={() => undefined} className={FLOOR} />
+          <BottomNav view={view} onGo={setView} className={FLOOR} />
         </div>
 
-        {/* Asked for in the app, not left to the OS: a reinstall silently
-            revokes this, and a reminder that cannot fire is worse than no
-            reminder because it was trusted. */}
-        {notify === 'denied' && (
-          <div className="mt-4 flex items-center gap-3 rounded-xl border border-line bg-sunken px-3.5 py-2.5">
-            <p className="min-w-0 flex-1 text-xs text-muted">
-              Allow notifications, or reminders cannot reach you.
+        {view === 'today' && (
+          <>
+          {/* Asked for in the app, not left to the OS: a reinstall silently
+              revokes this, and a reminder that cannot fire is worse than no
+              reminder because it was trusted. */}
+          {notify === 'denied' && (
+            <div className="mt-4 flex items-center gap-3 rounded-xl border border-line bg-sunken px-3.5 py-2.5">
+              <p className="min-w-0 flex-1 text-xs text-muted">
+                Allow notifications, or reminders cannot reach you.
+              </p>
+              {/* 44px like everything else. It was 36 to keep the banner short,
+                  which is the one trade this app does not make — and it is the
+                  only control on the screen the *native* app actually depends on,
+                  since nothing rings without it. Negative margins keep the banner
+                  the height it was. */}
+              <button
+                type="button"
+                onClick={() => void allowReminders()}
+                className="-my-1 flex h-11 shrink-0 items-center rounded-lg bg-ink px-3.5 text-xs font-medium text-surface transition-opacity hover:opacity-90"
+              >
+                Allow
+              </button>
+            </div>
+          )}
+
+          {/* Offline is a state, not an error: everything still works, so it is
+              said quietly and the raw fetch failure behind it is not shown. What
+              does need saying is how much this device is still holding, because
+              an entry that exists nowhere else is the one thing worth knowing.
+              Driven by whether a request got an answer, never by
+              `navigator.onLine` — on Android that reports a connection the device
+              does not have. */}
+          {!reachable ? (
+            <p className="mt-4 text-xs text-faint">
+              Offline
+              {owed > 0
+                ? ` · ${owed} ${owed === 1 ? 'entry' : 'entries'} saved here, waiting to sync`
+                : ' · reading this device’s copy'}
             </p>
-            {/* 44px like everything else. It was 36 to keep the banner short,
-                which is the one trade this app does not make — and it is the
-                only control on the screen the *native* app actually depends on,
-                since nothing rings without it. Negative margins keep the banner
-                the height it was. */}
-            <button
-              type="button"
-              onClick={() => void allowReminders()}
-              className="-my-1 flex h-11 shrink-0 items-center rounded-lg bg-ink px-3.5 text-xs font-medium text-surface transition-opacity hover:opacity-90"
-            >
-              Allow
-            </button>
+          ) : (
+            error !== null && <p className="mt-4 text-xs text-expense">{error}</p>
+          )}
+
+          <div className="mt-4 flex-1" aria-busy={loading}>
+            {/* Placeholders, not a spinner: the rows land where these sat, so
+                nothing jumps when the fetch resolves. */}
+            {loading && shown.length === 0 && (
+              <div aria-hidden="true">
+                {[0, 1, 2].map((index) => (
+                  <div key={index} className="flex items-center gap-3 border-b border-line py-4">
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-line" />
+                    <span
+                      className="h-3 flex-1 rounded bg-line"
+                      style={{ opacity: 1 - index * 0.3 }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* The day opened on what was already over: struck-through reminders
+                keep full size and position, so the loudest thing at the top was
+                frequently the part that no longer matters. Folded into one line,
+                the day opens on what is still live.
+
+                Only a *leading run* of them, so nothing is reordered — a passed
+                reminder later in the day stays where it happened. And only from
+                two upwards: hiding a single row behind a tap costs a row and
+                saves none. `passed` is true of events alone, so nothing carrying
+                money or time is ever inside the fold. */}
+            {folded > 0 && (
+              <button
+                type="button"
+                aria-expanded={showEarlier}
+                onClick={() => setShowEarlier(true)}
+                className="-mx-2 flex h-11 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
+              >
+                <span aria-hidden="true" className="flex w-5 shrink-0 justify-center text-faint">
+                  <Chevron dir="down" size={16} />
+                </span>
+                {folded} already passed
+              </button>
+            )}
+
+            {shownEntries.map((row) => (
+              <EntryRow
+                key={row.id}
+                row={row}
+                now={now}
+                onOpen={() => setEditing(asStored(row))}
+                onRetry={retry}
+              />
+            ))}
+
+            {/* Under the rows, not over them: read as a header it looked like a
+                label for the box you were about to type into, when it is a
+                summary of the day you have just finished reading. The last row's
+                own border is the rule above it. */}
+            {/* The figures lead and their names sit back, the same way an answer's
+                extras read — as values with labels attached rather than as a
+                sentence. Flat 12px muted, this line was the quietest thing on the
+                screen while carrying the only number that sums the day: smaller
+                than the per-row amounts it totals, which is exactly backwards. The
+                count stays quiet, because it names the list rather than measuring
+                it. */}
+            {shown.length > 0 && (
+              <p className="mt-3.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-faint">
+                {/* Not `> 0`: a day whose only money is a refund has a total, and
+                    hiding it says the day carried none at all. */}
+                {spent !== 0 && (
+                  <span>
+                    <span className="text-sm font-medium text-ink tabular-nums">{rupees(spent)}</span>{' '}
+                    spent
+                  </span>
+                )}
+                {logged > 0 && (
+                  <span>
+                    <span className="text-sm font-medium text-ink tabular-nums">
+                      {minutes(logged)}
+                    </span>{' '}
+                    logged
+                  </span>
+                )}
+                <span className="text-faint tabular-nums">
+                  {shown.length} {shown.length === 1 ? 'entry' : 'entries'}
+                </span>
+              </p>
+            )}
+
+            <OnThisDay found={recalled} onPick={setDay} />
+
+
+            {failedElsewhere.length > 0 && (
+              <div className="mt-6">
+                <p className="mb-1 text-xs font-medium text-expense">Did not save</p>
+                {failedElsewhere.map((row) => (
+                  <EntryRow
+                    key={row.id}
+                    row={row}
+                    now={now}
+                    offDay
+                    onOpen={() => setDay(row.occurred_on)}
+                    onRetry={retry}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          </>
+        )}
+
+        {/* The same grid the sidebar holds, with nothing else on the screen to
+            compete with it. Picking a day is asking to read it, so it lands on
+            Today — the calendar is navigation and never a place to stay. */}
+        {view === 'calendar' && (
+          <div className="mt-4 flex-1">
+            <MonthGrid day={day} now={now} loadDays={fetchDays} onPick={pick} />
           </div>
         )}
 
-        {/* Offline is a state, not an error: everything still works, so it is
-            said quietly and the raw fetch failure behind it is not shown. What
-            does need saying is how much this device is still holding, because
-            an entry that exists nowhere else is the one thing worth knowing.
-            Driven by whether a request got an answer, never by
-            `navigator.onLine` — on Android that reports a connection the device
-            does not have. */}
-        {!reachable ? (
-          <p className="mt-4 text-xs text-faint">
-            Offline
-            {owed > 0
-              ? ` · ${owed} ${owed === 1 ? 'entry' : 'entries'} saved here, waiting to sync`
-              : ' · reading this device’s copy'}
-          </p>
-        ) : (
-          error !== null && <p className="mt-4 text-xs text-expense">{error}</p>
-        )}
+        {/* Nothing of its own: the answer and the suggestions are drawn by the
+            capture control, above the field, which on a phone is the block along
+            the bottom edge. This is what keeps the block pushed down to it. */}
+        {view === 'ask' && <div className="flex-1" />}
 
-        <div className="mt-4 flex-1" aria-busy={loading}>
-          {/* Placeholders, not a spinner: the rows land where these sat, so
-              nothing jumps when the fetch resolves. */}
-          {loading && shown.length === 0 && (
-            <div aria-hidden="true">
-              {[0, 1, 2].map((index) => (
-                <div key={index} className="flex items-center gap-3 border-b border-line py-4">
-                  <span className="h-2 w-2 shrink-0 rounded-full bg-line" />
-                  <span
-                    className="h-3 flex-1 rounded bg-line"
-                    style={{ opacity: 1 - index * 0.3 }}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* The day opened on what was already over: struck-through reminders
-              keep full size and position, so the loudest thing at the top was
-              frequently the part that no longer matters. Folded into one line,
-              the day opens on what is still live.
-
-              Only a *leading run* of them, so nothing is reordered — a passed
-              reminder later in the day stays where it happened. And only from
-              two upwards: hiding a single row behind a tap costs a row and
-              saves none. `passed` is true of events alone, so nothing carrying
-              money or time is ever inside the fold. */}
-          {folded > 0 && (
-            <button
-              type="button"
-              aria-expanded={showEarlier}
-              onClick={() => setShowEarlier(true)}
-              className="-mx-2 flex h-11 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
-            >
-              <span aria-hidden="true" className="flex w-5 shrink-0 justify-center text-faint">
-                <Chevron dir="down" size={16} />
-              </span>
-              {folded} already passed
-            </button>
-          )}
-
-          {shownEntries.map((row) => (
-            <EntryRow
-              key={row.id}
-              row={row}
-              now={now}
-              onOpen={() => setEditing(asStored(row))}
-              onRetry={retry}
+        {view === 'you' && (
+          <div className="mt-4 flex-1">
+            <You
+              email={email}
+              local={local}
+              theme={theme}
+              onTheme={onTheme}
+              onSignIn={onSignIn}
+              onHelp={() => setHelpOpen(true)}
+              onExport={() => void exportJson()}
+              nudges={nudges}
+              onNudges={chooseNudges}
+              onExportCalendar={() => void exportCalendar()}
+              // Forgotten here as well as on the event, because signing out with
+              // no network never reaches Supabase — and an offline sign-out that
+              // does not sign you out is worse than no button at all.
+              onSignOut={() => {
+                forget(localStorage)
+                void supabase.auth.signOut()
+              }}
             />
-          ))}
-
-          {/* Under the rows, not over them: read as a header it looked like a
-              label for the box you were about to type into, when it is a
-              summary of the day you have just finished reading. The last row's
-              own border is the rule above it. */}
-          {/* The figures lead and their names sit back, the same way an answer's
-              extras read — as values with labels attached rather than as a
-              sentence. Flat 12px muted, this line was the quietest thing on the
-              screen while carrying the only number that sums the day: smaller
-              than the per-row amounts it totals, which is exactly backwards. The
-              count stays quiet, because it names the list rather than measuring
-              it. */}
-          {shown.length > 0 && (
-            <p className="mt-3.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-faint">
-              {/* Not `> 0`: a day whose only money is a refund has a total, and
-                  hiding it says the day carried none at all. */}
-              {spent !== 0 && (
-                <span>
-                  <span className="text-sm font-medium text-ink tabular-nums">{rupees(spent)}</span>{' '}
-                  spent
-                </span>
-              )}
-              {logged > 0 && (
-                <span>
-                  <span className="text-sm font-medium text-ink tabular-nums">
-                    {minutes(logged)}
-                  </span>{' '}
-                  logged
-                </span>
-              )}
-              <span className="text-faint tabular-nums">
-                {shown.length} {shown.length === 1 ? 'entry' : 'entries'}
-              </span>
-            </p>
-          )}
-
-          <OnThisDay found={recalled} onPick={setDay} />
-
-
-          {failedElsewhere.length > 0 && (
-            <div className="mt-6">
-              <p className="mb-1 text-xs font-medium text-expense">Did not save</p>
-              {failedElsewhere.map((row) => (
-                <EntryRow
-                  key={row.id}
-                  row={row}
-                  now={now}
-                  offDay
-                  onOpen={() => setDay(row.occurred_on)}
-                  onRetry={retry}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </main>
-
-      {calendarOpen && (
-        <MonthSheet
-          day={day}
-          now={now}
-          loadDays={fetchDays}
-          onPick={pick}
-          onClose={() => setCalendarOpen(false)}
-        />
-      )}
 
       {profileOpen && (
         <ProfileSheet

@@ -67,6 +67,16 @@ function asEntry(text: string): string {
 type Props = {
   day: string
   now: Date
+  /**
+   * Asking, because the destination says so.
+   *
+   * On a phone Ask is one of the four places the nav goes, so the mode is not
+   * this component's to decide. The toggle survives for `lg`, where there is no
+   * nav and the box's second job would otherwise have nowhere to be said.
+   */
+  ask: boolean
+  /** Ask was left from inside the box — Escape — so the destination has to follow. */
+  onLeaveAsk: () => void
   showExamples: boolean
   onSubmit: (parsed: ParsedEntry) => void
   /** Every entry, for answering questions. Null until asked for. */
@@ -94,6 +104,8 @@ function summarise(parsed: ParsedEntry, sameDay: boolean, now: Date): string {
 export function QuickAdd({
   day,
   now,
+  ask,
+  onLeaveAsk,
   showExamples,
   onSubmit,
   corpus,
@@ -115,11 +127,28 @@ export function QuickAdd({
     document.getElementById('quick-add')?.focus()
   }, [prefill, onPrefilled])
 
-  const [mode, setMode] = useState<Mode>('log')
+  const [toggled, setToggled] = useState<Mode>('log')
 
   // Every day starts in Log. Arriving somewhere — including by tapping a row in
   // an answer — is about reading that day, and logging is the primary act.
-  useEffect(() => setMode('log'), [day])
+  useEffect(() => setToggled('log'), [day])
+
+  /**
+   * One mode, said two ways.
+   *
+   * The destination wins where there is one, and on `lg` there is not: the nav
+   * is hidden there and the toggle inside the control is the only thing that
+   * can say the box has a second job. They never disagree, because `ask` is
+   * only ever true on a screen with a nav.
+   */
+  const mode: Mode = ask ? 'ask' : toggled
+
+  /** Leaving Ask, from whichever of the two said so. */
+  function leaveAsk() {
+    setToggled('log')
+    setText('')
+    onLeaveAsk()
+  }
 
   const trimmed = text.trim()
 
@@ -248,12 +277,8 @@ export function QuickAdd({
             // shortcut is unreachable. Blur, never clear: a half-typed entry
             // is not worth losing to a stray Escape.
             if (event.key === 'Escape') {
-              if (mode === 'ask') {
-                setMode('log')
-                setText('')
-              } else {
-                event.currentTarget.blur()
-              }
+              if (mode === 'ask') leaveAsk()
+              else event.currentTarget.blur()
             }
           }}
           className="w-full bg-transparent px-4 pt-3 pb-2 text-base text-ink outline-none placeholder:text-faint"
@@ -270,14 +295,21 @@ export function QuickAdd({
               disabled control also looks like. The selected word now sits in a
               filled pill. The pill is 28px and the button around it is 44 —
               the target is not allowed to shrink to fit the decoration. */}
-          <div role="group" aria-label="What the box does" className="flex shrink-0 items-center">
+          {/* The mode lives in the bottom nav on a phone, so the toggle is here
+              for `lg` alone — where the nav is hidden and this is the only place
+              the box's second job can be said. */}
+          <div
+            role="group"
+            aria-label="What the box does"
+            className="hidden shrink-0 items-center lg:flex"
+          >
             {(['log', 'ask'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
                 aria-pressed={mode === option}
                 onClick={() => {
-                  setMode(option)
+                  setToggled(option)
                   document.getElementById('quick-add')?.focus()
                 }}
                 className="flex h-11 items-center px-0.5"
@@ -402,8 +434,7 @@ export function QuickAdd({
             // preview above is allowed to be a tick behind; what gets saved is
             // not.
             onSubmit(parse(asEntry(text), new Date(), day) ?? wouldLog)
-            setText('')
-            setMode('log')
+            leaveAsk()
           }}
           className="mt-2 flex h-11 w-full items-center gap-2 rounded-lg border border-edge px-3 text-xs transition-colors hover:bg-sunken active:bg-sunken"
         >
