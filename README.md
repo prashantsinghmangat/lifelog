@@ -198,7 +198,7 @@ that is what actually makes this single-user.
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 603 tests
+npm test           # vitest run — 638 tests
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -576,23 +576,21 @@ Measured with `npm run build`:
 
 | File | Raw | Gzipped |
 | --- | --- | --- |
-| `assets/index-*.js` | 477.65 kB | **138.94 kB** |
-| `assets/index-*.css` | 25.05 kB | 5.99 kB |
-| `index.html` | 1.21 kB | 0.63 kB |
-| **What a browser fetches** | | **145.56 kB** |
+| `assets/index-*.js` | 487.72 kB | **141.58 kB** |
+| `assets/index-*.css` | 26.01 kB | 6.18 kB |
+| `index.html` | 1.21 kB | 0.62 kB |
+| **What a browser fetches** | | **148.38 kB** |
 | `assets/web-*.js` (×4) | 14.11 kB | 4.75 kB |
 | `assets/esm-*.js` (×4) | 2.59 kB | 1.51 kB |
-| **Everything the build emits** | | **151.82 kB** |
+| Everything the build emits | | 154.64 kB |
 
-Against a 150 KB budget. **The two figures disagree and it matters which one the budget is
-about.** A browser downloads 145.56 kB and has 4.4 KB of headroom: the eight small chunks are the
-Capacitor plugins, and nothing fetches them on the web — `reminders.ts`, `back.ts` and
-`deliver.ts` all check `isNative()` and return *before* the dynamic import, and inside the native
-shell the plugin proxies talk to the bridge rather than to these web shims. Counting them, as this
-table always has, the total is 151.82 kB and over budget. The conservative number is the safer one
-to hold, so treat it as over until the accounting is settled. If it needs bringing down, importing
+**The budget is 150 KB of what a browser fetches, and the headroom is 1.6 KB.** The eight small
+chunks below the line are the Capacitor plugins' web shims, and nothing downloads them:
+`reminders.ts`, `back.ts` and `deliver.ts` all check `isNative()` and return *before* the dynamic
+import, and inside the native shell the plugin proxies talk to the bridge rather than to these
+files. The stats screen cost 2.8 KB of the fetched figure. If more room is ever needed, importing
 `@supabase/auth-js` and `@supabase/postgrest-js` directly drops the unused half of the SDK, which
-is worth far more than these chunks. The four small chunks are the dynamic imports in `reminders.ts` and `back.ts`, fetched only
+is worth far more than everything else on this page combined. The four small chunks are the dynamic imports in `reminders.ts` and `back.ts`, fetched only
 inside the native shell. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
 `postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and
 postgrest are used. If the budget ever gets tight, importing `@supabase/auth-js` and
@@ -745,8 +743,9 @@ set, rows are never removed.
 
 ## Not built, on purpose
 
-No AI or LLM calls, no SMS parsing, no notification listeners, no push notifications, no charts,
-no category management UI, no search, no tags. No multi-day view beyond the
+No AI or LLM calls, no SMS parsing, no notification listeners, no push notifications, no
+category management UI, no search, no tags. One chart exists — the stats view inside Calendar —
+and DESIGN.md §10 records what it may not grow into. No multi-day view beyond the
 "on this day" strip and the bell's fortnight. **Still no recurring event expansion** — a repeat
 is one row that schedules several alarms, never several entries, so there stays one thing to
 edit and one to delete. The days it lands on are *derived* for the view, which is not the same

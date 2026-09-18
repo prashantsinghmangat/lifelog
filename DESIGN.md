@@ -21,8 +21,9 @@ it. Before adding a screen, ask whether the thing can be derived onto a screen t
 exists. Two of this app's features — the memories strip and the repeat occurrences — cost no
 query, no page and no control, and that is why they were allowed in.
 
-A corollary that comes up constantly: **do not add a fifth kind, a second editor, a chart, or a
-search field.** The bottom nav came off that list once, on evidence; see §10 for what it cost.
+A corollary that comes up constantly: **do not add a fifth kind, a second editor, or a search
+field.** The bottom nav and one chart each came off that list once, argued for on evidence; §10
+records what each cost and what neither is allowed to grow into.
 
 ---
 
@@ -130,8 +131,10 @@ with labels attached rather than as a sentence:
 component changes presentation:
 
 - `Sheet` is a bottom sheet on compact, a centred dialog from `sm`.
-- `MonthGrid` is the calendar; `Calendar` is that grid plus the month's own figures as a
-  destination, while the wide layout renders `MonthGrid` straight into the sidebar.
+- `MonthGrid` is the calendar; `Calendar` is a destination holding that grid and the `Stats`
+  chart behind a Grid | Chart toggle, while the wide layout renders `MonthGrid` straight into the
+  sidebar. **The stats are compact-only, as a decision rather than an oversight** — the wide
+  layout gained no destinations, and a wide answer will be designed on its own if wanted.
 - `You` is the account screen. It is a destination on compact and the same component inside a
   `Sheet` on `lg`, opened from the sidebar — one component, two surfaces.
 - `BottomNav` is `lg:hidden`, and `WeekStrip` is too, because on a wide screen the sidebar already
@@ -149,7 +152,7 @@ not lose the day being read.
 | Destination | Capture control | What is on it |
 | --- | --- | --- |
 | Today | yes, Log | the day header, the week strip, the timeline, the totals, the memories |
-| Calendar | yes, Log | `MonthGrid`, and the shown month's spend, hours and days |
+| Calendar | yes, Log | a Grid \| Chart toggle: `MonthGrid`, or the `Stats` chart |
 | Ask | yes, **Ask** | whatever the control draws — the answer, or `TRY ASKING` |
 | You | **no** | the account, theme, prompts, permission, exports, the manual |
 
@@ -417,9 +420,18 @@ No component library, no state manager, no data-fetching library, no icon packag
 inline SVG on a 24-box stroked with `currentColor`. Runtime dependencies are `react`, `react-dom`,
 `@supabase/supabase-js`, `date-fns` and Capacitor. **Ask before adding anything else.**
 
-No charts, no dashboard, no tabs, no search field, no tag UI, no category manager, no multi-day
-view, no second editor, no fifth kind, no "are you sure?" dialog, no onboarding carousel, no
-skeleton spinner where placeholders will do.
+No dashboard, no tabs, no search field, no tag UI, no category manager, no multi-day view, no
+second editor, no fifth kind, no "are you sure?" dialog, no onboarding carousel, no skeleton
+spinner where placeholders will do.
+
+**"No charts" was here and came off for exactly one screen.** What earned the exception: the
+stats view needs no query — the whole log is already on the device — no new table, no fifth kind
+and no settings, and it lives inside the Calendar destination as a Grid | Chart toggle rather
+than as a fifth place to go. All of its arithmetic is in `stats.ts`, pure and tested exactly like
+the parser; the component turns numbers into pixel heights and nothing else. What it is **not
+allowed to grow into**: a second screen, a filter UI, a goal, a budget, a streak, a comparison to
+last month, or an insight. Each of those turns a record into a scoreboard, and any one of them
+must be argued for on its own in CLAUDE.md the way the other exceptions were.
 
 **"No bottom nav" was on that list and came off it.** What earned the exception is that three of
 the four destinations already existed and were reachable only by knowing something: the month was

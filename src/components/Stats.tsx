@@ -65,13 +65,12 @@ const SOLID: Record<Exclude<Measure, 'entries'>, string> = {
   hours: 'bg-time',
 }
 
-/** The lead figure, as format.ts words it. */
-function figure(totals: Totals, measure: Measure): string {
-  if (measure === 'spent') return rupees(totals.paise)
-  if (measure === 'hours') return totals.minutes === 0 ? '0m' : minutes(totals.minutes)
-  const count =
-    totals.counts.expense + totals.counts.time + totals.counts.event + totals.counts.note
-  return String(count)
+/** What the secondary figures say, as format.ts words them. */
+function said(totals: Totals, measure: Measure): { value: string; name: string } {
+  if (measure === 'hours')
+    return { value: totals.minutes === 0 ? '0m' : minutes(totals.minutes), name: 'logged' }
+  const count = valueOf(totals, 'entries')
+  return { value: String(count), name: count === 1 ? 'entry' : 'entries' }
 }
 
 const SCALES: { value: Scale; label: string }[] = [
@@ -296,26 +295,30 @@ export function Stats({ all, now, day }: Props) {
         )} spent, ${totals.minutes === 0 ? 'no time logged' : minutes(totals.minutes)}`}
       </p>
 
-      {/* Figures lead and their names sit back, as everywhere else. The lead
-          is whatever the bars measure; the other two wait at the right. */}
+      {/* Figures lead and their names sit back, as everywhere else. Money is
+          the lead whatever the bars measure — the measure changes the picture,
+          never the headline — with the count and the hours at the right. */}
       <div className="mt-4 flex items-end justify-between gap-4">
         <div className="min-w-0">
           <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
-            {MEASURES.find((option) => option.value === measure)?.label}
+            Spent
           </p>
           <p className="mt-0.5 text-3xl font-semibold tracking-[-0.022em] text-ink tabular-nums">
-            {figure(totals, measure)}
+            {rupees(totals.paise)}
           </p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-0.5 pb-0.5">
-          {MEASURES.filter((option) => option.value !== measure).map((option) => (
-            <p key={option.value} className="text-right">
-              <span className="text-sm font-medium text-ink tabular-nums">
-                {figure(totals, option.value)}
-              </span>{' '}
-              <span className="text-xs text-faint">{option.label.toLowerCase()}</span>
-            </p>
-          ))}
+          {(['entries', 'hours'] as const).map((of) => {
+            const secondary = said(totals, of)
+            return (
+              <p key={of} className="text-right">
+                <span className="text-sm font-medium text-ink tabular-nums">
+                  {secondary.value}
+                </span>{' '}
+                <span className="text-xs text-faint">{secondary.name}</span>
+              </p>
+            )
+          })}
         </div>
       </div>
 

@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run android                    # build, then copy the web assets into android/
 npm run android:open               # open the native project in Android Studio
 npm run dev                        # vite dev server on :5173
-npm test                           # vitest run (602 tests)
+npm test                           # vitest run (638 tests)
 npm run test:watch                 # vitest watch
 npx vitest run -t "yesterday"      # tests whose name matches a substring (4 of 602)
 npx tsc -b                         # typecheck only (add --force to ignore the build cache)
@@ -221,6 +221,36 @@ sat squarely over Save, Cancel and Delete — `elementFromPoint` at the middle o
 toast. The tap did not miss, it hit the wrong control, and on a toast carrying Undo that meant
 pressing Save restored the row you had just deleted. Logging something and editing an entry within
 the next few seconds is all it takes.
+
+**`src/lib/stats.ts` is the arithmetic behind the stats view, and it is pure for the same reason
+the parser is.** Every figure on that screen is a confident claim about the log, and a claim is
+only testable exactly if the module imports nothing stateful and never reads the clock — `now` is
+injected, and the tests assert the source itself never contains a bare `new Date()`. **Totals come
+from stored rows only**: a weekday standup counts once, on the day it is stored, which is the same
+rule the day screen's totals follow — if either place ever changes this, both change in the same
+commit. The cost is agreed: the chart shows a quiet Tuesday on which the phone rang. The rows are
+`useEntries`'s `all`, so there is no fetch, no loading state and no network path, which is the
+entire argument for the screen existing. `WEEK_STARTS` moved from `DayCell` to `format.ts` so this
+module could import it without pulling in React — still one definition.
+
+**The chart lives inside Calendar behind a Grid | Chart toggle, and the drill is view state, not
+history.** Tapping a year bar lands in that month and a month bar in that day; Android's back
+button from Calendar still goes to Today and **does not walk Year → Month → Day in reverse** —
+someone will report that as a bug one day, and it is a decision: there is one back model in this
+app (sheet, home, minimise) and a second, chart-private history inside one destination would be a
+different answer to the same gesture depending on where you stand. The grid keeps its own job
+untouched: a tap on 14 September ends on the timeline for 14 September, never in a sub-view of
+the stats. An hour is the bottom of the drill — tapping selects and names it, since drilling into
+nothing is worse than stopping.
+
+**The day scale's bars can disagree with the day's total, and the hint line is what reconciles
+them.** `occurred_at` is optional, so most rows have no hour to stand in; they are left out of
+the hourly bars and counted out loud rather than silently dropped. The lead figure is always the
+period's money — the measure buttons change the picture, never the headline — and on Spent and
+Hours the bars are one colour, because stacking a rupee total by kind would be a lie. A refund
+keeps its sign in every figure while bars and tracks use its size, so a negative never draws a
+negative pixel. Browsing is bounded at both ends: nothing may start after today (a walkable empty
+November reads as data loss), and the past stops at the log's earliest row.
 
 **`src/lib/history.ts` is the look-back layer, and it costs no query.** `onThisDay()` filters the
 corpus `App` already fetches on launch to re-arm reminders — that result used to be discarded.
@@ -1048,8 +1078,11 @@ fonts, one 100ms fade on new rows, nothing else animated.
 
 ## Deliberately not built
 
-No AI or LLM calls, no SMS parsing, no notification listeners, no push notifications, no charts,
-no category management UI, no search, no tags, no multi-day views. **No recurring event
+No AI or LLM calls, no SMS parsing, no notification listeners, no push notifications, no
+category management UI, no search, no tags, no multi-day views. **"No charts" stood here until
+the stats view earned its exception** — one screen, no query, no new table, no settings, inside
+the Calendar destination; DESIGN.md §10 records what it may not grow into (goals, budgets,
+streaks, comparisons, insights — each turns a record into a scoreboard). **No recurring event
 expansion**, which still means what it always did — a repeat is one stored row however many times
 it rings, so there is one thing to edit and one to delete. Drawing the days it lands on is a
 derivation over that row, not a set of rows (see `occurrences.ts`). Capacitor and the native

@@ -15,8 +15,8 @@ is a regression.
 | Web | https://lifelog-timeline.netlify.app, auto-deployed from `main` |
 | Android | Capacitor shell, installed by `npm run android:install` |
 | iOS | the web app, installable as a PWA — **never tested** |
-| Tests | 603, across the pure libraries plus component journeys for the app, the editor, the capture box, the sheets and the four destinations |
-| Bundle | 147.5 KB gzipped across everything the page fetches, against a 150 KB budget |
+| Tests | 638, across the pure libraries plus component journeys for the app, the editor, the capture box, the sheets, the four destinations and the stats chart |
+| Bundle | 148.4 KB fetched by a browser, against a 150 KB budget — the accounting the budget now means |
 | Data | one `entries` table, RLS verified, soft deletes, nightly backups off-site |
 | Runtime deps | react, react-dom, supabase-js, date-fns, Capacitor (core, android, local-notifications, app, filesystem, share), @netlify/blobs |
 
@@ -87,6 +87,13 @@ that quiet row, and the nav stands down whenever the capture field has text, so 
 costs exactly what it did. `--dock` was retired in the same move: the toast, the control and the
 nav are one block in flow, so an overlap is impossible by construction rather than kept away by a
 constant two files had to agree about.
+
+**One chart, exactly.** A stats view inside the Calendar destination behind a Grid | Chart
+toggle: how much and how often over a day, a week, a month or a year, every bar a way further in,
+totals from stored rows so a repeat counts once, and all arithmetic in a pure `stats.ts` tested
+exactly like the parser. "No charts" came off the do-not-add list for this one screen; what it
+may not grow into — goals, budgets, streaks, comparisons, insights — is recorded in DESIGN.md
+§10. Compact-only by decision: the wide layout gained no destinations.
 
 **Android's back button.** It used to background the whole app with a sheet still open behind it —
 the one platform convention the app broke. `@capacitor/app` routes the event into `Sheet`'s own
@@ -319,13 +326,13 @@ Each of these has already resisted a plausible reason to break it.
   following the *app's* theme rather than the OS's — the You screen lets the two disagree, so a
   `values-night` qualifier would get it backwards — which needs `@capacitor/status-bar` or native
   work. Making the bar transparent instead is worse: the header would land under the clock.
-- **The bundle budget needs a decision: the total is now 151.8 KB against 150.** That figure is
-  everything the build emits, which is how README has always counted it — but it includes the
-  Capacitor plugins' *web* shims, and those are fetched by nobody: on native the plugin proxies go
-  straight to the bridge, and on the web `deliver.ts` and `reminders.ts` return before importing
-  them at all. **What a browser actually downloads is 145.6 KB** (main chunk, CSS, HTML), which has
-  4.4 KB of headroom. Two honest numbers that disagree, and the accounting should say which one the
-  budget is about before anything else is added.
+- **The bundle budget means what a browser fetches — decided when the stats screen was built.**
+  The emitted total includes the Capacitor plugins' web shims, which nobody downloads: native goes
+  straight to the bridge, and on the web `deliver.ts`, `back.ts` and `reminders.ts` return before
+  importing them. The governing figure is the main chunk plus CSS plus HTML: **148.4 KB against
+  150**, of which the stats screen cost 2.8. The headroom is 1.6 KB, which is thin — the next
+  thing that needs room pays for it by importing `@supabase/auth-js` and `@supabase/postgrest-js`
+  directly, which drops the unused half of the SDK.
 
 ---
 

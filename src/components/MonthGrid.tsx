@@ -10,7 +10,7 @@ import {
   startOfWeek,
   subMonths,
 } from 'date-fns'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { DayCell, WEEKDAYS } from './DayCell'
 import { Chevron } from './Icons'
 import { useMarkedDays } from '../hooks/useMarkedDays'
@@ -22,24 +22,13 @@ type Props = {
   now: Date
   loadDays: (from: string, to: string) => Promise<string[]>
   onPick: (day: string) => void
-  /**
-   * Which month is on show, for a caller that has something to say about it.
-   *
-   * Browsing months is this component's own state, and the Calendar screen puts
-   * that month's own figures under the grid. Without this the figures would
-   * describe the month the *selected day* is in while the grid showed another —
-   * two things on one screen disagreeing about which month they mean, which is
-   * the kind of bug that is obvious once seen and invisible until then. Optional,
-   * and the sidebar passes nothing.
-   */
-  onMonth?: (month: Date) => void
 }
 
 /**
  * Navigation, not a scheduler. A dot means something happened that day; the
  * only job is getting to that day in one tap.
  */
-export function MonthGrid({ day, now, loadDays, onPick, onMonth }: Props) {
+export function MonthGrid({ day, now, loadDays, onPick }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(parseISO(day)))
 
   /**
@@ -62,17 +51,6 @@ export function MonthGrid({ day, now, loadDays, onPick, onMonth }: Props) {
     const picked = parseISO(day)
     if (!isSameMonth(picked, month)) setMonth(startOfMonth(picked))
   }
-
-  // Held in a ref for the same reason `Sheet` holds its close in one: the
-  // caller passes an inline arrow, which is a new function on every render, and
-  // the page re-renders on the 30-second clock tick.
-  const report = useRef(onMonth)
-  useEffect(() => {
-    report.current = onMonth
-  }, [onMonth])
-  useEffect(() => {
-    report.current?.(month)
-  }, [month])
 
   const gridStart = startOfWeek(month, WEEK_STARTS)
   const gridEnd = endOfWeek(endOfMonth(month), WEEK_STARTS)
