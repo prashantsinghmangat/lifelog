@@ -187,8 +187,43 @@ intelligence on top will save it.
 
 ## Held behind the freeze
 
-The interface is frozen for the release candidate. Two ideas survived review and are worth
+The interface is frozen for the release candidate. Three ideas survived review and are worth
 doing **after** it, not instead of it.
+
+**Nag-until-done: a reminder that keeps ringing until it is acted on.** The owner's own log
+already asked for this — *"there should be a system that will keep notification… until mark it
+complete, like punch out or punch in"*, logged 15 Sep — which is the evidence loop working, and
+it ranks this first among the held features. The shape: an event opted in re-rings every ten
+minutes after its moment, bounded (six follow-ups, then it stops — unbounded nagging is how an
+app gets muted), each carrying an action button that ends the run.
+
+The design fits the machinery that exists. Follow-ups are six more one-off alarms derived in
+`alarms()` — ids covered by `alarmIds()`, so an edit or delete sweeps them like any others — and
+marking done already silences everything through the `fireAt` choke point, so "done cancels the
+nag" costs nothing new. The plugin already supports action buttons (`registerActionTypes` /
+`localNotificationActionPerformed`), so the notification itself can end the run without opening
+the app. Opt-in is per event: a toggle in the editor, off by default, stored as `data.nag` —
+nothing sums it, so no column and no migration, the same rule `data.done` follows.
+
+**One collision is settled here so it is not discovered mid-build**: the motivating example (a
+standup) is a *repeat*, and a repeat deliberately cannot be marked done — `done` sits on the row,
+so ticking off today's standup would silence every future one, which is exactly why the editor
+withholds that control. The action on a repeat's notification is therefore **"Got it", which only
+cancels today's remaining follow-ups** — pure alarm cancellation, no row state — while a one-off's
+action is "Done" and marks the entry. Follow-ups for a repeat are derived for the next occurrence
+only and re-arm at launch, the same converge-on-launch shape the yearly reminders use. Costs to
+accept: the action wakes the app briefly in the background (that is how Capacitor delivers the
+event to JS), and a phone left on a desk rings seven times over an hour — which is the feature,
+and why it is opt-in per event rather than a default.
+
+**Not held, because it already works: sound and the lock screen.** Reminders go out on the
+`lifelog-reminders-v1` channel at importance 5 — sound, vibration, heads-up, lock screen —
+verified by `dumpsys`; silence today means the OS setting, not the app. A custom ringtone is
+Android's to offer, not the app's: a channel's sound belongs to the user once the channel exists
+and cannot be changed from the app, so the setting lives at Settings → Apps → lifelog →
+Notifications → Reminders. The one improvement worth making alongside the nag work is a
+"Notification sound" row in You that deep-links to that page, which needs a few lines of native
+intent and no new dependency.
 
 **Monthly repeats (`FREQ=MONTHLY`), pending evidence from real use.** Warranty expiries and
 one-off bill due dates already work as plain events — `fridge warranty expires 12 mar 2027` files
