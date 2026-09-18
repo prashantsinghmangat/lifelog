@@ -80,6 +80,14 @@ export function dayKey(date: Date): string {
 }
 
 /**
+ * The one place the week starts, since two answers to that is a bug you see.
+ * It lived in `DayCell` while only the grids read it; `stats.ts` is pure and
+ * cannot import a component, so the constant moved to the date home instead of
+ * being written twice.
+ */
+export const WEEK_STARTS = { weekStartsOn: 1 } as const
+
+/**
  * How long until a moment happening later today: "in 47m", "in 1h 30m".
  *
  * A clock time answers *when* and leaves the arithmetic to you, which is the one

@@ -11,10 +11,10 @@ import {
   subMonths,
 } from 'date-fns'
 import { useEffect, useRef, useState } from 'react'
-import { DayCell, WEEKDAYS, WEEK_STARTS } from './DayCell'
+import { DayCell, WEEKDAYS } from './DayCell'
 import { Chevron } from './Icons'
 import { useMarkedDays } from '../hooks/useMarkedDays'
-import { dayKey } from '../lib/format'
+import { WEEK_STARTS, dayKey } from '../lib/format'
 
 type Props = {
   /** The currently selected day, yyyy-MM-dd. */

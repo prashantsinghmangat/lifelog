@@ -1,7 +1,7 @@
 import { addDays, eachDayOfInterval, parseISO, startOfWeek } from 'date-fns'
-import { DayCell, WEEKDAYS, WEEK_STARTS } from './DayCell'
+import { DayCell, WEEKDAYS } from './DayCell'
 import { useMarkedDays } from '../hooks/useMarkedDays'
-import { dayKey } from '../lib/format'
+import { WEEK_STARTS, dayKey } from '../lib/format'
 
 /**
  * The week you are in, always visible.

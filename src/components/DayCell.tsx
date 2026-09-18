@@ -11,9 +11,6 @@ import { dayKey } from '../lib/format'
 // full weekday name is on each cell for screen readers.
 export const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
-/** The one place the week starts, since two answers to that is a bug you see. */
-export const WEEK_STARTS = { weekStartsOn: 1 } as const
-
 type Props = {
   date: Date
   /** The currently selected day, yyyy-MM-dd. */
