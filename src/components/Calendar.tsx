@@ -1,6 +1,7 @@
 import { format, parseISO, startOfMonth } from 'date-fns'
 import { useState } from 'react'
 import { MonthGrid } from './MonthGrid'
+import { Stats } from './Stats'
 import { minutes, rupees } from '../lib/format'
 import type { Entry } from '../types'
 
@@ -33,6 +34,14 @@ type Props = {
  * total the month it landed in. Costs no query either way.
  */
 export function Calendar({ day, now, all, loadDays, onPick }: Props) {
+  /**
+   * Two views of one destination: the grid for getting to a day, the chart for
+   * how much and how often. A toggle rather than a fifth destination — the nav
+   * holds four items and a screen that both gets you somewhere and tells you
+   * how much is strictly more useful in the same slot.
+   */
+  const [look, setLook] = useState<'grid' | 'chart'>('grid')
+
   // The month the *grid* is showing, which is not always the month the selected
   // day is in — browsing back through the year must move the figures with it.
   const [month, setMonth] = useState(() => startOfMonth(parseISO(day)))
@@ -45,6 +54,31 @@ export function Calendar({ day, now, all, loadDays, onPick }: Props) {
 
   return (
     <div>
+      {/* The same segmented shape the theme control uses, at 44px: a 40px pill
+          inside a full-height button, so the target never shrinks to fit the
+          decoration. */}
+      <div role="group" aria-label="Calendar view" className="mb-4 flex gap-1 rounded-xl border border-line bg-sunken p-0.5">
+        {(['grid', 'chart'] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={look === option}
+            onClick={() => setLook(option)}
+            className={`h-11 flex-1 rounded-[11px] px-2 text-sm transition-colors ${
+              look === option
+                ? 'bg-raised font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
+                : 'text-muted hover:text-ink'
+            }`}
+          >
+            {option === 'grid' ? 'Grid' : 'Chart'}
+          </button>
+        ))}
+      </div>
+
+      {look === 'chart' && <Stats all={all} now={now} day={day} />}
+
+      {look === 'grid' && (
+        <>
       <MonthGrid day={day} now={now} loadDays={loadDays} onPick={onPick} onMonth={setMonth} />
 
       {/* Under what it summarises, with the grid's own edge as the rule above
@@ -80,6 +114,8 @@ export function Calendar({ day, now, all, loadDays, onPick }: Props) {
           </span>
         </p>
       </div>
+        </>
+      )}
     </div>
   )
 }
