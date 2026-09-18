@@ -10,7 +10,9 @@ import {
   totalsFor,
   valueOf,
   type Column,
+  type Measure,
   type Scale,
+  type Totals,
 } from '../lib/stats'
 import { dayKey, minutes, rupees } from '../lib/format'
 import type { Entry, Kind } from '../types'
@@ -42,6 +44,35 @@ const SEGMENT: Record<Kind, string> = {
 
 /** Stacking order, bottom up. Money sits on the baseline. */
 const STACK: Kind[] = ['expense', 'time', 'event', 'note']
+
+const KIND_NAME: Record<Kind, string> = {
+  expense: 'Expenses',
+  time: 'Time logs',
+  event: 'Events',
+  note: 'Notes',
+}
+
+const MEASURES: { value: Measure; label: string }[] = [
+  { value: 'entries', label: 'Entries' },
+  { value: 'spent', label: 'Spent' },
+  { value: 'hours', label: 'Hours' },
+]
+
+/** The one colour a single-measure bar takes. Stacking a rupee total by kind
+ *  would be a lie, so Spent is the expense colour and Hours the time colour. */
+const SOLID: Record<Exclude<Measure, 'entries'>, string> = {
+  spent: 'bg-expense',
+  hours: 'bg-time',
+}
+
+/** The lead figure, as format.ts words it. */
+function figure(totals: Totals, measure: Measure): string {
+  if (measure === 'spent') return rupees(totals.paise)
+  if (measure === 'hours') return totals.minutes === 0 ? '0m' : minutes(totals.minutes)
+  const count =
+    totals.counts.expense + totals.counts.time + totals.counts.event + totals.counts.note
+  return String(count)
+}
 
 const SCALES: { value: Scale; label: string }[] = [
   { value: 'day', label: 'Day' },
@@ -110,6 +141,7 @@ export function Stats({ all, now, day }: Props) {
    */
   const [scale, setScale] = useState<Scale>('month')
   const [anchor, setAnchor] = useState(() => (day < today ? day : today))
+  const [measure, setMeasure] = useState<Measure>('entries')
 
   /**
    * The hour picked out of the day view — the one bar tap that goes nowhere,
@@ -147,7 +179,11 @@ export function Stats({ all, now, day }: Props) {
     () => columnsFor(all, scale, anchor, now),
     [all, scale, anchor, now],
   )
-  const max = useMemo(() => peak(columns, 'entries'), [columns])
+  const max = useMemo(() => peak(columns, measure), [columns, measure])
+
+  /** The whole period's totals, which the figures and both blocks read. */
+  const totals = useMemo(() => totalsFor(all, spanOf(scale, anchor)), [all, scale, anchor])
+  const entries = valueOf(totals, 'entries')
 
   const back = stepAnchor(scale, anchor, -1, now, floor)
   const ahead = stepAnchor(scale, anchor, 1, now, floor)
@@ -252,11 +288,55 @@ export function Stats({ all, now, day }: Props) {
         </div>
       </div>
 
-      {/* Announced as one polite sentence when the period moves, the way an
-          answer is — never a walk through the bars. */}
+      {/* Announced as one polite sentence when the period or scale moves, the
+          way an answer is — never a walk through the bars. */}
       <p role="status" aria-live="polite" className="sr-only">
-        {label}
+        {`${label}: ${entries} ${entries === 1 ? 'entry' : 'entries'}, ${rupees(
+          totals.paise,
+        )} spent, ${totals.minutes === 0 ? 'no time logged' : minutes(totals.minutes)}`}
       </p>
+
+      {/* Figures lead and their names sit back, as everywhere else. The lead
+          is whatever the bars measure; the other two wait at the right. */}
+      <div className="mt-4 flex items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+            {MEASURES.find((option) => option.value === measure)?.label}
+          </p>
+          <p className="mt-0.5 text-3xl font-semibold tracking-[-0.022em] text-ink tabular-nums">
+            {figure(totals, measure)}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-0.5 pb-0.5">
+          {MEASURES.filter((option) => option.value !== measure).map((option) => (
+            <p key={option.value} className="text-right">
+              <span className="text-sm font-medium text-ink tabular-nums">
+                {figure(totals, option.value)}
+              </span>{' '}
+              <span className="text-xs text-faint">{option.label.toLowerCase()}</span>
+            </p>
+          ))}
+        </div>
+      </div>
+
+      {/* What bar height measures. On Entries the bars stack by kind; on Spent
+          and Hours they are one colour, because stacking a rupee total by kind
+          would be a lie. */}
+      <div role="group" aria-label="Measure" className="mt-1 flex gap-1">
+        {MEASURES.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={measure === option.value}
+            onClick={() => setMeasure(option.value)}
+            className={`-mx-1 -my-[10px] flex h-11 items-center px-2 text-xs transition-colors ${
+              measure === option.value ? 'font-medium text-ink' : 'text-faint hover:text-muted'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
 
       <div
         role="group"
@@ -273,16 +353,23 @@ export function Stats({ all, now, day }: Props) {
             className="flex h-full min-w-0 flex-1 flex-col justify-end"
           >
             <span aria-hidden="true" className="flex w-full flex-col justify-end gap-px">
-              {/* Stacked by kind so a period's texture is visible. Bottom up,
-                  so the order is reversed for the DOM's top-down flow. */}
-              {[...STACK].reverse().map((kind) =>
-                column.totals.counts[kind] === 0 ? null : (
-                  <span
-                    key={kind}
-                    className={`w-full rounded-[1px] ${SEGMENT[kind]}`}
-                    style={{ height: height(column.totals.counts[kind], max) }}
-                  />
-                ),
+              {measure === 'entries' ? (
+                // Stacked by kind so a period's texture is visible. Bottom up,
+                // so the order is reversed for the DOM's top-down flow.
+                [...STACK].reverse().map((kind) =>
+                  column.totals.counts[kind] === 0 ? null : (
+                    <span
+                      key={kind}
+                      className={`w-full rounded-[1px] ${SEGMENT[kind]}`}
+                      style={{ height: height(column.totals.counts[kind], max) }}
+                    />
+                  ),
+                )
+              ) : valueOf(column.totals, measure) === 0 ? null : (
+                <span
+                  className={`w-full rounded-[1px] ${SOLID[measure]}`}
+                  style={{ height: height(valueOf(column.totals, measure), max) }}
+                />
               )}
             </span>
             {/* The whole of the you-are-here treatment: a heavier baseline. */}
@@ -322,6 +409,64 @@ export function Stats({ all, now, day }: Props) {
             } not in the bars`
           )}
         </p>
+      )}
+
+      {/* A fact about a past week, not a problem to fix: no illustration and
+          no call to action, just the truth said quietly. */}
+      {entries === 0 && <p className="mt-4 text-xs text-faint">Nothing was logged.</p>}
+
+      {/* The same two blocks under every scale, so the shape of the answer
+          never changes as you move — only the numbers. First the four kinds. */}
+      <div className="mt-5 border-t border-line pt-3">
+        {STACK.map((kind) => {
+          const count = totals.counts[kind]
+          return (
+            <div key={kind} className="flex h-[30px] items-center gap-2.5">
+              <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${SEGMENT[kind]}`} />
+              <span className="w-24 shrink-0 text-sm text-muted">{KIND_NAME[kind]}</span>
+              <span aria-hidden="true" className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-sunken">
+                <span
+                  className={`block h-full rounded-full ${SEGMENT[kind]}`}
+                  style={{ width: entries === 0 ? 0 : `${(count / entries) * 100}%` }}
+                />
+              </span>
+              <span className="shrink-0 text-right text-sm text-muted tabular-nums">
+                {count}
+                {kind === 'expense' && totals.paise !== 0 && ` · ${rupees(totals.paise)}`}
+                {kind === 'time' && totals.minutes > 0 && ` · ${minutes(totals.minutes)}`}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Then the top three categories by spend. The bucket with no name sorts
+          last even when largest, because it is an absence, not a category. */}
+      {totals.byCategory.length > 0 && (
+        <div className="mt-3 border-t border-line pt-3">
+          {totals.byCategory.slice(0, 3).map((category) => {
+            const widest = Math.max(
+              1,
+              ...totals.byCategory.slice(0, 3).map((held) => Math.abs(held.paise)),
+            )
+            return (
+              <div key={category.name ?? ''} className="flex h-[28px] items-center gap-2.5">
+                <span className={`w-24 shrink-0 truncate text-sm ${category.name === null ? 'text-faint' : 'text-muted'}`}>
+                  {category.name ?? 'uncategorised'}
+                </span>
+                <span aria-hidden="true" className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-sunken">
+                  <span
+                    className="block h-full rounded-full bg-expense"
+                    style={{ width: `${(Math.abs(category.paise) / widest) * 100}%` }}
+                  />
+                </span>
+                <span className="shrink-0 text-right text-sm text-muted tabular-nums">
+                  {rupees(category.paise)}
+                </span>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
