@@ -5,7 +5,10 @@ import {
   columnsFor,
   peak,
   periodLabel,
+  spanOf,
   stepAnchor,
+  totalsFor,
+  valueOf,
   type Column,
   type Scale,
 } from '../lib/stats'
@@ -109,6 +112,20 @@ export function Stats({ all, now, day }: Props) {
   const [anchor, setAnchor] = useState(() => (day < today ? day : today))
 
   /**
+   * The hour picked out of the day view — the one bar tap that goes nowhere,
+   * because there is nothing finer than an hour. Tapping selects and names it;
+   * tapping again clears. Reconciled during render rather than in an effect,
+   * the way `MonthGrid` follows the day: a selection made on one day must not
+   * still be lit when the arrows move to another.
+   */
+  const [hour, setHour] = useState<string | null>(null)
+  const [hourFor, setHourFor] = useState(anchor)
+  if (hourFor !== anchor) {
+    setHourFor(anchor)
+    setHour(null)
+  }
+
+  /**
    * Browsing stops where the log starts: the earliest stored day, so a
    * birthday logged in 2010 stays reachable while nothing invites a walk into
    * empty decades before it.
@@ -136,6 +153,34 @@ export function Stats({ all, now, day }: Props) {
   const ahead = stepAnchor(scale, anchor, 1, now, floor)
 
   const label = periodLabel(scale, anchor)
+
+  /**
+   * What the hourly bars cannot hold. `occurred_at` is optional, so most rows
+   * have no hour to land on — and a few land outside 6am–10pm. Said out loud,
+   * or the day's bars quietly disagree with the day's own total.
+   */
+  const dayTotal = useMemo(
+    () => (scale === 'day' ? totalsFor(all, spanOf('day', anchor)) : null),
+    [all, scale, anchor],
+  )
+  const leftOut =
+    dayTotal === null
+      ? 0
+      : valueOf(dayTotal, 'entries') -
+        columns.reduce((sum, column) => sum + valueOf(column.totals, 'entries'), 0)
+
+  const chosen = columns.find((column) => column.key === hour) ?? null
+
+  /** A bar is a way further in — except an hour, which is the bottom. */
+  function tap(column: Column) {
+    if (scale === 'day') {
+      setHour((held) => (held === column.key ? null : column.key))
+      return
+    }
+    if (column.drillTo === null) return
+    setScale(column.drillTo.scale)
+    setAnchor(column.drillTo.anchor)
+  }
 
   return (
     <div>
@@ -223,6 +268,8 @@ export function Stats({ all, now, day }: Props) {
             key={column.key}
             type="button"
             aria-label={barName(column)}
+            aria-pressed={scale === 'day' ? column.key === hour : undefined}
+            onClick={() => tap(column)}
             className="flex h-full min-w-0 flex-1 flex-col justify-end"
           >
             <span aria-hidden="true" className="flex w-full flex-col justify-end gap-px">
@@ -258,6 +305,24 @@ export function Stats({ all, now, day }: Props) {
           </button>
         ))}
       </div>
+
+      {/* The day view's hint line: the selected hour said in numbers, or how
+          many entries have no clock and so stand in no bar. One quiet line —
+          a fact about the day, not a problem to fix. */}
+      {scale === 'day' && (chosen !== null || leftOut > 0) && (
+        <p role="status" aria-live="polite" className="mt-2 text-xs text-faint">
+          {chosen !== null ? (
+            <>
+              <span className="font-medium text-muted">{chosen.label}</span>
+              {` — ${barName(chosen).split(', ').slice(1).join(', ')}`}
+            </>
+          ) : (
+            `${leftOut} ${leftOut === 1 ? 'entry has' : 'entries have'} no time and ${
+              leftOut === 1 ? 'is' : 'are'
+            } not in the bars`
+          )}
+        </p>
+      )}
     </div>
   )
 }
