@@ -1,0 +1,45 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Secrets. Only .env.example is committed.
+.env
+.env.*
+!.env.example
+
+# Build and tool output
+dev-dist
+.vercel
+*.tsbuildinfo
+coverage
+
+# Signing material. The release build takes all four values from the
+# environment (see android/app/build.gradle), so none of this should ever be in
+# the tree — the ignore is the second lock, not the first.
+*.jks
+*.keystore
+keystore.properties
+
+# Planning notes. Working material, not part of the published project.
+ROADMAP.md

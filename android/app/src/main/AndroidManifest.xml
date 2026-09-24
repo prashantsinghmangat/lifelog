@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Cloud backup is off, and that is a security decision rather than a
+      default left alone. The WebView's `localStorage` holds two things: this
+      device's whole log, and the Supabase session, which `supabase.ts` persists
+      — including a live refresh token. Android's Auto Backup and its
+      device-to-device transfer both copy app data by default, so with this on,
+      a restore onto somebody else's phone resumes the session outright, without
+      the password or the email ever being involved.
+
+      Excluding just the WebView's data directory would come to the same thing,
+      since the log lives in it too. Nothing is promised here in any case:
+      README and the You screen both say a log with no account lives on one
+      device and is not backed up; an account's log is on the server, and the
+      nightly Netlify snapshot is the copy that exists to be restored from.
+    -->
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Reminders. POST_NOTIFICATIONS is a runtime permission from Android 13, and
+      is requested at the moment an entry is scheduled.
+
+      SCHEDULE_EXACT_ALARM is what keeps "in 5 minutes" honest: from Android 12
+      an inexact alarm can be batched and drift by minutes. On Android 14 the
+      user may still have to allow "Alarms & reminders" for the app by hand.
+      RECEIVE_BOOT_COMPLETED lets scheduled reminders survive a restart.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+</manifest>

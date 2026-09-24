@@ -1,0 +1,54 @@
+# The gates this project already states, run before a merge rather than after.
+#
+# Netlify runs `npm run build`, so `tsc -b` is enforced on deploy and nothing
+# else is. The suite is what holds the parser's correctness, and the parser is
+# the part of this app that has repeatedly been wrong in ways nobody could see —
+# so it is the one thing most worth running automatically.
+#
+# Deliberately not a deployment pipeline: Netlify already deploys from `main`
+# and a second path to production is a second thing to get wrong.
+name: check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+# A newer push supersedes an in-flight run for the same ref.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches netlify.toml: Vite 8 needs ^20.19 or >=22.12.
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Typecheck
+        run: npx tsc -b --force
+
+      # `supabase.ts` throws at module scope without these, and the bundler then
+      # proves the throw unconditional and tree-shakes the whole Supabase SDK
+      # away — producing a bundle that is far smaller than the real one and
+      # cannot run. The values are not secrets and are not the project's: they
+      # only have to exist for the build to keep the import.
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-not-a-real-key
+
+      - name: Bundle budget
+        run: node scripts/bundle-budget.mjs

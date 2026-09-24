@@ -1,0 +1,47 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Vite 8 needs Node ^20.19 or >=22.12; older Netlify sites still default to 18.
+  NODE_VERSION = "22"
+
+# SPA fallback. No force = true, so real files (sw.js, the manifest, the icons)
+# are served directly and only genuine navigations fall through to index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Without this the service worker itself can be served from cache, which stalls
+# the autoUpdate registration on a stale build.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Framing is the one that matters here. Every destructive control in this app is
+# one tap with no confirmation — that is a deliberate design ("Undo, not
+# confirmation") and it is safe exactly as long as the tap cannot be aimed by
+# somebody else's page. `frame-ancestors` is the modern spelling;
+# `X-Frame-Options` covers the browsers that predate it.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "frame-ancestors 'none'"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    # The backup endpoints authenticate on a query-string token, so a full
+    # referrer leaving this origin would carry it to wherever it was sent.
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+# Content-hashed filenames are immutable by construction, so revalidating them
+# on every launch is a round trip that can never change the answer. Netlify's
+# default is `max-age=0, must-revalidate`, which is right for `/index.html` and
+# `/sw.js` and wrong for these.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

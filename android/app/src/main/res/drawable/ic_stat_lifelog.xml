@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The notification icon. Android draws a small icon as a silhouette and tints
+  it, so this carries no colour at all — the mark was designed from shapes
+  coarse enough to survive that, which is why it is three nodes and three bars
+  and nothing finer.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M6.2,5 H7.8 V19 H6.2 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M4.8,7 A2.2,2.2 0 1 0 9.2,7 A2.2,2.2 0 1 0 4.8,7 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,6 L18,6 A1,1 0 0 1 18,8 L12,8 A1,1 0 0 1 12,6 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M4.8,12 A2.2,2.2 0 1 0 9.2,12 A2.2,2.2 0 1 0 4.8,12 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,11 L15.5,11 A1,1 0 0 1 15.5,13 L12,13 A1,1 0 0 1 12,11 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M4.8,17 A2.2,2.2 0 1 0 9.2,17 A2.2,2.2 0 1 0 4.8,17 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,16 L19,16 A1,1 0 0 1 19,18 L12,18 A1,1 0 0 1 12,16 Z" />
+</vector>

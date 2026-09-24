@@ -1,0 +1,176 @@
+/* source(none) disables automatic content detection, which otherwise scans the
+   README and the tests and lets prose change the CSS bundle. */
+@import 'tailwindcss' source(none);
+@source './**/*.tsx';
+
+/* Semantic tokens, not raw greys. Dark mode swaps the values below, so no
+   component needs a `dark:` variant. A third theme (high contrast) would be
+   another block here and nothing else.
+ *
+ * The hues are **warm** in both themes, which is the one decision the whole
+ * palette hangs off. A log of what happened to somebody is a personal record,
+ * not a console: a pure-white page with blue-grey text reads as a form to fill
+ * in, and the same layout on warm paper reads as something to keep. Light mode
+ * is therefore off-white paper with a near-black warm ink, and dark mode is
+ * warm charcoal with an off-white — not the light palette inverted, which is
+ * how a dark theme ends up looking like a lit screen rather than a dim room.
+ *
+ * Every text token clears 4.5:1 on the surface it is used over; `faint` in
+ * particular used to sit at 2.9:1, which is what "tertiary" had quietly come to
+ * mean. `line` and `edge` are deliberately below that — they separate, they do
+ * not inform, and nothing in the app is legible only because of a border. */
+@theme {
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+
+  --color-surface: #faf9f7;
+  --color-raised: #ffffff;
+  --color-sunken: #f1efea;
+  --color-ink: #1b1a18;
+  --color-muted: #5c5851;
+  --color-faint: #726e66;
+  --color-line: #eae6e0;
+  --color-edge: #cbc4b8;
+  --color-focus: #1f5ed4;
+
+  /* Four scanning accents, not four UI colours. Each is deep enough to read as
+     ink with a hue rather than as a highlight — at 15px these mark a row, they
+     do not decorate it. */
+  --color-expense: #b0452c;
+  --color-time: #136b60;
+  --color-event: #5a41b5;
+  --color-note: #6f6a62;
+}
+
+[data-theme='dark'] {
+  --color-surface: #141311;
+  --color-raised: #1e1c1a;
+  --color-sunken: #1a1816;
+  --color-ink: #eeeae3;
+  --color-muted: #a49f97;
+  --color-faint: #8a857c;
+  --color-line: #2a2724;
+  --color-edge: #4a453f;
+  --color-focus: #7fa6ff;
+
+  /* Lifted and desaturated: the light-mode hues go muddy on a dark ground, and
+     a fully saturated one glows. */
+  --color-expense: #e79479;
+  --color-time: #5cb9a8;
+  --color-event: #a893ee;
+  --color-note: #9b958c;
+
+  /* Native date inputs, scrollbars and focus rings follow this. */
+  color-scheme: dark;
+}
+
+/* There is no `--dock`, and that is deliberate.
+ *
+ * The toast used to be `fixed` at the bottom and read a constant from here to
+ * clear the docked capture control, because a message sitting over that control
+ * meant `Undo` and `Save` on top of each other and a tap hitting the wrong one.
+ * The constant had to be re-derived whenever the bottom edge changed — it was
+ * wrong by two paddings the first time — and once the bottom nav could come and
+ * go while typing, one value could no longer describe it. The toast, the control
+ * and the nav are one block in flow now, in that order, so an overlap is
+ * impossible by construction rather than kept away by a number. See `App`.
+ */
+
+html {
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  /* System UI faces are drawn heavy on a warm ground at these sizes, and the
+     app is almost entirely 12–14px text. Smoothing is what keeps the secondary
+     lines from thickening into the titles above them. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* One visible focus treatment for everything, so no component can forget it.
+   :focus-visible keeps it off mouse clicks and on for keyboard users. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* A sheet takes focus so the keyboard starts inside it, not because the sheet
+   is something to act on — and the rule above, which matches any `[tabindex]`,
+   drew a 2px ring round the whole dialog every time one opened. The controls
+   inside it still draw their own. */
+[role='dialog']:focus-visible {
+  outline: none;
+}
+
+/**
+ * The capture control is one object, so its focus ring goes round the control
+ * rather than round the field nested inside it.
+ *
+ * The field fills the top row of a bordered box, so the global ring drew a box
+ * inside a box on every launch — the field is autofocused, which made that the
+ * first thing anybody saw. Kept here beside the global rule rather than in the
+ * component, so focus is still decided in one file.
+ *
+ * Three rules, and the order is the fallback: the ring is on for any focus
+ * inside the control, then taken off again unless the *field* is the thing
+ * keyboard-focused. Where `:has()` is unsupported the third rule is dropped
+ * whole and the ring simply shows more eagerly. Louder, never absent.
+ */
+#quick-add:focus-visible {
+  outline: none;
+}
+
+.capture:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: 14px;
+}
+
+.capture:focus-within:not(:has(#quick-add:focus-visible)) {
+  outline: none;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.row-in {
+  animation: row-in 100ms ease-out;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+.sheet-in {
+  animation: sheet-in 120ms ease-out;
+}
+
+/* A horizontal day swipe must not also pan the page sideways. Vertical scroll
+   and pinch-zoom stay with the browser. */
+.swipe-area {
+  touch-action: pan-y pinch-zoom;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
