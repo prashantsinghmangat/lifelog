@@ -33,7 +33,7 @@ export function DayHeader({ day, now, onChange, onOpenCalendar, actions }: Props
       <span className="block text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
         {dayEyebrow(day, now)}
       </span>
-      <span className="mt-0.5 block truncate text-[1.375rem] leading-tight font-semibold tracking-tight sm:text-2xl">
+      <span className="mt-0.5 block truncate font-display text-[1.375rem] leading-tight font-semibold tracking-tight sm:text-2xl">
         {dayTitle(day, now)}
       </span>
     </>

@@ -63,7 +63,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
           {answer.caption}
         </p>
       )}
-      <p className="mt-1.5 text-3xl leading-none font-semibold tracking-tight tabular-nums">
+      <p className="mt-1.5 font-display text-3xl leading-none font-semibold tracking-tight tabular-nums">
         {answer.lead}
       </p>
 

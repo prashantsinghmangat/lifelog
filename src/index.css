@@ -24,6 +24,11 @@
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     sans-serif;
 
+  /* One serif face, for the two places a figure is meant to be read rather
+     than scanned: the day's own date and an answer's lead number. System
+     stack only — no webfont, nothing to fetch. */
+  --font-display: 'Iowan Old Style', 'Charter', 'Palatino Linotype', Georgia, serif;
+
   --color-surface: #faf9f7;
   --color-raised: #ffffff;
   --color-sunken: #f1efea;
