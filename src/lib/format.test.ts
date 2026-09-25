@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   atTime,
+  dayEyebrow,
   dayKey,
   dayLabel,
   daySpan,
@@ -118,6 +119,20 @@ describe('naming a day', () => {
     // Without it, `12 sep 2025` previewed as "saving to 12 Sep" — the same
     // thing a date in this September shows, and wrong by twelve months.
     expect(relativeDay('2025-09-12', NOW)).toBe('12 Sep 2025')
+  })
+})
+
+describe('the day header eyebrow', () => {
+  const NOW = new Date(2026, 8, 8, 10, 0, 0) // a Tuesday
+
+  it('names the weekday beside today, yesterday and tomorrow', () => {
+    expect(dayEyebrow('2026-09-08', NOW)).toBe('Today · Tuesday')
+    expect(dayEyebrow('2026-09-07', NOW)).toBe('Yesterday · Monday')
+    expect(dayEyebrow('2026-09-09', NOW)).toBe('Tomorrow · Wednesday')
+  })
+
+  it('is the weekday alone once neither word applies — it already says which day', () => {
+    expect(dayEyebrow('2026-09-12', NOW)).toBe('Saturday')
   })
 })
 

@@ -160,18 +160,24 @@ export function dayLabel(day: string, now: Date): string {
  * and the title is not, and they are set at different sizes, so they were never
  * going to be rendered together anyway. `dayLabel` stays exactly as it was —
  * nothing that names a control or a tab has changed.
+ *
+ * The near days name the weekday too — `Today · Friday`, not `Today` alone —
+ * because the relation and the date below it were the only two facts on the
+ * screen and neither said which day of the week this was. A plain day already
+ * did: its relation *is* the weekday, so there is nothing to add.
  */
 export function dayEyebrow(day: string, now: Date): string {
   const date = parseISO(day)
+  const weekday = format(date, 'EEEE')
   switch (differenceInCalendarDays(date, now)) {
     case 0:
-      return 'Today'
+      return `Today · ${weekday}`
     case -1:
-      return 'Yesterday'
+      return `Yesterday · ${weekday}`
     case 1:
-      return 'Tomorrow'
+      return `Tomorrow · ${weekday}`
     default:
-      return format(date, 'EEEE')
+      return weekday
   }
 }
 
