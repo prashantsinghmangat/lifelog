@@ -9,6 +9,7 @@ import {
   reminderAt,
   recurring,
   repeatLabel,
+  repeatOnly,
   weeklyDays,
   withLead,
 } from './events'
@@ -258,6 +259,23 @@ describe('saying a repeat in words', () => {
   it('says nothing about an absent, zero or unset lead', () => {
     expect(repeatLabel(entry({ occurred_on: '2026-09-14', data: { lead: 0 } }))).toBeNull()
     expect(repeatLabel(entry({ occurred_on: '2026-09-14' }))).toBeNull()
+  })
+})
+
+describe('the repeat alone, with no lead folded in', () => {
+  // A found-on-device bug: `EntryEditor` reused `repeatLabel` to decide
+  // whether to show "Stop repeating", and an entry with only a lead made that
+  // button appear over a repeat that was never there.
+  it('is null for an entry that has a lead but no repeat', () => {
+    const row = entry({ occurred_on: '2026-09-14', data: { lead: 60 * 24 } })
+    expect(repeatOnly(row)).toBeNull()
+    expect(repeatLabel(row)).toBe('reminder 1 day before')
+  })
+
+  it('names the rule while `repeatLabel` combines it with the lead', () => {
+    const row = entry({ occurred_on: '2026-09-14', data: { rrule: 'FREQ=YEARLY', lead: 60 * 24 } })
+    expect(repeatOnly(row)).toBe('every year')
+    expect(repeatLabel(row)).toBe('every year · reminder 1 day before')
   })
 })
 

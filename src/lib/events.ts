@@ -76,19 +76,25 @@ export function leadWords(minutes: number): string {
   return `${minutes} minutes`
 }
 
-export function repeatLabel(entry: Entry): string | null {
+/**
+ * The repeat alone, with no lead folded in — what `EntryEditor` needs to
+ * decide whether "Stop repeating" applies at all. `repeatLabel` below returns
+ * non-null for a lead on its own, which is correct for a row's caption and
+ * wrong for a control that offers to turn a repeat off: an entry with only a
+ * lead has no repeat to stop.
+ */
+export function repeatOnly(entry: Entry): string | null {
   const weekly = weeklyDays(entry)
-  const base =
-    weekly === null
-      ? entry.data.rrule === 'FREQ=YEARLY'
-        ? 'every year'
-        : null
-      : (() => {
-          const days = [...new Set(weekly)].sort((a, b) => a - b)
-          if (days.length === 5 && days.every((day, i) => day === i + 1)) return 'weekdays'
-          const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-          return `every ${days.map((day) => names[day]).join(', ')}`
-        })()
+  if (weekly === null) return entry.data.rrule === 'FREQ=YEARLY' ? 'every year' : null
+
+  const days = [...new Set(weekly)].sort((a, b) => a - b)
+  if (days.length === 5 && days.every((day, i) => day === i + 1)) return 'weekdays'
+  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  return `every ${days.map((day) => names[day]).join(', ')}`
+}
+
+export function repeatLabel(entry: Entry): string | null {
+  const base = repeatOnly(entry)
 
   // A lead never lands on a weekly repeat — the parser refuses that
   // combination — but reads it off the entry rather than assuming, so a row

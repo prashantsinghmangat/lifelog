@@ -1,7 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { CheckIcon } from './Icons'
 import { Sheet } from './Sheet'
-import { done as isDone, leadWords, nextFireAt, recurring, reminderAt, repeatLabel } from '../lib/events'
+import {
+  done as isDone,
+  leadWords,
+  nextFireAt,
+  recurring,
+  reminderAt,
+  repeatLabel,
+  repeatOnly,
+} from '../lib/events'
 import {
   MAX_PAISE,
   amountFits,
@@ -257,8 +265,11 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
    * parser is where those are said — a day-picker here would be a second way to
    * express something the text box already handles in one word.
    */
-  const repeats = repeatLabel(pending)
-  const previously = stored === undefined ? null : repeatLabel(row)
+  // The repeat alone, never the lead: an entry with only a lead has no repeat
+  // to stop, and offering to stop one that is not there is the kind of
+  // control that does something other than what it says.
+  const repeats = repeatOnly(pending)
+  const previously = stored === undefined ? null : repeatOnly(row)
   const couldRepeatYearly = kind === 'event' && rule === undefined && recurringTitle(cleaned)
 
   /**
