@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { CheckIcon } from './Icons'
 import { Sheet } from './Sheet'
-import { done as isDone, nextFireAt, recurring, repeatLabel } from '../lib/events'
+import { done as isDone, leadWords, nextFireAt, recurring, reminderAt, repeatLabel } from '../lib/events'
 import {
   MAX_PAISE,
   amountFits,
@@ -77,6 +77,13 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
    */
   const [choice, setChoice] = useState<{ rule: string | undefined } | null>(null)
   /**
+   * The lead the user has chosen in this sheet, or null while they have not
+   * touched it — the same wrapper `choice` uses above, for the same reason:
+   * "chose on the day" and "has not chosen" both read as `undefined` minutes
+   * and only one of them should override what the entry already carries.
+   */
+  const [leadChoice, setLeadChoice] = useState<{ minutes: number | undefined } | null>(null)
+  /**
    * Why the save did not happen. Pressing Save and having nothing at all occur
    * is the same silence the rest of the app spent three bugs learning to avoid.
    */
@@ -125,11 +132,22 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
   const derived = promoting ? (recurringTitle(cleaned) ? 'FREQ=YEARLY' : undefined) : stored
   const rule = kind !== 'event' ? undefined : (choice === null ? derived : choice.rule)
 
+  /**
+   * The lead this entry will carry once saved. Absent means on the day, which
+   * is also what a demotion away from an event drops it to — a note has
+   * nothing to be early for.
+   */
+  const storedLead =
+    typeof row.data.lead === 'number' && row.data.lead > 0 ? row.data.lead : undefined
+  const lead = kind !== 'event' ? undefined : (leadChoice === null ? storedLead : leadChoice.minutes)
+
   const nextData = { ...row.data }
   if (rule === undefined) delete nextData.rrule
   else nextData.rrule = rule
   if (finished) nextData.done = true
   else delete nextData.done
+  if (lead === undefined) delete nextData.lead
+  else nextData.lead = lead
 
   /** The entry as this form would save it, which is what the next line describes. */
   const pending: Row = {
@@ -156,7 +174,8 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
       occurred_at: pending.occurred_at,
     }
 
-    if (rule !== row.data.rrule || finished !== isDone(row)) patch.data = nextData
+    if (rule !== row.data.rrule || finished !== isDone(row) || lead !== storedLead)
+      patch.data = nextData
     // Refused here rather than saved and owed for ever: these two columns are
     // Postgres `integer`, so a bigger number reaches the server once, is
     // rejected with `22003`, and leaves a row that looks saved, counts into the
@@ -193,7 +212,9 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
   )
 
   /**
-   * When this entry next happens — the fact the sheet could not previously state.
+   * When this entry next happens, and when its reminder actually comes —
+   * shown together, under the chips below, because a reader with only one of
+   * the two has to do the date arithmetic themselves to check they line up.
    *
    * A repeat is stored once and expanded nowhere, so `weekdays` on the row was
    * the *only* evidence that anything had taken effect: it names the rule and
@@ -205,9 +226,15 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
    * notification. Whether an alarm reaches you also depends on the OS permission
    * this sheet knows nothing about — and App already says so in its own banner.
    * Promising "rings" from here would be the one kind of claim this app must not
-   * make and then fail to keep.
+   * make and then fail to keep — truer still of the reminder moment than of the
+   * event's own, since a lead makes the promise sound more specific.
+   *
+   * The two can disagree: a lead long enough to have already gone by leaves
+   * `remindAt` null while `nextAt` is not, which gets its own sentence below
+   * rather than silently falling back to the single-fact wording.
    */
   const nextAt = nextFireAt(pending, now)
+  const remindAt = reminderAt(pending, now)
 
   // Nothing that repeats can be ticked off. `done` sits on the row, so marking
   // a weekday standup done would silence every future Monday as well as today's
@@ -233,6 +260,26 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
   const repeats = repeatLabel(pending)
   const previously = stored === undefined ? null : repeatLabel(row)
   const couldRepeatYearly = kind === 'event' && rule === undefined && recurringTitle(cleaned)
+
+  /**
+   * Four values cover nearly every real case, plus a fifth that is not a
+   * choice so much as an admission: the text box is the whole app, and a
+   * typed `remind 2 hours before` must survive opening the entry it produced.
+   * Recognising a value beats deciding one, so the fifth chip only ever shows
+   * what is already there — there is no way to type a new one in here — and
+   * it is gone the moment any other chip is picked.
+   */
+  const LEAD_PRESETS: (number | undefined)[] = [undefined, 60 * 24, 60 * 24 * 7, 60 * 24 * 30]
+  const leadChips = [
+    { minutes: undefined, label: 'On the day' },
+    ...LEAD_PRESETS.slice(1).map((minutes) => ({
+      minutes,
+      label: `${leadWords(minutes as number)} before`,
+    })),
+    ...(lead !== undefined && !LEAD_PRESETS.includes(lead)
+      ? [{ minutes: lead, label: `${leadWords(lead)} before` }]
+      : []),
+  ]
 
   return (
     <Sheet label={`Edit ${row.title}`} onClose={onClose}>
@@ -264,27 +311,7 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
           ))}
         </div>
 
-        {/* Only events have a next. A note is not waiting to happen. */}
-        {kind === 'event' && (
-          <p className={`mt-4 text-xs ${finished ? 'text-faint' : 'text-muted'}`}>
-            {finished ? (
-              // The consequence of the button below, which is not obvious from
-              // it: ticking a reminder off is also how you switch it off.
-              'Done — no reminder.'
-            ) : nextAt === null ? (
-              'Its time has passed.'
-            ) : (
-              <>
-                Next{' '}
-                <span className="font-medium text-ink">
-                  {relativeDay(dayKey(nextAt), now)} at {clockAt(nextAt)}
-                </span>
-              </>
-            )}
-          </p>
-        )}
-
-        {context.length > 0 && <p className="mt-2 text-xs text-faint">{context.join(' · ')}</p>}
+        {context.length > 0 && <p className="mt-4 text-xs text-faint">{context.join(' · ')}</p>}
 
         <div className="mt-5">
           <label className={LABEL} htmlFor="entry-title">
@@ -396,6 +423,66 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
             Repeat every year
           </button>
         ) : null}
+
+        {/* Only events have anything to be early for. */}
+        {kind === 'event' && (
+          <fieldset className="mt-5">
+            <legend className={LABEL}>Reminder</legend>
+            <div className="mt-1.5 flex flex-wrap gap-1 rounded-xl border border-line bg-sunken p-1">
+              {leadChips.map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  aria-pressed={lead === chip.minutes}
+                  onClick={() => setLeadChoice({ minutes: chip.minutes })}
+                  className={`h-11 rounded-lg px-3 text-xs whitespace-nowrap transition-colors ${
+                    lead === chip.minutes
+                      ? 'bg-raised font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+
+            <p className={`mt-2 text-xs ${finished ? 'text-faint' : 'text-muted'}`}>
+              {finished ? (
+                // The consequence of the button below, which is not obvious
+                // from it: ticking a reminder off is also how you switch it off.
+                'Done — no reminder.'
+              ) : nextAt === null ? (
+                'Its time has passed.'
+              ) : lead === undefined ? (
+                <>
+                  Next{' '}
+                  <span className="font-medium text-ink">
+                    {relativeDay(dayKey(nextAt), now)} at {clockAt(nextAt)}
+                  </span>
+                </>
+              ) : remindAt === null ? (
+                <>
+                  Its reminder has passed. Next{' '}
+                  <span className="font-medium text-ink">
+                    {relativeDay(dayKey(nextAt), now)} at {clockAt(nextAt)}
+                  </span>
+                </>
+              ) : (
+                <>
+                  Next{' '}
+                  <span className="font-medium text-ink">
+                    {relativeDay(dayKey(remindAt), now)} at {clockAt(remindAt)}
+                  </span>
+                  {', '}
+                  {leadWords(lead)} before{' '}
+                  <span className="font-medium text-ink">
+                    {relativeDay(dayKey(nextAt), now)} at {clockAt(nextAt)}
+                  </span>
+                </>
+              )}
+            </p>
+          </fieldset>
+        )}
 
         {/* The one piece of state here that no clock can work out. A reminder
             whose time has gone strikes itself through; a note saying "send the
