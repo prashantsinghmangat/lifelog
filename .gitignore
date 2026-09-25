@@ -43,3 +43,10 @@ keystore.properties
 
 # Planning notes. Working material, not part of the published project.
 ROADMAP.md
+
+# Agent tooling and the specs that drive it. Local working material for the same
+# reason ROADMAP.md is above: none of it is needed to build, run or understand
+# lifelog, and the published project should carry no trace of how it was written.
+CLAUDE.md
+.claude/
+specs/

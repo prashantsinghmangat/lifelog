@@ -4,6 +4,7 @@ import { KIND_NAME, KindMark } from './KindMark'
 import { behindYou } from '../lib/events'
 import { clock, dayHeading, rowValue } from '../lib/format'
 import { extraText, type Answer } from '../lib/query'
+import type { Entry } from '../types'
 
 /**
  * The answer to a question, laid out to be read rather than parsed.
@@ -36,7 +37,14 @@ const SHOWN = 4
 type Props = {
   answer: Answer
   now: Date
-  onPick: (day: string) => void
+  /**
+   * The row that was tapped, whole.
+   *
+   * It used to be handed the date alone, which is why tapping a result read as
+   * the search being wiped: the day changed behind a screen that was still
+   * showing Ask, and the entry you actually aimed at never opened.
+   */
+  onPick: (row: Entry) => void
 }
 
 export function AnswerCard({ answer, now, onPick }: Props) {
@@ -114,7 +122,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
 
               <button
                 type="button"
-                onClick={() => onPick(row.occurred_on)}
+                onClick={() => onPick(row)}
                 className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
               >
                 <KindMark kind={row.kind} />

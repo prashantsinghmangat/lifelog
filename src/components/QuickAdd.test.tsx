@@ -41,7 +41,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   const onNeedCorpus = vi.fn()
   const onPrefilled = vi.fn()
   const onHelp = vi.fn()
-  const onGoToDay = vi.fn<(day: string) => void>()
+  const onOpenEntry = vi.fn<(row: Entry) => void>()
   const onLeaveAsk = vi.fn()
 
   const props = {
@@ -51,7 +51,6 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
     // tests drive the control's own toggle instead, as `lg` does.
     ask: false,
     onLeaveAsk,
-    onTyping: () => undefined,
     showExamples: false,
     onSubmit,
     corpus: null,
@@ -59,7 +58,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
     prefill: null,
     onPrefilled,
     onHelp,
-    onGoToDay,
+    onOpenEntry,
     ...over,
   }
 
@@ -67,7 +66,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   // Plain DOM assertions throughout, rather than pulling in jest-dom for
   // sugar: one less dependency, and `.value` reads no worse than a matcher.
   const box = screen.getByLabelText('What happened?') as HTMLInputElement
-  return { view, box, onSubmit, onNeedCorpus, onPrefilled, onHelp, onGoToDay, onLeaveAsk, props }
+  return { view, box, onSubmit, onNeedCorpus, onPrefilled, onHelp, onOpenEntry, onLeaveAsk, props }
 }
 
 describe('capturing an entry', () => {
@@ -317,12 +316,18 @@ describe('asking a question', () => {
     expect(screen.getAllByText('Thu 3 Sep')).toHaveLength(1)
   })
 
-  it('takes you to the day an answer points at, and clears the question', async () => {
-    const { box, onGoToDay } = setup({ corpus })
+  it('opens the entry an answer row points at, and clears the question', async () => {
+    // The row that was tapped, whole — not just its date. Handed the date
+    // alone, the caller could only change the day, which on the Ask screen
+    // looked exactly like the search being wiped for no reason.
+    const { box, onOpenEntry } = setup({ corpus })
     await userEvent.type(box, '? gym')
     await userEvent.click(screen.getByText('gym again'))
 
-    expect(onGoToDay).toHaveBeenCalledWith('2026-09-03')
+    expect(onOpenEntry).toHaveBeenCalledTimes(1)
+    const opened = onOpenEntry.mock.calls[0]?.[0]
+    expect(opened?.title).toBe('gym again')
+    expect(opened?.occurred_on).toBe('2026-09-03')
     // Leaving the question in the box would hide the day it just opened.
     expect(box.value).toBe('')
   })

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   addDays,
@@ -83,17 +83,35 @@ let who: { id: string; email: string; local?: boolean } | null = {
   email: 'you@example.com',
 }
 
-vi.mock('./hooks/useSession', () => ({
-  // An identity, not a session: the app runs for whoever this device belongs
-  // to, which is not the same as whether Supabase can prove it right now.
-  useSession: () => ({
-    identity: who,
-    loading: false,
-    startGuest: () => {
-      who = { id: 'local-guest', email: '', local: true }
+vi.mock('./hooks/useSession', async () => {
+  const { useState } = await import('react')
+  /** Set on each render, so a swapped identity re-renders `App` as the real hook does. */
+  let bump = () => {}
+  return {
+    // An identity, not a session: the app runs for whoever this device belongs
+    // to, which is not the same as whether Supabase can prove it right now.
+    useSession: () => {
+      const [, tick] = useState(0)
+      bump = () => tick((n) => n + 1)
+      return {
+        identity: who,
+        loading: false,
+        startGuest: () => {
+          who = { id: 'local-guest', email: '', local: true }
+          bump()
+        },
+      }
     },
-  }),
-}))
+    /**
+     * Test-only. What `onAuthStateChange` does when a sign-in lands: the
+     * identity stops being local and the app is told.
+     */
+    __signedIn: (next: { id: string; email: string }) => {
+      who = next
+      bump()
+    },
+  }
+})
 
 vi.mock('./lib/reminders', () => ({
   // Faithful to the real thing: only an event is ever scheduled, so an expense
@@ -555,15 +573,31 @@ describe('the four destinations', () => {
     expect(document.title).toBe(reading)
   })
 
-  it('stands the bar down while there is something to log, and puts it back', async () => {
+  it('keeps the bar up while there is something in the box', async () => {
+    // It used to stand down the moment the field had text. Logging a line then
+    // made the bar vanish and reappear on every entry, and in Ask it removed
+    // the only thing on screen saying which destination you were on — and the
+    // only way off it — at exactly the moment an answer appeared.
     const box = await open()
     expect(nav()).toBeTruthy()
 
     await userEvent.type(box, '350 lunch')
-    expect(screen.queryByRole('navigation', { name: 'Destinations' })).toBeNull()
+    expect(nav()).toBeTruthy()
 
     await userEvent.clear(box)
-    expect(screen.getByRole('navigation', { name: 'Destinations' })).toBeTruthy()
+    expect(nav()).toBeTruthy()
+  })
+
+  it('leaves a way out of Ask while a question is being typed', async () => {
+    const box = await open()
+    await go('Ask')
+
+    await userEvent.type(box, '? how much on food')
+    // The nav is the only route back to Today from Ask on a phone.
+    expect(nav()).toBeTruthy()
+
+    await go('Today')
+    expect(screen.getByLabelText('What happened?')).toBeTruthy()
   })
 
   it('answers from Ask without filing the question away as an entry', async () => {
@@ -598,6 +632,53 @@ describe('the four destinations', () => {
     await waitFor(() => expect(screen.getByText(/₹350 · 1 entry/)).toBeTruthy())
     // Answered, not logged: nothing is on the timeline titled with the question.
     expect(screen.queryByText('how much today')).toBeNull()
+  })
+
+  it('opens the entry when a result is tapped, rather than looking like a cleared search', async () => {
+    /**
+     * The reported behaviour: tapping a result emptied the box and did nothing
+     * visible. It was in fact setting the day — behind a screen still showing
+     * Ask, which was not displaying that day — so the only thing the reader saw
+     * was their question disappearing.
+     *
+     * Tapping a row opens that row, on its own day, with Today behind it.
+     */
+    const yesterday = dayKey(new Date(Date.now() - 86_400_000))
+    rowsOnServer = [
+      {
+        id: 'b',
+        kind: 'expense',
+        occurred_on: yesterday,
+        occurred_at: null,
+        title: 'dentist payment',
+        note: null,
+        amount_paise: 120000,
+        duration_minutes: null,
+        category: null,
+        data: {},
+        created_at: '2026-09-05T09:00:00+05:30',
+      },
+    ]
+    await open()
+
+    await go('Ask')
+    const asking = screen.getByLabelText('What do you want to know?')
+    await userEvent.type(asking, 'dentist')
+
+    const result = await screen.findByText('dentist payment')
+    await userEvent.click(result)
+
+    // The entry itself, open — not a silently changed day on a screen that
+    // does not show days.
+    const editor = await screen.findByRole('dialog')
+    expect(within(editor).getByDisplayValue('dentist payment')).toBeTruthy()
+
+    // And Today is behind it, on the day that entry lives on, so closing the
+    // editor leaves the reader looking at the row they asked about.
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByLabelText('What happened?')).toBeTruthy()
+    expect(screen.getByText('dentist payment')).toBeTruthy()
   })
 
   /**
@@ -1162,5 +1243,36 @@ describe('the way in for somebody with no account', () => {
     await screen.findByRole('button', { name: 'Back to the log' })
     expect(screen.getByText(/moves to your account/i)).toBeTruthy()
     expect(screen.getByText(/Nothing is lost/i)).toBeTruthy()
+  })
+
+  it('lets a guest into the app once the sign-in actually lands', async () => {
+    /**
+     * The bug this covers locked people out of their own account.
+     *
+     * Asking to sign in set a flag whose only way down was Cancel. Supabase
+     * accepted the password, the session was stored and the identity swapped —
+     * and the flag was still set, so the sign-in screen stayed exactly where it
+     * was. Nothing failed and nothing moved, so the only reading available was
+     * that the password had been silently rejected.
+     */
+    who = { id: 'local-guest', email: '', local: true }
+    await open()
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in to sync' }))
+    await screen.findByRole('button', { name: 'Back to the log' })
+
+    // What a successful sign-in does: the identity stops being local.
+    const { __signedIn } = (await import('./hooks/useSession')) as unknown as {
+      __signedIn: (next: { id: string; email: string }) => void
+    }
+    act(() => __signedIn({ id: 'user-1', email: 'you@example.com' }))
+
+    // The password box has nothing left to ask for, so it goes.
+    await waitFor(() => expect(screen.queryByLabelText(/password/i)).toBeNull())
+    expect(screen.getByLabelText('What happened?')).toBeTruthy()
   })
 })

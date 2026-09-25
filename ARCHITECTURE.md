@@ -740,14 +740,17 @@ screen that did not exist; it stops three of them hiding, and gives the account 
 instead of the least looked-at corner there is. The header pays for it by giving up that quiet
 first row, which held a wordmark nobody needs on a screen they had to open the app to reach.
 
-**What makes it affordable is that the bar stands down the moment there is something to log.** A
-nav sitting over the box while you type would have cost a step in the one act this app exists for,
-and no amount of discoverability buys that back. `QuickAdd` reports through `onTyping` whether the
-field has anything in it; the nav unmounts and the control takes the whole bottom edge back. The
-control is also present on three of the four destinations, so a line can be typed from anywhere
-but You — which has no box deliberately, since a capture field under the settings is an invitation
-to log the settings. This is the clause the exception rests on: weaken it and the nav stops being
-worth its 60px.
+**The bar used to stand down the moment the field had text, and that cost more than it bought.**
+The argument was that a nav sitting over the box would cost a step in the one act this app exists
+for. In use it did the opposite. Logging a line made the bar disappear and come back on every
+single entry, which reads as the page flinching rather than as space being reclaimed — and in Ask
+it was not cosmetic at all: typing a question removed the only thing on screen saying which
+destination you were on, and the only way off it, at exactly the moment an answer appeared. The
+reader was left holding an answer with no way out but emptying the box they had just filled. Sixty
+pixels is what the app's only navigation costs, and it is worth it while typing too. `onTyping` is
+gone, and with it the second `FLOOR` case it existed to drive. The control is still present on
+three of the four destinations, so a line can be typed from anywhere but You — which has no box
+deliberately, since a capture field under the settings is an invitation to log the settings.
 
 **A wide screen has to be *put* on Today, not assumed to be there.** The nav is `lg:hidden`, so
 nothing visible on `lg` can change the destination — which is exactly why the view never leaves
@@ -770,7 +773,7 @@ control, nav, in that order — clearing each other is not arithmetic anybody ha
 still stacks above the toast: the overlay is `fixed z-40` and the block is `z-10`.
 
 **The floor belongs to whatever is last in that block.** `FLOOR` in `App` is one written value and
-it goes on the nav normally, on the control while the nav is down. One `pb` on the block itself
+it lives on the nav, which is always the last thing there now. One `pb` on the block itself
 would sit *under* the bar's own background and leave it floating a centimetre above the gesture
 bar; both of them carrying it would stack two safe-area insets on the handset that reports 48px.
 Neither failure is visible from reading either component.
@@ -822,6 +825,15 @@ found", which is a dead end in front of something the app plainly understands. S
 offers **Log instead**, carrying the parse it would record on the button. Held behind a tap, never
 acted on by itself: automatic detection is what the leading `?` exists to avoid. Escape leaves Ask
 and clears; every day opens in Log, because logging is the primary act.
+
+**Tapping a row in an answer opens that row.** It used to hand the caller the *date* and nothing
+else, so the day changed behind a screen that was still showing Ask — a screen that does not show
+days — and the question was cleared on the way. Every report of it was the same sentence: it just
+cleared my search. Nothing about the result you aimed at ever appeared. `AnswerCard` passes the
+whole entry now, and `App` puts you on its day, on Today, with the entry open: the thing you
+tapped, in the place it lives, with somewhere to close back to. `asStored` runs first, because an
+answer can carry a derived occurrence of a repeat and nothing that writes may be handed one.
+
 
 **The answer is banded, not boxed.** `AnswerCard` was a bordered, recessed card; once day
 headings took over the grouping the card was drawing a boundary nothing needed, since dates

@@ -82,7 +82,6 @@ type Props = {
    * stand down. Told rather than read: the text lives here, and a nav that went
    * looking for it through the DOM would be one more thing to keep in step.
    */
-  onTyping: (typing: boolean) => void
   showExamples: boolean
   onSubmit: (parsed: ParsedEntry) => void
   /** Every entry, for answering questions. Null until asked for. */
@@ -93,7 +92,8 @@ type Props = {
   onPrefilled: () => void
   onHelp: () => void
   /** Jumping to the day an answer points at, which is usually why it was asked. */
-  onGoToDay: (day: string) => void
+  /** Open an entry an answer led to — see `AnswerCard`'s `onPick`. */
+  onOpenEntry: (row: Entry) => void
 }
 
 /** `expense · ₹350 · food · today` — the date token is dropped when it needs its own warning. */
@@ -112,7 +112,6 @@ export function QuickAdd({
   now,
   ask,
   onLeaveAsk,
-  onTyping,
   showExamples,
   onSubmit,
   corpus,
@@ -120,7 +119,7 @@ export function QuickAdd({
   prefill,
   onPrefilled,
   onHelp,
-  onGoToDay,
+  onOpenEntry,
 }: Props) {
   const [text, setText] = useState('')
   const dictation = useDictation(setText)
@@ -158,16 +157,6 @@ export function QuickAdd({
   }
 
   const trimmed = text.trim()
-
-  // Mid-entry the control takes the whole bottom edge back. Reset on the way
-  // out as well, or leaving this screen with something half-typed would leave
-  // the nav hidden on a screen that has no field to clear.
-  useEffect(() => {
-    onTyping(text !== '')
-  }, [text, onTyping])
-  useEffect(() => {
-    return () => onTyping(false)
-  }, [onTyping])
 
   /**
    * Asking is a mode *and* a prefix.
@@ -439,8 +428,8 @@ export function QuickAdd({
           key={text}
           answer={answer}
           now={now}
-          onPick={(picked) => {
-            onGoToDay(picked)
+          onPick={(row) => {
+            onOpenEntry(row)
             // The question has been answered and acted on; leaving it in the box
             // would hide the day it just took you to.
             setText('')

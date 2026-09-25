@@ -158,8 +158,9 @@ not lose the day being read.
 
 - **The control is on three of the four**, which is what keeps the nav from costing anything:
   logging is one tap from anywhere but You.
-- **The bar stands down whenever the field has text.** `QuickAdd` reports it through `onTyping`;
-  the nav unmounts and the control takes the whole bottom edge back. This is the rule that lets a
+- **The bar stays up, including while the field has text.** It used to stand down on any text,
+  which made it flicker on every entry and, in Ask, took away the only way off the screen at the
+  moment an answer arrived. This is the rule that lets a
   nav and a five-second capture share one edge — do not weaken it.
 - **On `lg` the view never leaves `today`**, because nothing visible there can change it. The nav
   is hidden, the sidebar owns the calendar and the account, and the control keeps its own
@@ -310,7 +311,7 @@ siblings the two cannot overlap, and nothing has to be kept in agreement.
 
 **The floor belongs to whatever is last in the block.** `FLOOR` in `App` is one written value —
 `pb-[max(0.75rem,env(safe-area-inset-bottom))]` — and it goes on the nav normally, on the control
-while the nav is down. Two elements both carrying it would stack two safe-area insets on the
+which is always last in the block. Two elements both carrying it would stack two safe-area insets on the
 handset that reports 48px; one `pb` on the block itself would sit *under* the bar's own background
 and leave it floating a centimetre off the gesture bar.
 
@@ -439,7 +440,7 @@ a sheet behind the date, the account was a 20px glyph in the quietest row on the
 was a mode you had to be told about. Nothing new was added; three things stopped hiding. What it
 cost is 60px of the bottom edge and the header's quiet first row, which is where the wordmark and
 the account used to live. What it did **not** cost is a step added to logging — the control is on
-three of the four destinations and the bar stands down the moment the field has text. That last
+three of the four destinations. That last
 clause is the whole licence. A nav that stayed up over the box would not have earned it.
 
 The app is still one text box. Most UI work here is deciding what *not* to put on it.

@@ -82,8 +82,8 @@ export default function App() {
   const { identity, loading, startGuest } = useSession()
   // Resolved before the auth gate, so the login screen honours the choice too.
   const { theme, choose } = useTheme()
-  /** A guest who has asked to sign in. The log is still there behind this. */
-  const [signingIn, setSigningIn] = useState(false)
+  /** A guest who has *asked* to sign in. The log is still there behind this. */
+  const [asked, setAsked] = useState(false)
 
   // Armed here rather than inside `Day`, so it covers the sign-in screen too
   // and survives a guest signing in — which unmounts and remounts `Day`.
@@ -105,9 +105,26 @@ export default function App() {
 
   if (loading) return <div className="p-4 text-sm text-faint">…</div>
   if (identity === null) return <Login onGuest={startGuest} />
+
+  /**
+   * Still a guest, and still asking. **Both**, because the second half was
+   * missing and it locked people out of their own account.
+   *
+   * Asking was a flag with one way down: Cancel. A sign-in that *worked* left
+   * it set, so the screen stayed exactly where it was — over an app that was by
+   * then signed in, with the session stored and the identity swapped. No error,
+   * no progress, nothing to act on. The reader is looking at a password box
+   * that just accepted their password and is still a password box, so the only
+   * reading available is that it silently failed.
+   *
+   * Derived rather than cleared, so the stuck state cannot be represented: the
+   * question is whether there is still a guest here to sign in, and the moment
+   * `identity` stops being local the screen has nothing left to ask for and
+   * falls away on its own.
+   */
   // No `onGuest`: this reader already has a log, and starting a second empty one
   // is not an offer, it is a way to lose the first.
-  if (signingIn) return <Login onCancel={() => setSigningIn(false)} />
+  if (asked && identity.local === true) return <Login onCancel={() => setAsked(false)} />
 
   return (
     <Day
@@ -116,7 +133,7 @@ export default function App() {
       local={identity.local === true}
       theme={theme}
       onTheme={choose}
-      onSignIn={() => setSigningIn(true)}
+      onSignIn={() => setAsked(true)}
     />
   )
 }
@@ -158,7 +175,6 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
    * whole bottom edge back, so nothing has been added to the one act the app
    * exists for. Reported by `QuickAdd`, which owns the text.
    */
-  const [typing, setTyping] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [aheadOpen, setAheadOpen] = useState(false)
@@ -602,6 +618,24 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     },
   }
 
+  /**
+   * Tapping a row in an answer opens that row.
+   *
+   * It used to set the day and clear the question, and nothing else — so the
+   * screen stayed on Ask, the box emptied, and the day changed underneath a
+   * view that was not showing it. Every report of this was the same: "it just
+   * cleared my search". The entry you aimed at is what you get, on the day it
+   * lives on, with Today behind it so closing the editor leaves you there.
+   *
+   * `asStored` first, because an answer can carry a derived occurrence of a
+   * repeat and nothing that writes may ever be handed one.
+   */
+  const openFromAnswer = (row: Entry) => {
+    setDay(row.occurred_on)
+    setView('today')
+    setEditing(asStored(row as Row))
+  }
+
   /** Picking a day in the calendar is asking to read it, so it lands on Today. */
   const pick = (picked: string) => {
     setDay(picked)
@@ -760,13 +794,12 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
               The floor moves onto the control whenever the nav is not there to
               hold it — on `lg` the block is at the top and neither does. */}
           {view !== 'you' && (
-            <div className={typing ? `${FLOOR} lg:pb-0` : undefined}>
+            <div>
               <QuickAdd
                 day={day}
                 now={now}
                 ask={view === 'ask'}
                 onLeaveAsk={() => setView('today')}
-                onTyping={setTyping}
                 showExamples={view === 'today' && !loading && shown.length === 0}
                 onSubmit={submit}
                 corpus={corpus}
@@ -774,15 +807,24 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                 prefill={prefill}
                 onPrefilled={() => setPrefill(null)}
                 onHelp={() => setHelpOpen(true)}
-                onGoToDay={setDay}
+                onOpenEntry={openFromAnswer}
               />
             </div>
           )}
 
           {/* Last in the block, so it carries the floor and its own background
               reaches the bottom edge — a bar floating a centimetre above the
-              gesture bar reads as a rendering fault. */}
-          {!typing && <BottomNav view={view} onGo={setView} className={FLOOR} />}
+              gesture bar reads as a rendering fault.
+
+              It used to stand down the moment the box had any text in it, and
+              that cost more than it bought. Logging a line made the bar vanish
+              and come back on every entry, which reads as the page flinching;
+              and in Ask it was worse than cosmetic — typing a question removed
+              the only thing on screen saying which destination you were on, and
+              the only way off it, so an answer left you stranded with no way
+              out but clearing the box. The bar is 60px and it is the app's
+              only navigation: it stays. */}
+          <BottomNav view={view} onGo={setView} className={FLOOR} />
         </div>
 
         {view === 'today' && (
