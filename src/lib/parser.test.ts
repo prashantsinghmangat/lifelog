@@ -1215,3 +1215,107 @@ describe('a reminder that comes round again', () => {
     expect(on('riya birthday 14 nov')?.data.rrule).toBe('FREQ=YEARLY')
   })
 })
+
+describe('a lead time before a reminder', () => {
+  it('attaches to an event with a written date', () => {
+    const r = p('fridge warranty expires 12 mar 2027 remind 1 week before')
+    expect(r?.kind).toBe('event')
+    expect(r?.occurredOn).toBe('2027-03-12')
+    expect(r?.data.lead).toBe(60 * 24 * 7)
+    expect(r?.title).toBe('fridge warranty expires')
+  })
+
+  it('reads every accepted unit, with the verb and "me" both optional', () => {
+    expect(p('bin day tomorrow remind 1 day before')?.data.lead).toBe(60 * 24)
+    expect(p('rent due 1 oct remind me a week before')?.data.lead).toBe(60 * 24 * 7)
+    expect(p('passport renewal 20 dec alert 1 month early')?.data.lead).toBe(60 * 24 * 30)
+    expect(p('call client tomorrow 3pm remind me an hour before')?.data.lead).toBe(60)
+    expect(p('call client tomorrow 3pm remind 15 minutes before')?.data.lead).toBe(15)
+  })
+
+  it('does not shift the entry’s own date or clock — only `data.lead` records the offset', () => {
+    const r = p('call client tomorrow 3pm remind 1 hour before')
+    expect(r?.occurredOn).toBe(TOMORROW)
+    expect(r?.occurredAt?.startsWith(`${TOMORROW}T15:00:00`)).toBe(true)
+  })
+
+  it('does not misread its own number as an amount or a duration', () => {
+    // The same failure `every 2 weeks` already guards against for a repeat
+    // this app cannot express: a number beside a keyword is that keyword's
+    // quantity, never a price or a length of time.
+    const r = p('bill due 1 oct remind 2 hours before')
+    expect(r?.amountPaise).toBeUndefined()
+    expect(r?.durationMinutes).toBeUndefined()
+    expect(r?.kind).toBe('event')
+    expect(r?.data.lead).toBe(120)
+  })
+
+  it('refuses on an entry that resolved to money — a lead attaches to an event, it never creates one', () => {
+    const r = p('500 dinner remind 1 day before')
+    expect(r?.kind).toBe('expense')
+    expect(r?.amountPaise).toBe(50000)
+    expect(r?.data.lead).toBeUndefined()
+    expect(r?.title).toBe('dinner remind 1 day before')
+  })
+
+  it('refuses on an entry that resolved to a time log, the same way', () => {
+    const r = p('gym 2h remind 1 day before')
+    expect(r?.kind).toBe('time')
+    expect(r?.durationMinutes).toBe(120)
+    expect(r?.data.lead).toBeUndefined()
+    expect(r?.title).toBe('gym remind 1 day before')
+  })
+
+  it('refuses on a line naming no date, time, relative moment or repeat', () => {
+    const r = p('call mom remind 1 hour before')
+    expect(r?.kind).toBe('note')
+    expect(r?.data.lead).toBeUndefined()
+    expect(r?.title).toBe('call mom remind 1 hour before')
+  })
+
+  // The one exception: a future `defaultDay` is already its own anchor by the
+  // pre-existing "occurredOn > today is an event" rule, with nothing about the
+  // lead grammar involved — viewed from Monday the 14th, an undated line lands
+  // on the 14th and is already an event before `takeLead` is ever consulted.
+  it('still attaches when the day being viewed is itself in the future', () => {
+    const r = parse('call mom remind 1 hour before', NOW, '2026-09-10')
+    expect(r?.kind).toBe('event')
+    expect(r?.occurredOn).toBe('2026-09-10')
+    expect(r?.data.lead).toBe(60)
+  })
+
+  it('refuses on a weekly repeat — a related but separate widening, not built here', () => {
+    const r = p('standup 10am weekdays remind 15 minutes before')
+    expect(r?.kind).toBe('event')
+    expect(r?.data.rrule).toBe('FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR')
+    expect(r?.data.lead).toBeUndefined()
+    expect(r?.title).toBe('standup remind 15 minutes before')
+  })
+
+  it('still attaches to a yearly anniversary', () => {
+    const r = p('riya birthday 14 nov remind 1 day before')
+    expect(r?.data.rrule).toBe('FREQ=YEARLY')
+    expect(r?.data.lead).toBe(60 * 24)
+  })
+
+  it('caps at two years, leaving an out-of-range phrase as literal text', () => {
+    const inRange = p('lease renews 1 sep 2028 remind 104 weeks before')
+    expect(inRange?.data.lead).toBe(104 * 60 * 24 * 7)
+
+    const overCap = p('lease renews 1 sep 2028 remind 105 weeks before')
+    expect(overCap?.data.lead).toBeUndefined()
+    expect(overCap?.amountPaise).toBeUndefined()
+    expect(overCap?.durationMinutes).toBeUndefined()
+    expect(overCap?.title).toBe('lease renews remind 105 weeks before')
+  })
+
+  it('requires the verb — bare "before" is ordinary English, not a lead', () => {
+    // "1 hour" is still read as a duration, exactly as it would be with no
+    // "before" in sight — that is the pre-existing grammar and correct. What
+    // this checks is only that no verb means no lead: `data.lead` stays unset.
+    const r = p('meeting tomorrow 3pm 1 hour before lunch')
+    expect(r?.data.lead).toBeUndefined()
+    expect(r?.durationMinutes).toBe(60)
+    expect(r?.title).toBe('meeting before lunch')
+  })
+})

@@ -263,18 +263,29 @@ function takeTime(input: string): Cut<Clock> | null {
 const HOURS = '(?:hours?|hrs?|h)'
 const MINUTES = '(?:minutes?|mins?|m)'
 
-function takeDuration(input: string): Cut<number> | null {
+/**
+ * `scan` defaults to `input`, exactly like `cut` itself — the override exists
+ * for `parse`, which must keep a lead phrase's own digit out of reach here.
+ * See `takeLead`: `remind 2 hours before` is a lead, not a two-hour time log.
+ */
+function takeDuration(input: string, scan: string = input): Cut<number> | null {
   return (
-    cut(input, new RegExp(`\\b(\\d+)\\s*${HOURS}\\s*(\\d+)\\s*${MINUTES}\\b`, 'i'), (m) =>
-      asMinutes(int(m[1]) * 60 + int(m[2])),
+    cut(
+      input,
+      new RegExp(`\\b(\\d+)\\s*${HOURS}\\s*(\\d+)\\s*${MINUTES}\\b`, 'i'),
+      (m) => asMinutes(int(m[1]) * 60 + int(m[2])),
+      scan,
     ) ??
     // `2h30`, with the m dropped. The space is forbidden on purpose: in
     // `2h 500 client work` the 500 is an amount, not thirty-plus hours of minutes.
-    cut(input, /\b(\d+)h([0-5]?\d)\b/i, (m) => asMinutes(int(m[1]) * 60 + int(m[2]))) ??
-    cut(input, new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*${HOURS}\\b`, 'i'), (m) =>
-      asMinutes(Number(m[1]) * 60),
+    cut(input, /\b(\d+)h([0-5]?\d)\b/i, (m) => asMinutes(int(m[1]) * 60 + int(m[2])), scan) ??
+    cut(
+      input,
+      new RegExp(`\\b(\\d+(?:\\.\\d+)?)\\s*${HOURS}\\b`, 'i'),
+      (m) => asMinutes(Number(m[1]) * 60),
+      scan,
     ) ??
-    cut(input, new RegExp(`\\b(\\d+)\\s*${MINUTES}\\b`, 'i'), (m) => asMinutes(int(m[1])))
+    cut(input, new RegExp(`\\b(\\d+)\\s*${MINUTES}\\b`, 'i'), (m) => asMinutes(int(m[1])), scan)
   )
 }
 
@@ -497,6 +508,76 @@ function maskDates(input: string): string {
   return input.replace(DATE_SHAPE, (phrase) => phrase.replace(/\d/g, '#'))
 }
 
+/**
+ * `remind 2 days before`, `remind me a week before`, `alert 1 month early`.
+ *
+ * A verb is required — `remind` or `alert`, `me` optional — because `before`
+ * on its own is ordinary English (`call before dinner`) and needs the same
+ * explicit anchor `every` already gives the weekday grammar. Units are always
+ * spelled out in full: `1d`, `1w` and `2h` collide with the duration tokens
+ * and with `3 days ago`, and extraction only protects against that by
+ * ordering, which is exactly the kind of correctness a later reorder quietly
+ * breaks. `a`/`an` stand in for one, matching `in an hour` elsewhere in this
+ * file — mind the trailing `\b` on the unit, or `remind a house before` would
+ * be the same mistake `in a house` once was here.
+ */
+const LEAD_VERB = '(?:remind(?:\\s+me)?|alert(?:\\s+me)?)'
+const LEAD_UNIT = '(?:days?|weeks?|months?|hours?|minutes?)'
+const LEAD_SHAPE = new RegExp(
+  `\\b${LEAD_VERB}\\s+(?:a|an|\\d+)\\s*${LEAD_UNIT}\\s+(?:before|early)\\b`,
+  'gi',
+)
+
+/**
+ * Two years of headroom: a passport or an insurance policy is a real one-year
+ * lead, a lease is closer to two, and past that a lead is more likely a typo
+ * than a want. `data.lead` is a JSONB field with no column to overflow, so
+ * this is a sanity ceiling agreed on rather than one Postgres imposes.
+ */
+const LEAD_MAX_MINUTES = 2 * 365 * 24 * 60
+
+function leadFits(minutes: number): boolean {
+  return Number.isInteger(minutes) && minutes > 0 && minutes <= LEAD_MAX_MINUTES
+}
+
+/** A month has no fixed length; the export in `ics.ts` decides why this one does. */
+function minutesPerLeadUnit(unit: string): number {
+  const word = unit.toLowerCase()
+  if (word.startsWith('week')) return 60 * 24 * 7
+  if (word.startsWith('month')) return 60 * 24 * 30
+  if (word.startsWith('day')) return 60 * 24
+  if (word.startsWith('hour')) return 60
+  return 1
+}
+
+/**
+ * A lead time, in minutes — `parse` decides on its own whether to keep it. See
+ * the comment at the call site for why: it must not create an event, only
+ * attach to one already implied by the rest of the line, and never to a
+ * weekly repeat.
+ */
+function takeLead(input: string): Cut<number> | null {
+  return cut(
+    input,
+    new RegExp(`\\b${LEAD_VERB}\\s+(a|an|\\d+)\\s*(${LEAD_UNIT})\\s+(?:before|early)\\b`, 'i'),
+    (m) => {
+      const qty = /^\d+$/.test(m[1] ?? '') ? int(m[1]) : 1
+      const minutes = qty * minutesPerLeadUnit(m[2] ?? '')
+      return leadFits(minutes) ? minutes : null
+    },
+  )
+}
+
+/**
+ * The same string with a lead phrase's own digit blanked, so `takeDuration`
+ * and `takeAmount` can never read it as a two-hour time log or two rupees —
+ * the same trick `maskDates` already plays for a date phrase it declined to
+ * use. Unconditional, like `maskDates`: a lead over the two-year cap is still
+ * a lead-shaped phrase and its digit must not leak into either reading either.
+ */
+function maskLead(input: string): string {
+  return input.replace(LEAD_SHAPE, (phrase) => phrase.replace(/\d/g, '#'))
+}
 
 /**
  * Money can be negative, because a refund is money.
@@ -509,7 +590,7 @@ function maskDates(input: string): string {
  *
  * This is not a fifth kind and not a new concept: it is an expense of −₹50.
  */
-function takeAmount(input: string, currencyOnly: boolean): Cut<number> | null {
+function takeAmount(input: string, currencyOnly: boolean, leadMask: string = input): Cut<number> | null {
   const marked =
     cut(input, new RegExp(`${CURRENCY}\\s*-\\s*${AMOUNT}`, 'i'), negated) ??
     cut(input, new RegExp(`${CURRENCY}\\s*${AMOUNT}`, 'i'), toPaise) ??
@@ -533,7 +614,10 @@ function takeAmount(input: string, currencyOnly: boolean): Cut<number> | null {
   // `31 feb`, or `29 feb 2026` — and those digits are a day and a year, never
   // money. Visible to this branch, `anniversary 31 feb` became an expense of
   // ₹31 and `anniversary 29 feb 2026` an expense of ₹2,026.
-  const scan = maskDates(input)
+  //
+  // `leadMask` has already had a lead phrase's own digit blanked the same way,
+  // so `remind 2 days before` reads as a lead and not as ₹2 — see `takeLead`.
+  const scan = maskDates(leadMask)
 
   return (
     cut(input, new RegExp(`${MINUS}${BARE}`), negated, scan) ??
@@ -625,6 +709,27 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     matched = true
   }
 
+  /**
+   * `remind 2 days before` — held rather than cut. Two reasons pin it exactly
+   * here, both load-bearing:
+   *
+   * It must run after `takeRepeat`/`takeDate`/`takeRelative`/`takeTime`,
+   * because whether it is kept depends on `resolved` further down, which in
+   * turn depends on whether any of those four found an anchor — reordering
+   * this earlier would mean guessing at a kind that is not decided yet.
+   *
+   * It must run before `takeDuration`/`takeAmount`, or its own number is read
+   * as a two-hour time log or two rupees — the exact `every 2 weeks` failure
+   * `takeAmount` already guards against for a repeat this app cannot express.
+   * Extraction is what makes that guard unnecessary here: masked out via
+   * `maskLead` below, the number is simply never visible to either.
+   *
+   * Not cut into `rest` yet, because whether it survives depends on `kind`,
+   * and `kind` is not settled until after `takeDuration` and `takeAmount` have
+   * both had their turn — see the call site by `resolved`, below.
+   */
+  const lead = takeLead(rest)
+
   const fallback = defaultDay === undefined ? startOfDay(now) : startOfDay(parseISO(defaultDay))
   // A relative offset can roll past midnight, so it decides the day too. A
   // weekly repeat lands on its next matching weekday, so `standup 10am
@@ -642,7 +747,10 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
         ? soonestOf(repeat.value, fallback, time?.value ?? null, now)
         : fallback)
 
-  const duration = takeDuration(rest)
+  // Recomputed fresh before each call rather than once: an earlier cut can
+  // shift where the lead phrase sits, and a stale mask would blank the wrong
+  // characters — or none at all — in whatever `rest` has become by then.
+  const duration = takeDuration(rest, maskLead(rest))
   if (duration) {
     rest = duration.rest
     matched = true
@@ -650,7 +758,7 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
   }
 
   // A bare number is part of the title once a duration has fixed the kind.
-  const amount = takeAmount(rest, duration !== null)
+  const amount = takeAmount(rest, duration !== null, maskLead(rest))
   if (amount) {
     rest = amount.rest
     matched = true
@@ -682,6 +790,51 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
   const day = format(occurredOn, 'yyyy-MM-dd')
   const resolved: Kind = kind ?? 'note'
 
+  /**
+   * Commit, or release back into the title.
+   *
+   * A lead attaches to an event; it never creates one. Money already blocks
+   * the event inference above — `kind ??= 'expense'` runs before the
+   * future-date check ever gets a turn — so `500 dinner remind 1 day before`
+   * is already an expense by the time this is reached, and giving the lead a
+   * say here would need `alarms()`, the day totals and `query.ts` to all learn
+   * the difference between money spent and money merely due. The parser
+   * already keeps that distinction for free by staying quiet: refused, the
+   * phrase stays in the title exactly as `every 2 weeks` does — ugly, honest,
+   * and the same rule applied twice.
+   *
+   * Refused on a weekly repeat too. `alarms()` schedules that as a cron on a
+   * fixed weekday and clock; shifting *which* weekday a lead would fire on is
+   * a wider change this build does not take on, so `remind` beside `weekdays`
+   * stays literal text rather than silently doing nothing once saved.
+   *
+   * And refused on a line with no date, time, relative moment or repeat, even
+   * though `occurredOn` still resolves to *some* day — the ordinary fallback,
+   * viewing today, is not itself an anchor. `call mom remind 1 hour before`
+   * names nothing to be early for, and inventing "today" would arm a reminder
+   * against a moment nobody stated — the same "before *what*" question
+   * `RECURRING` already refuses to guess at without a date. Stricter than it
+   * strictly needs to be, and the right default: an event dated today whose
+   * lead has already rolled past `now` is a reminder that never fires and
+   * never says so. The one exception is a `defaultDay` already in the future:
+   * that is its own anchor by the *existing* "occurredOn > today" rule below,
+   * with nothing about the lead grammar involved.
+   *
+   * `takeLead` is called again rather than reusing `lead.rest`: `duration` and
+   * `amount` matched against a masked copy and never touched the lead phrase's
+   * own text, so it is still sitting in `rest` untouched and this is
+   * guaranteed to find it.
+   */
+  let committedLead: number | null = null
+  if (lead !== null && resolved === 'event' && repeat === null) {
+    const applied = takeLead(rest)
+    if (applied !== null) {
+      rest = applied.rest
+      matched = true
+      committedLead = applied.value
+    }
+  }
+
   // Nothing was recognised, so the input stands untouched as the title.
   let title = original
   if (matched) {
@@ -710,6 +863,11 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
   // anniversary even if somebody calls it a birthday standup.
   if (repeat) entry.data.rrule = weeklyRule(repeat.value)
   else if (resolved === 'event' && recurring) entry.data.rrule = 'FREQ=YEARLY'
+
+  // Minutes, nothing summed — the same rule `data.done` and `data.rrule`
+  // already follow, so this costs no column and no migration. Absent means on
+  // the day, so every existing row keeps its current behaviour with no backfill.
+  if (committedLead !== null) entry.data.lead = committedLead
 
   return entry
 }
