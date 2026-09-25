@@ -44,6 +44,15 @@ const EXAMPLES: { typed: string; becomes: string; kind: Kind }[] = [
  */
 const QUESTIONS = ['how much this month', 'hours worked this week', 'what happened last week']
 
+/**
+ * Shown in the preview row while the field is empty and the mode is Log — the
+ * same trick the empty-day examples play, folded into one line since this one
+ * runs beside the field on every day, not only an empty one. Static text, not
+ * a live one: it sits outside `#quick-add-preview` so nothing is announced at
+ * launch, the same silence the field itself starts in.
+ */
+const HINT = '350 lunch · 2h client · dentist 5pm'
+
 /** Written out, never interpolated: Tailwind only compiles classes it can see. */
 const DOT: Record<Kind, string> = {
   expense: 'bg-expense',
@@ -344,45 +353,49 @@ export function QuickAdd({
             ))}
           </div>
 
-          {/* Announced politely: the parse changes as you type, and a screen
-              reader should hear the result without losing your place in the
-              field. */}
-          <div
-            id="quick-add-preview"
-            role="status"
-            aria-live="polite"
-            className="min-w-0 flex-1 truncate px-2 text-xs"
-          >
-            {dictation.error !== null ? (
-              <span className="text-expense">{dictation.error}</span>
-            ) : dictation.listening ? (
-              <span className="text-expense">Listening…</span>
-            ) : spoken !== null ? (
-              // The card below is the answer. This is the same thing said aloud.
-              <span className="sr-only">{spoken}</span>
-            ) : asking ? (
-              <span className="text-faint">…</span>
-            ) : parsed ? (
-              // The whole line is one text node on purpose — it is read aloud as
-              // one phrase, and splitting it into coloured parts would turn a
-              // reassurance into a debug dump. The accent is a 5px dot in the
-              // kind's colour, carrying no meaning the word beside it does not.
-              <span className="text-muted tabular-nums">
-                <span
-                  aria-hidden="true"
-                  className={`mr-1.5 mb-px inline-block h-[5px] w-[5px] rounded-full align-middle ${
-                    DOT[parsed.kind]
-                  }`}
-                />
-                {summarise(parsed, sameDay, now)}
-                {!sameDay && (
-                  <span className="font-medium text-event">
-                    {' → saving to '}
-                    {relativeDay(parsed.occurredOn, now)}
-                  </span>
-                )}
-              </span>
-            ) : null}
+          <div className="min-w-0 flex-1 truncate px-2 text-xs">
+            {/* Plain text, never inside the live region below: the field is
+                autofocused, so this is the first thing on screen and a screen
+                reader must hear nothing about it on launch. Gone the moment
+                there is anything to say instead. */}
+            {mode === 'log' && trimmed === '' && !asking && (
+              <span className="text-faint">{HINT}</span>
+            )}
+            {/* Announced politely: the parse changes as you type, and a screen
+                reader should hear the result without losing your place in the
+                field. */}
+            <span id="quick-add-preview" role="status" aria-live="polite">
+              {dictation.error !== null ? (
+                <span className="text-expense">{dictation.error}</span>
+              ) : dictation.listening ? (
+                <span className="text-expense">Listening…</span>
+              ) : spoken !== null ? (
+                // The card below is the answer. This is the same thing said aloud.
+                <span className="sr-only">{spoken}</span>
+              ) : asking ? (
+                <span className="text-faint">…</span>
+              ) : parsed ? (
+                // The whole line is one text node on purpose — it is read aloud as
+                // one phrase, and splitting it into coloured parts would turn a
+                // reassurance into a debug dump. The accent is a 5px dot in the
+                // kind's colour, carrying no meaning the word beside it does not.
+                <span className="text-muted tabular-nums">
+                  <span
+                    aria-hidden="true"
+                    className={`mr-1.5 mb-px inline-block h-[5px] w-[5px] rounded-full align-middle ${
+                      DOT[parsed.kind]
+                    }`}
+                  />
+                  {summarise(parsed, sameDay, now)}
+                  {!sameDay && (
+                    <span className="font-medium text-event">
+                      {' → saving to '}
+                      {relativeDay(parsed.occurredOn, now)}
+                    </span>
+                  )}
+                </span>
+              ) : null}
+            </span>
           </div>
 
           {/* One slot: the mic while the box is empty, send once there is

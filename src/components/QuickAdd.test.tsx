@@ -126,6 +126,24 @@ describe('capturing an entry', () => {
   })
 })
 
+describe('the empty-field hint', () => {
+  it('shows an example while the field is empty, and nothing once there is text', async () => {
+    const { box } = setup()
+    expect(screen.getByText('350 lunch · 2h client · dentist 5pm')).toBeTruthy()
+
+    // Gone on the very first keystroke — it never sits under a real parse.
+    await userEvent.type(box, '5')
+    expect(screen.queryByText('350 lunch · 2h client · dentist 5pm')).toBeNull()
+  })
+
+  it('says nothing in the live region on mount, so a screen reader is silent at launch', () => {
+    setup()
+    // The hint is real text on screen, but not inside `role="status"` — that
+    // region is what a screen reader announces, and it must start empty.
+    expect(document.getElementById('quick-add-preview')?.textContent).toBe('')
+  })
+})
+
 describe('choosing between logging and asking', () => {
   const corpus = [
     entry({ occurred_on: TODAY, kind: 'expense', title: 'lunch swiggy', amount_paise: 35000, duration_minutes: null }),
