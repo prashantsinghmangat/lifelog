@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { openReminderChannelSettings } from '../lib/openSettings'
 import { isNative } from '../lib/platform'
 import { permission, requestPermission } from '../lib/reminders'
 import { supabase } from '../lib/supabase'
@@ -172,6 +173,21 @@ export function You({
         {reminders === 'unavailable' && (
           <p className="text-sm text-muted">Reminders are not available here.</p>
         )}
+
+        {/* The sound and vibration a channel uses are Android's to set, not
+            this app's — there is no API for either, only this deep link to
+            the screen that can. Offered regardless of permission, since it is
+            just as useful for finding the channel to turn back on. */}
+        <button
+          type="button"
+          onClick={() => void openReminderChannelSettings()}
+          className="mt-3 flex h-11 w-full items-center justify-between gap-3 rounded-lg border border-edge px-3 text-left"
+        >
+          <span className="min-w-0">
+            <span className="block text-sm text-ink">Reminder sound</span>
+            <span className="block text-xs text-faint">Opens Android's settings for this channel</span>
+          </span>
+        </button>
 
         {/* Two prompts a day, raised by the phone with nothing on a server
             involved. A log nobody is reminded to keep is a log that stops
