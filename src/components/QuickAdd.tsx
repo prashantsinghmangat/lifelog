@@ -543,7 +543,11 @@ export function QuickAdd({
                   <KindMark kind={example.kind} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-muted">{example.typed}</span>
+                  {/* Monospace, because this is the line to type verbatim — it
+                      should look typed, not written. */}
+                  <span className="block truncate font-mono text-sm text-muted">
+                    {example.typed}
+                  </span>
                   <span className="mt-0.5 block truncate text-xs text-faint">
                     becomes {example.becomes}
                   </span>
