@@ -497,6 +497,39 @@ only dismissed the keyboard, a question filed away as a note — while the pure 
 more tests produced almost none. A new test here should describe something a user does that could
 silently go wrong, not that a component renders.
 
+**A lead time is `remind`/`alert`, a number, a spelled-out unit, and `before`/`early` — and it
+attaches to an event, it never creates one.** `takeLead` in `parser.ts` sits between `takeTime` and
+`takeDuration`: after the first because whether it is kept depends on `resolved`, which depends on
+whether a date, a relative moment, a time or a repeat gave the line an anchor at all; before the
+second because its own number would otherwise be read as a two-hour time log or two rupees, the
+same `every 2 weeks` failure `takeAmount` already guards against for a repeat this app cannot
+express. Extraction is the guard here too — `maskLead` blanks the digit the same way `maskDates`
+blanks one in a date phrase it declined to use, so `takeDuration` and `takeAmount` never see it,
+whether or not the lead is ultimately kept. Refused, on money (`500 dinner remind 1 day before` is
+an expense, not an event with a bill it has not paid folded into the day's total), on a duration,
+on a weekly repeat (shifting *which* weekday a lead fires on is a wider change than this one), and
+on a line naming no anchor at all — every refusal leaves the phrase sitting in the title exactly as
+`every 2 weeks` does. Capped at two years, `data.lead` holds minutes: no column, no migration, the
+same rule `data.done` and `data.rrule` already follow.
+
+**`fireAt`/`reminderAt` and `passed` are supposed to disagree.** A lead subtracts from a moment in
+exactly one place each: `withLead` in `events.ts`, called from `fireAt` in `reminders.ts` for the
+one-off case, from the yearly branch of `alarms()`, and from `reminderAt` — the moment `ahead.ts`
+sorts and displays the bell by. `passed()` does not call it. A warranty whose reminder rang last
+week but which expires tomorrow is not behind you, so the row must not strike through because the
+phone already rang; `passed()` stays the event's own moment on purpose, and `reminderAt` is a
+second, different answer rather than a replacement for `nextFireAt`. This reads like an
+inconsistency because it is one, deliberately: unifying the two would make an unarrived event
+strike through the moment its early warning fires.
+
+**A month is flattened to 30 days everywhere a lead touches one, and the reason lives in the
+export.** RFC 5545 has no month unit for a `VALARM` duration — only weeks, days, hours, minutes and
+seconds — so a calendar-aware month would still have to be approximated in `ics.ts`, and the app
+and the calendar it exported to would then disagree about when the alarm actually is. Flat and
+consistent is the only version where they agree. The cost is a wobble at month boundaries — "1
+month before 28 Feb" lands on 29 January, not 28 — invisible at the point of use because the editor
+shows the resolved date rather than the arithmetic behind it.
+
 **A silent reminder is worse than a broken one.** Every path through `reminders.ts` reports an
 outcome (`scheduled` / `blocked` / `skipped`) or a caught message, because three separate bugs here
 were invisible for exactly as long as their promises rejected into nothing.

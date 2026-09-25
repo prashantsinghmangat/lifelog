@@ -1,4 +1,4 @@
-﻿import { ALL_DAY_HOUR, done, nextOccurrence, weeklyDays } from './events'
+﻿import { ALL_DAY_HOUR, done, nextOccurrence, weeklyDays, withLead } from './events'
 import { isNative } from './platform'
 import type { LocalNotificationsPlugin } from '@capacitor/local-notifications'
 import type { Entry } from '../types'
@@ -171,15 +171,23 @@ export function notificationId(uuid: string): number {
  * something done is enough to stop the alarm — otherwise "call mom" would ring
  * at five o'clock to remind you of something you did at three, which is worse
  * than no reminder because it teaches you to ignore them.
+ *
+ * A day becomes a moment here, and a lead subtracts from it in this one place
+ * — `withLead`, shared with `reminderAt` in `events.ts` — or the editor's
+ * confirmation line and the alarm actually set would eventually disagree.
+ * Whether the shifted moment has already gone by is left to the caller, which
+ * already checks `at.getTime() <= now.getTime()` against whatever this
+ * returns: that comparison now covers the shifted moment for free, which is
+ * what makes a lead landing in the past schedule nothing.
  */
 export function fireAt(entry: Entry): Date | null {
   if (entry.kind !== 'event') return null
   if (done(entry)) return null
-  if (entry.occurred_at !== null) return new Date(entry.occurred_at)
+  if (entry.occurred_at !== null) return withLead(entry, new Date(entry.occurred_at))
 
   const [year, month, day] = entry.occurred_on.split('-').map(Number)
   if (year === undefined || month === undefined || day === undefined) return null
-  return new Date(year, month - 1, day, ALL_DAY_HOUR, 0, 0, 0)
+  return withLead(entry, new Date(year, month - 1, day, ALL_DAY_HOUR, 0, 0, 0))
 }
 
 /** A `yyyy-MM-dd` as local midnight, or null if it is not one. */
@@ -284,9 +292,14 @@ export function alarms(entry: Entry, now: Date): Alarm[] {
     const clock = entry.occurred_at === null ? null : new Date(entry.occurred_at)
     const when = new Date(next)
     when.setHours(clock?.getHours() ?? ALL_DAY_HOUR, clock?.getMinutes() ?? 0, 0, 0)
-    if (when.getTime() <= now.getTime()) return []
 
-    return [{ id: notificationId(entry.id), at: when }]
+    // A lead applies to the *next* occurrence, not the stored date — a
+    // birthday's own date is almost always in the past, and shifting that
+    // would answer with a moment from a year no reminder should fire in.
+    const shifted = withLead(entry, when)
+    if (shifted.getTime() <= now.getTime()) return []
+
+    return [{ id: notificationId(entry.id), at: shifted }]
   }
 
   const at = fireAt(entry)

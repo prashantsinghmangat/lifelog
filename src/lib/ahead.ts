@@ -1,4 +1,4 @@
-import { done, nextFireAt } from './events'
+import { done, reminderAt } from './events'
 import type { Entry } from '../types'
 
 /**
@@ -26,8 +26,10 @@ export function ahead(entries: Entry[], now: Date, horizon = HORIZON_DAYS): Upco
     // Ticked off means it is not coming, the same way it means silent.
     if (done(entry)) continue
 
-    // Already past is `nextFireAt`'s own answer now — null, not a stale moment.
-    const at = nextFireAt(entry, now)
+    // The bell lists what the phone will raise, so it sorts and shows the
+    // reminder moment — pulled back by any lead — not the event's own moment.
+    // Already past is `reminderAt`'s own answer now — null, not a stale one.
+    const at = reminderAt(entry, now)
     if (at === null || at > until) continue
 
     found.push({ entry, at })

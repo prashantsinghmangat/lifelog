@@ -95,4 +95,27 @@ describe('what is coming', () => {
     const found = ahead([entry({ occurred_on: '2026-09-12' })], NOW)
     expect(found[0]?.at.getHours()).toBe(9)
   })
+
+  it('sorts and shows the reminder moment, not the event’s own moment', () => {
+    // A phone call the 14th with no lead, a warranty the 20th with a week's
+    // lead — the warranty's *reminder* is sooner, and this is what the phone
+    // is actually going to raise first.
+    const found = ahead(
+      [
+        entry({ occurred_on: '2026-09-14', occurred_at: at('2026-09-14', '09:00:00'), title: 'call' }),
+        entry({ occurred_on: '2026-09-20', data: { lead: 60 * 24 * 7 }, title: 'warranty' }),
+      ],
+      NOW,
+    )
+    expect(found.map((row) => row.entry.title)).toEqual(['warranty', 'call'])
+    expect(found[0]?.at.getDate()).toBe(13)
+  })
+
+  it('leaves out an entry whose lead has already gone by, even though the event itself has not', () => {
+    const found = ahead(
+      [entry({ occurred_on: '2026-09-11', data: { lead: 60 * 24 * 2 } })],
+      NOW,
+    )
+    expect(found).toEqual([])
+  })
 })

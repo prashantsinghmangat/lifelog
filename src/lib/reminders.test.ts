@@ -65,6 +65,39 @@ describe('fireAt', () => {
       expect(fireAt(entry({ id: 'a', kind, occurred_at: '2026-09-02T17:00:00+05:30' }))).toBeNull()
     }
   })
+
+  it('is pulled back by a lead — the day becomes a moment here, and the shift happens in the same place', () => {
+    const timed = fireAt(
+      entry({ id: 'a', occurred_at: '2026-09-02T17:00:00+05:30', data: { lead: 30 } }),
+    )
+    expect(timed?.getHours()).toBe(16)
+    expect(timed?.getMinutes()).toBe(30)
+
+    const allDay = fireAt(entry({ id: 'a', occurred_on: '2026-11-14', data: { lead: 60 * 24 } }))
+    expect(allDay?.getDate()).toBe(13)
+    expect(allDay?.getHours()).toBe(9)
+  })
+})
+
+describe('a lead landing in the past', () => {
+  it('schedules nothing — the caller compares against the shifted moment, not the stored one', () => {
+    // The event is tomorrow morning; a two-day lead has already gone by.
+    const now = new Date(2026, 8, 1, 10, 0)
+    const row = entry({
+      id: 'a',
+      occurred_at: '2026-09-02T09:00:00+05:30',
+      data: { lead: 60 * 24 * 2 },
+    })
+    expect(alarms(row, now)).toEqual([])
+  })
+
+  it('still arms once the shifted moment is far enough ahead', () => {
+    const now = new Date(2026, 8, 1, 10, 0)
+    const row = entry({ id: 'a', occurred_at: '2026-09-05T09:00:00+05:30', data: { lead: 60 * 24 } })
+    const due = alarms(row, now)
+    expect(due).toHaveLength(1)
+    expect(due[0]?.at?.getDate()).toBe(4)
+  })
 })
 
 describe('a reminder that has been ticked off', () => {
@@ -148,6 +181,38 @@ describe('a yearly repeat', () => {
       data: { rrule: 'FREQ=YEARLY', done: true },
     })
     expect(alarms(finished, now)).toEqual([])
+  })
+
+  it('applies a lead to the next occurrence, not the stored date', () => {
+    // A birthday's own date is nearly always in the past — shifting that would
+    // answer with a moment from a year no reminder should fire in.
+    const now = new Date(2026, 8, 11, 14, 30)
+    const due = alarms(
+      entry({
+        id: 'bday',
+        occurred_on: '2010-02-13',
+        data: { rrule: 'FREQ=YEARLY', lead: 60 * 24 },
+      }),
+      now,
+    )
+    expect(due).toHaveLength(1)
+    expect(due[0]?.at?.getFullYear()).toBe(2027)
+    expect(due[0]?.at?.getDate()).toBe(12)
+  })
+
+  it('drops a yearly lead once the shifted moment, not just the occurrence, has gone by', () => {
+    // Nine days out; a two-week lead has already passed even though the
+    // birthday itself has not.
+    const now = new Date(2026, 8, 11, 14, 30)
+    const due = alarms(
+      entry({
+        id: 'bday',
+        occurred_on: '2010-09-20',
+        data: { rrule: 'FREQ=YEARLY', lead: 60 * 24 * 14 },
+      }),
+      now,
+    )
+    expect(due).toEqual([])
   })
 })
 

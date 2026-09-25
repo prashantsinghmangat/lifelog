@@ -51,15 +51,55 @@ export function recurring(entry: Entry): boolean {
  * feature worked and looked like it had not — which is the same failure as a
  * silent reminder, one step earlier.
  */
+/**
+ * `2 hours`, `1 week` — the largest whole unit a lead (in minutes) divides
+ * into. Shared between `repeatLabel` and the editor's chip so a stored value
+ * is never described two ways: that drift is exactly what happened once
+ * already between this file and `AheadSheet`'s own copy of the repeat wording.
+ */
+export function leadWords(minutes: number): string {
+  const units: [number, string][] = [
+    [60 * 24 * 30, 'month'],
+    [60 * 24 * 7, 'week'],
+    [60 * 24, 'day'],
+    [60, 'hour'],
+    [1, 'minute'],
+  ]
+  for (const [size, name] of units) {
+    if (minutes % size === 0) {
+      const count = minutes / size
+      return `${count} ${name}${count === 1 ? '' : 's'}`
+    }
+  }
+  // Unreachable — the 1-minute unit always divides — but a total function
+  // needs no comment explaining why its last branch never runs by surprise.
+  return `${minutes} minutes`
+}
+
 export function repeatLabel(entry: Entry): string | null {
   const weekly = weeklyDays(entry)
-  if (weekly === null) return entry.data.rrule === 'FREQ=YEARLY' ? 'every year' : null
+  const base =
+    weekly === null
+      ? entry.data.rrule === 'FREQ=YEARLY'
+        ? 'every year'
+        : null
+      : (() => {
+          const days = [...new Set(weekly)].sort((a, b) => a - b)
+          if (days.length === 5 && days.every((day, i) => day === i + 1)) return 'weekdays'
+          const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+          return `every ${days.map((day) => names[day]).join(', ')}`
+        })()
 
-  const days = [...new Set(weekly)].sort((a, b) => a - b)
-  if (days.length === 5 && days.every((day, i) => day === i + 1)) return 'weekdays'
+  // A lead never lands on a weekly repeat — the parser refuses that
+  // combination — but reads it off the entry rather than assuming, so a row
+  // stays honest even if `data.lead` ever gets there some other way.
+  const lead =
+    typeof entry.data.lead === 'number' && entry.data.lead > 0
+      ? `reminder ${leadWords(entry.data.lead)} before`
+      : null
 
-  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  return `every ${days.map((day) => names[day]).join(', ')}`
+  const bits = [base, lead].filter((bit): bit is string => bit !== null)
+  return bits.length === 0 ? null : bits.join(' · ')
 }
 
 /**
@@ -167,6 +207,41 @@ export function nextFireAt(entry: Entry, now: Date): Date | null {
 }
 
 /**
+ * A moment, pulled back by however many minutes `data.lead` asks for. Absent,
+ * zero or not a number means on the day: `at` comes back unchanged. Shared by
+ * `reminderAt` here and by `fireAt` in `reminders.ts`, so the one arithmetic —
+ * what a lead actually does to a moment — is written once rather than kept in
+ * step across two files by hand.
+ */
+export function withLead(entry: Entry, at: Date): Date {
+  const lead = entry.data.lead
+  if (typeof lead !== 'number' || !Number.isFinite(lead) || lead <= 0) return at
+  return new Date(at.getTime() - lead * 60_000)
+}
+
+/**
+ * The moment the phone will actually raise a notification for — `nextFireAt`
+ * pulled back by any lead. This is what `alarms()` schedules the one-off and
+ * yearly cases against, and what the bell in `ahead.ts` sorts and displays.
+ *
+ * Deliberately a second answer from `nextFireAt`'s, not a replacement for it.
+ * `passed()` keeps querying the event's own moment on purpose: a warranty
+ * whose reminder fired last week but which expires tomorrow is not behind
+ * you, and a row must not strike through because the phone already rang.
+ * These two are supposed to disagree — see the note beside `passed`.
+ *
+ * A moment that has gone by is not a next one, the same rule `nextFireAt`
+ * itself already states — reapplied here because pulling a moment backwards
+ * can put it in the past even when the event's own moment is still ahead.
+ */
+export function reminderAt(entry: Entry, now: Date): Date | null {
+  const at = nextFireAt(entry, now)
+  if (at === null) return null
+  const shifted = withLead(entry, at)
+  return shifted <= now ? null : shifted
+}
+
+/**
  * The moment has gone by, so the timeline can stop presenting it as something
  * still ahead. Derived from the clock rather than stored: a reminder does not
  * need to be ticked off to have happened, and asking for a tap would put a step
@@ -175,6 +250,12 @@ export function nextFireAt(entry: Entry, now: Date): Date | null {
  * Never true of a recurring event — a birthday is not something you finish —
  * and never true without a time until the day itself is over, so a birthday
  * today does not read as done from 9am onwards.
+ *
+ * **Deliberately blind to a lead.** This answers about the event's own
+ * moment, not the moment `reminderAt` fires at — a warranty whose reminder
+ * rang last week but which expires tomorrow is not behind you, so it must not
+ * strike through early. Reads like the two ought to agree; they are supposed
+ * not to.
  */
 export function passed(entry: Entry, now: Date): boolean {
   if (entry.kind !== 'event') return false

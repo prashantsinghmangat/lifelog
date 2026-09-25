@@ -54,8 +54,9 @@ describe('all-day events', () => {
     expect(ics).toContain('DTSTART;VALUE=DATE:20261114')
     // Exclusive end, so the next day.
     expect(ics).toContain('DTEND;VALUE=DATE:20261115')
-    // Relative to local midnight: 9am in any timezone, and correct every year.
-    expect(ics).toContain('TRIGGER;RELATED=START:PT9H')
+    // Relative to local midnight: 540 minutes (9am) in any timezone, and
+    // correct every year.
+    expect(ics).toContain('TRIGGER;RELATED=START:PT540M')
   })
 
   it('adds a yearly rule for a birthday', () => {
@@ -65,6 +66,17 @@ describe('all-day events', () => {
 
   it('omits the rule when the flag is absent', () => {
     expect(toIcs([entry({ id: 'a' })], NOW)).not.toContain('RRULE')
+  })
+
+  it('pulls the trigger back by a lead, past midnight if the lead asks for it', () => {
+    // 1 day before 9am on the day is 9am the day before — 15 hours ahead of
+    // DTSTART, so the offset goes negative.
+    const oneDay = toIcs([entry({ id: 'a', data: { lead: 60 * 24 } })], NOW)
+    expect(oneDay).toContain('TRIGGER;RELATED=START:-PT900M')
+
+    // A lead smaller than 9 hours stays a positive offset from midnight.
+    const oneHour = toIcs([entry({ id: 'a', data: { lead: 60 } })], NOW)
+    expect(oneHour).toContain('TRIGGER;RELATED=START:PT480M')
   })
 })
 
@@ -87,6 +99,11 @@ describe('timed events', () => {
 
   it('alarms at the event itself', () => {
     expect(toIcs([timed], NOW)).toContain('TRIGGER:-PT0M')
+  })
+
+  it('alarms a lead earlier, relative to the moment rather than absolute', () => {
+    const withLead = { ...timed, data: { lead: 30 } }
+    expect(toIcs([withLead], NOW)).toContain('TRIGGER:-PT30M')
   })
 })
 

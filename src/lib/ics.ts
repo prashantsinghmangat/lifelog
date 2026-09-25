@@ -1,5 +1,5 @@
 import { addDays, addMinutes, parseISO } from 'date-fns'
-import { done, weeklyDays } from './events'
+import { ALL_DAY_HOUR, done, weeklyDays } from './events'
 import { dayKey } from './format'
 import type { Entry } from '../types'
 
@@ -66,22 +66,56 @@ function alarm(title: string, trigger: string): string[] {
   return ['BEGIN:VALARM', `TRIGGER${trigger}`, 'ACTION:DISPLAY', `DESCRIPTION:${escapeText(title)}`, 'END:VALARM']
 }
 
+/** `entry.data.lead`, in whole minutes, or 0 when there is none. */
+function leadMinutes(entry: Entry): number {
+  const lead = entry.data.lead
+  return typeof lead === 'number' && Number.isFinite(lead) && lead > 0 ? lead : 0
+}
+
+/**
+ * The lead becomes the trigger offset, kept relative rather than absolute.
+ * RFC 5545 has no month unit for a duration — days, hours, minutes and
+ * seconds only — which is why a month is flattened to 30 days everywhere in
+ * this feature and not only here: a calendar-aware month would need this file
+ * to approximate it separately, and the app and the calendar it exported to
+ * would then disagree about when the alarm actually is.
+ *
+ * A timed event's DTSTART is the moment itself, so the trigger is simply
+ * `lead` minutes before it. `:-PT0M` — the pre-existing no-lead case — already
+ * meant exactly that, at zero.
+ */
+function timedTrigger(entry: Entry): string {
+  return `:-PT${leadMinutes(entry)}M`
+}
+
+/**
+ * An all-day DTSTART is local midnight, and the alarm has always sat 9 hours
+ * after it. A lead pulls that back further — possibly past midnight itself,
+ * which is why the offset can go negative: `remind 1 day before` on an
+ * all-day event fires the previous day at 9am, 15 hours *before* DTSTART.
+ */
+function allDayTrigger(entry: Entry): string {
+  const offset = ALL_DAY_HOUR * 60 - leadMinutes(entry)
+  return offset >= 0 ? `;RELATED=START:PT${offset}M` : `;RELATED=START:-PT${-offset}M`
+}
+
 function event(entry: Entry, now: Date): string[] {
   const lines = ['BEGIN:VEVENT', `UID:${entry.id}@lifelog`, `DTSTAMP:${stamp(now)}`]
 
   if (entry.occurred_at !== null) {
     const at = parseISO(entry.occurred_at)
     lines.push(`DTSTART:${stamp(at)}`, `DTEND:${stamp(addMinutes(at, BLOCK_MINUTES))}`)
-    // "Notify me at 4pm" means 4pm, so the alarm sits on the start.
-    lines.push(...alarm(entry.title, ':-PT0M'))
+    // "Notify me at 4pm" means 4pm, so with no lead the alarm sits on the start.
+    lines.push(...alarm(entry.title, timedTrigger(entry)))
   } else {
     lines.push(
       `DTSTART;VALUE=DATE:${dateValue(entry.occurred_on)}`,
       `DTEND;VALUE=DATE:${dateValue(dayKey(addDays(parseISO(entry.occurred_on), 1)))}`,
     )
-    // An all-day event starts at local midnight, so +9h is 9am wherever the
-    // reader is. Relative also repeats correctly every year; absolute would not.
-    lines.push(...alarm(entry.title, ';RELATED=START:PT9H'))
+    // An all-day event starts at local midnight, so with no lead the offset is
+    // simply +9h — 9am wherever the reader is. Relative also repeats correctly
+    // every year; absolute would not.
+    lines.push(...alarm(entry.title, allDayTrigger(entry)))
   }
 
   // The rule goes into the file, so the OS calendar repeats it too rather than

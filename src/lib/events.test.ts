@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   behindYou,
   done,
+  leadWords,
   nextFireAt,
   nextOccurrence,
   passed,
+  reminderAt,
   recurring,
   repeatLabel,
   weeklyDays,
+  withLead,
 } from './events'
 import type { Entry, Kind } from '../types'
 
@@ -240,6 +243,95 @@ describe('saying a repeat in words', () => {
   it('does not call a single weekday "weekdays"', () => {
     const row = entry({ occurred_on: '2026-09-14', data: { rrule: 'FREQ=WEEKLY;BYDAY=MO' } })
     expect(repeatLabel(row)).toBe('every Mon')
+  })
+
+  it('names a one-off’s lead on its own, since it repeats nothing', () => {
+    const row = entry({ occurred_on: '2027-03-12', data: { lead: 60 * 24 * 7 } })
+    expect(repeatLabel(row)).toBe('reminder 1 week before')
+  })
+
+  it('combines a yearly rule and a lead, the rule first', () => {
+    const row = entry({ occurred_on: '2010-02-13', data: { rrule: 'FREQ=YEARLY', lead: 60 * 24 } })
+    expect(repeatLabel(row)).toBe('every year · reminder 1 day before')
+  })
+
+  it('says nothing about an absent, zero or unset lead', () => {
+    expect(repeatLabel(entry({ occurred_on: '2026-09-14', data: { lead: 0 } }))).toBeNull()
+    expect(repeatLabel(entry({ occurred_on: '2026-09-14' }))).toBeNull()
+  })
+})
+
+describe('the words for a lead', () => {
+  it('picks the largest unit a lead divides into exactly', () => {
+    expect(leadWords(15)).toBe('15 minutes')
+    expect(leadWords(60)).toBe('1 hour')
+    expect(leadWords(120)).toBe('2 hours')
+    expect(leadWords(60 * 24)).toBe('1 day')
+    expect(leadWords(60 * 24 * 7)).toBe('1 week')
+    expect(leadWords(60 * 24 * 30)).toBe('1 month')
+  })
+
+  it('falls back to minutes when nothing larger divides it exactly', () => {
+    expect(leadWords(90)).toBe('90 minutes')
+  })
+})
+
+describe('pulling a moment back by a lead', () => {
+  it('leaves a moment untouched with no lead, or a zero or invalid one', () => {
+    const at = new Date(2026, 8, 14, 9, 0, 0)
+    expect(withLead(entry({ occurred_on: '2026-09-14' }), at)).toEqual(at)
+    expect(withLead(entry({ occurred_on: '2026-09-14', data: { lead: 0 } }), at)).toEqual(at)
+    expect(withLead(entry({ occurred_on: '2026-09-14', data: { lead: -5 } }), at)).toEqual(at)
+  })
+
+  it('subtracts the lead in minutes', () => {
+    const at = new Date(2026, 8, 14, 9, 0, 0)
+    const shifted = withLead(entry({ occurred_on: '2026-09-14', data: { lead: 90 } }), at)
+    expect(shifted.getTime()).toBe(at.getTime() - 90 * 60_000)
+  })
+})
+
+describe('the moment a reminder actually fires', () => {
+  it('is the event’s own moment pulled back by the lead', () => {
+    const row = entry({
+      occurred_on: '2026-09-07',
+      occurred_at: at('2026-09-07', '10:00:00'),
+      data: { lead: 60 },
+    })
+    const fires = reminderAt(row, NOW)
+    expect(fires?.getDate()).toBe(7)
+    expect(fires?.getHours()).toBe(9)
+  })
+
+  it('disagrees with `passed`, on purpose', () => {
+    // A warranty due tomorrow with a two-day lead has already had its
+    // reminder moment go by — the reminder fires, the warranty has not.
+    const row = entry({ occurred_on: '2026-09-06', data: { lead: 60 * 24 * 2 } })
+    expect(reminderAt(row, NOW)).toBeNull()
+    expect(passed(row, NOW)).toBe(false)
+  })
+
+  it('has no answer once the shifted moment, not just the stored one, has gone', () => {
+    // The event itself is still hours away; the lead alone has already passed.
+    const row = entry({
+      occurred_on: '2026-09-05',
+      occurred_at: at('2026-09-05', '15:00:00'),
+      data: { lead: 60 },
+    })
+    expect(reminderAt(row, NOW)).toBeNull()
+  })
+
+  it('applies a yearly lead to the next occurrence, not the stored date', () => {
+    const row = entry({
+      occurred_on: '2010-02-13',
+      occurred_at: at('2010-02-13', '18:00:00'),
+      data: { rrule: 'FREQ=YEARLY', lead: 60 * 24 },
+    })
+    const fires = reminderAt(row, NOW)
+    expect(fires?.getFullYear()).toBe(2027)
+    expect(fires?.getMonth()).toBe(1)
+    expect(fires?.getDate()).toBe(12)
+    expect(fires?.getHours()).toBe(18)
   })
 })
 
