@@ -40,13 +40,13 @@ export function AheadSheet({ upcoming, now, onPick, onClose }: Props) {
         <p className="py-2 text-sm text-muted">Nothing in the next fortnight.</p>
       ) : (
         upcoming.map(({ entry, at }) => {
-          const detail = [
+          const timeAt = clockAt(at)
+          const rest = [
             // This sheet exists to answer "what is the phone going to do", and
             // for anything left today "in 47m" answers it where "today" only
             // repeats what the sheet already said. `until` is null on any other
             // day, so the weekday wording still covers the rest of the fortnight.
             until(at, now) ?? when(at, now),
-            clockAt(at),
             repeatLabel(entry),
           ].filter((bit): bit is string => bit !== null)
 
@@ -62,7 +62,13 @@ export function AheadSheet({ upcoming, now, onPick, onClose }: Props) {
                 <span className="sr-only">{KIND_NAME[entry.kind]}. </span>
                 {/* No `block`: it would override the clamp's display. See EntryRow. */}
                 <span className="line-clamp-2 text-sm leading-snug text-ink">{entry.title}</span>
-                <span className="mt-1 block truncate text-xs text-faint">{detail.join(' · ')}</span>
+                {/* The clock leads, a step forward of the rest of the line —
+                    the same rule the timeline itself follows. */}
+                <span className="mt-1 block truncate text-xs text-faint">
+                  <span className="text-muted tabular-nums">{timeAt}</span>
+                  {rest.length > 0 && ' · '}
+                  {rest.join(' · ')}
+                </span>
               </span>
             </button>
           )

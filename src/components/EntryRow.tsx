@@ -25,8 +25,7 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
     row.kind === 'event' && !gone && row.occurred_at !== null
       ? until(parseISO(row.occurred_at), now)
       : null
-  const detail = [
-    soon,
+  const rest = [
     // A repeat has one row, so this line is the only thing that can say the
     // standup on Friday is also the standup on Monday.
     repeatLabel(row),
@@ -79,7 +78,7 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
             {KIND_NAME[row.kind]}
             {gone ? ', done' : ''}.{' '}
           </span>
-          {(at !== null || detail.length > 0) && (
+          {(at !== null || soon !== null || rest.length > 0) && (
             <span className="mt-1 block truncate text-xs text-faint">
               {/* The clock sits a step forward of the rest of the line. There is
                   no time gutter — `occurred_at` is optional, so a column for it
@@ -88,8 +87,13 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
                   the day, and flattened into the list of categories and repeat
                   rules it read as one more tag. */}
               {at !== null && <span className="text-muted tabular-nums">{at}</span>}
-              {at !== null && detail.length > 0 && ' · '}
-              {detail.join(' · ')}
+              {at !== null && (soon !== null || rest.length > 0) && ' · '}
+              {/* The one coloured piece of text on a row: the clock is the fact
+                  you would repeat to somebody else, this is the one you were
+                  reading the row for. */}
+              {soon !== null && <span className="font-medium text-event">{soon}</span>}
+              {soon !== null && rest.length > 0 && ' · '}
+              {rest.join(' · ')}
             </span>
           )}
         </span>

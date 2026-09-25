@@ -97,9 +97,9 @@ export function AnswerCard({ answer, now, onPick }: Props) {
 
           // The date is the heading above, or the caption for a single day.
           // Either way, repeating it here would say nothing.
-          const detail = [
+          const at = row.occurred_at === null ? null : clock(row.occurred_at)
+          const rest = [
             answer.oneDay || answer.grouped ? null : dayHeading(row.occurred_on, now),
-            row.occurred_at === null ? null : clock(row.occurred_at),
             row.category,
           ].filter((bit): bit is string => bit !== null && bit !== '')
 
@@ -142,9 +142,13 @@ export function AnswerCard({ answer, now, onPick }: Props) {
                   >
                     {row.title}
                   </span>
-                  {detail.length > 0 && (
+                  {(at !== null || rest.length > 0) && (
                     <span className="mt-1 block truncate text-xs text-faint">
-                      {detail.join(' · ')}
+                      {/* The clock leads, a step forward of the rest of the
+                          line — the same rule the timeline itself follows. */}
+                      {at !== null && <span className="text-muted tabular-nums">{at}</span>}
+                      {at !== null && rest.length > 0 && ' · '}
+                      {rest.join(' · ')}
                     </span>
                   )}
                 </span>
