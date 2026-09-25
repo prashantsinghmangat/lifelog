@@ -871,3 +871,40 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
 
   return entry
 }
+
+/**
+ * `label: item1, item2, ...` — one line, several rows, gated behind an
+ * explicit colon so nothing about a single line's reading changes. `parse()`
+ * already treats `Lunch, 350.` as one entry, and an unconditional split on a
+ * bare comma would break exactly that — the colon is what makes this opt-in,
+ * the same way `?` opts into a question and `every` opts into a repeat.
+ *
+ * The label is prepended to every item and each is then read by `parse()`
+ * unchanged: a date, a time or a `+` typed in the label falls out for free,
+ * because each item is — textually — the same line with a different tail, and
+ * the items can never disagree about what day they land on.
+ *
+ * The colon must be followed by whitespace, or `5:30pm: prep, snacks` reads
+ * its own clock as the boundary — a clock's colon in this grammar is never
+ * followed by a space, so `\s+` is what tells the two apart without having to
+ * know anything about `takeTime`'s own patterns.
+ *
+ * Requires at least two items. A single item after the colon is not a batch —
+ * `salon: 450 detan` alone reads closer to a label typed out of habit than an
+ * instruction to split, and `parse()` already handles it as one entry, colon
+ * and all.
+ */
+export function parseMulti(input: string, now: Date, defaultDay?: string): ParsedEntry[] | null {
+  const split = /^(.*?):\s+(.+)$/.exec(input)
+  if (split === null) return null
+
+  const label = (split[1] ?? '').trim()
+  const items = (split[2] ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (items.length < 2) return null
+
+  const parsed = items.map((item) => parse(label === '' ? item : `${label} ${item}`, now, defaultDay))
+  return parsed.every((entry): entry is ParsedEntry => entry !== null) ? parsed : null
+}

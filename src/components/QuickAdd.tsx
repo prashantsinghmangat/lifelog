@@ -4,7 +4,7 @@ import { ArrowUpIcon, MicIcon } from './Icons'
 import { KindMark } from './KindMark'
 import { useDictation } from '../hooks/useDictation'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
-import { parse, type ParsedEntry } from '../lib/parser'
+import { parse, parseMulti, type ParsedEntry } from '../lib/parser'
 import { answer as answerTo, parseQuestion, phrase, summarise as summariseLog } from '../lib/query'
 import type { Entry, Kind } from '../types'
 
@@ -93,6 +93,8 @@ type Props = {
    */
   showExamples: boolean
   onSubmit: (parsed: ParsedEntry) => void
+  /** `label: item, item, ...` — one line, several rows. See `parseMulti`. */
+  onSubmitMulti: (parsed: ParsedEntry[]) => void
   /** Every entry, for answering questions. Null until asked for. */
   corpus: Entry[] | null
   onNeedCorpus: () => void
@@ -123,6 +125,7 @@ export function QuickAdd({
   onLeaveAsk,
   showExamples,
   onSubmit,
+  onSubmitMulti,
   corpus,
   onNeedCorpus,
   prefill,
@@ -184,10 +187,24 @@ export function QuickAdd({
 
   const asking = question !== null
 
+  /**
+   * `label: item, item, ...` — tried ahead of a single parse, and only ever in
+   * Log mode: a line that doesn't match reads as `null` and everything below
+   * falls through to `parsed` exactly as it did before this existed.
+   */
+  const multi = useMemo(
+    () => (asking || mode === 'ask' ? null : parseMulti(text, now, day)),
+    [asking, mode, text, now, day],
+  )
+  /** The one figure worth surfacing for a batch — a count alone does not say
+   *  whether it added up to anything. Zero when nothing in the batch has a
+   *  price, which is not shown at all rather than printed as "₹0 total". */
+  const multiTotal = multi?.reduce((sum, entry) => sum + (entry.amountPaise ?? 0), 0) ?? 0
+
   // `day`, not today: an undated entry belongs to the day being viewed.
   const parsed = useMemo(
-    () => (asking || mode === 'ask' ? null : parse(text, now, day)),
-    [asking, mode, text, now, day],
+    () => (asking || mode === 'ask' || multi !== null ? null : parse(text, now, day)),
+    [asking, mode, text, now, day, multi],
   )
   const sameDay = parsed === null || parsed.occurredOn === day
 
@@ -220,7 +237,7 @@ export function QuickAdd({
     question === null || summary === null ? null : phrase(summary, question, now)
 
   /** There is something worth saving, so the send button takes the mic's place. */
-  const ready = parsed !== null && !asking
+  const ready = (parsed !== null || multi !== null) && !asking
 
   function submit(event: FormEvent | KeyboardEvent) {
     event.preventDefault()
@@ -228,10 +245,18 @@ export function QuickAdd({
     // keyboard's own Enter reaches here, and the re-parse below would happily
     // file "? how many times ping me" away as a note.
     if (asking) return
-    // Re-parsed against the real clock. `now` is held in state and refreshed
-    // only on focus, which is fine for a preview but wrong for saving: with the
-    // app left open, "in 2 minutes" measured from the last focus can already be
-    // in the past, and the reminder is then silently skipped as overdue.
+    // Re-parsed against the real clock, for the same reason the single-entry
+    // path below does: `now` is held in state and refreshed only on focus,
+    // which is fine for a preview but wrong for saving.
+    const freshMulti = parseMulti(text, new Date(), day)
+    if (freshMulti !== null) {
+      onSubmitMulti(freshMulti)
+      setText('')
+      return
+    }
+    // With the app left open, "in 2 minutes" measured from the last focus can
+    // already be in the past, and the reminder is then silently skipped as
+    // overdue.
     const fresh = parse(text, new Date(), day)
     if (!fresh) return
     onSubmit(fresh)
@@ -374,6 +399,22 @@ export function QuickAdd({
                 <span className="sr-only">{spoken}</span>
               ) : asking ? (
                 <span className="text-faint">…</span>
+              ) : multi ? (
+                // One text node, the same discipline the single-entry preview
+                // keeps: a count and, only where it means something, a total —
+                // never the per-item breakdown, which would be the longest
+                // line in the app and unreadable at a glance either way. Every
+                // item shares the label's date, so they share this warning too.
+                <span className="text-muted tabular-nums">
+                  {multi.length} entries
+                  {multiTotal > 0 && ` · ${rupees(multiTotal)} total`}
+                  {multi[0]?.occurredOn !== day && (
+                    <span className="font-medium text-event">
+                      {' → saving to '}
+                      {relativeDay(multi[0]?.occurredOn ?? day, now)}
+                    </span>
+                  )}
+                </span>
               ) : parsed ? (
                 // The whole line is one text node on purpose — it is read aloud as
                 // one phrase, and splitting it into coloured parts would turn a

@@ -38,6 +38,7 @@ function entry(over: Partial<Entry>): Entry {
 
 function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   const onSubmit = vi.fn<(parsed: ParsedEntry) => void>()
+  const onSubmitMulti = vi.fn<(parsed: ParsedEntry[]) => void>()
   const onNeedCorpus = vi.fn()
   const onPrefilled = vi.fn()
   const onHelp = vi.fn()
@@ -53,6 +54,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
     onLeaveAsk,
     showExamples: false,
     onSubmit,
+    onSubmitMulti,
     corpus: null,
     onNeedCorpus,
     prefill: null,
@@ -66,7 +68,18 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   // Plain DOM assertions throughout, rather than pulling in jest-dom for
   // sugar: one less dependency, and `.value` reads no worse than a matcher.
   const box = screen.getByLabelText('What happened?') as HTMLInputElement
-  return { view, box, onSubmit, onNeedCorpus, onPrefilled, onHelp, onOpenEntry, onLeaveAsk, props }
+  return {
+    view,
+    box,
+    onSubmit,
+    onSubmitMulti,
+    onNeedCorpus,
+    onPrefilled,
+    onHelp,
+    onOpenEntry,
+    onLeaveAsk,
+    props,
+  }
 }
 
 describe('capturing an entry', () => {
@@ -141,6 +154,34 @@ describe('the empty-field hint', () => {
     // The hint is real text on screen, but not inside `role="status"` — that
     // region is what a screen reader announces, and it must start empty.
     expect(document.getElementById('quick-add-preview')?.textContent).toBe('')
+  })
+})
+
+describe('one line, several entries', () => {
+  it('previews a count and the total once a batch is recognised', async () => {
+    const { box } = setup()
+    await userEvent.type(box, 'salon: 450 detan, 100 cutting, beard cutting')
+    expect(screen.getByText(/3 entries/).textContent).toContain('₹550 total')
+  })
+
+  it('submits the whole batch through onSubmitMulti, not onSubmit', async () => {
+    const { box, onSubmit, onSubmitMulti } = setup()
+    await userEvent.type(box, 'salon: 450 detan, 100 cutting, beard cutting{Enter}')
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onSubmitMulti).toHaveBeenCalledTimes(1)
+    const batch = onSubmitMulti.mock.calls[0]?.[0]
+    expect(batch).toHaveLength(3)
+    expect(batch?.[0]).toMatchObject({ kind: 'expense', amountPaise: 45000 })
+    expect(box.value).toBe('')
+  })
+
+  it('falls back to a single entry when the line has no comma to split on', async () => {
+    const { box, onSubmit, onSubmitMulti } = setup()
+    await userEvent.type(box, 'salon: 450 detan{Enter}')
+
+    expect(onSubmitMulti).not.toHaveBeenCalled()
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 })
 

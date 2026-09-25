@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parse } from './parser'
+import { parse, parseMulti } from './parser'
 
 // Tuesday, 1 September 2026, 10:00 local.
 const NOW = new Date(2026, 8, 1, 10, 0, 0)
@@ -1317,5 +1317,55 @@ describe('a lead time before a reminder', () => {
     expect(r?.data.lead).toBeUndefined()
     expect(r?.durationMinutes).toBe(60)
     expect(r?.title).toBe('meeting before lunch')
+  })
+})
+
+describe('one line, several entries', () => {
+  const pm = (input: string) => parseMulti(input, NOW)
+
+  it('splits a labelled line into one entry per item, label prepended to each', () => {
+    const r = pm('salon: 450 detan, 100 cutting, beard cutting')
+    expect(r).toHaveLength(3)
+    expect(r?.[0]).toMatchObject({ kind: 'expense', amountPaise: 45000, title: 'salon detan' })
+    expect(r?.[1]).toMatchObject({ kind: 'expense', amountPaise: 10000, title: 'salon cutting' })
+    // No amount, no duration, no future date: the same reading a lone line gets.
+    expect(r?.[2]).toMatchObject({ kind: 'note', title: 'salon beard cutting' })
+  })
+
+  it('lets a date or time typed in the label reach every item', () => {
+    const r = pm('salon tomorrow: 450 detan, 100 cutting')
+    expect(r?.[0]?.occurredOn).toBe(TOMORROW)
+    expect(r?.[1]?.occurredOn).toBe(TOMORROW)
+  })
+
+  it('does nothing to a line with no colon, or with a colon but no comma', () => {
+    expect(pm('350 lunch swiggy')).toBeNull()
+    expect(pm('salon: 450 detan')).toBeNull()
+  })
+
+  it('does not mistake a clock’s own colon for the label boundary', () => {
+    // "5:30pm" has a colon with no space after it; the label boundary is the
+    // one after "pm", which does.
+    const r = pm('meeting 5:30pm: prep, snacks')
+    expect(r).toHaveLength(2)
+    expect(r?.[0]?.occurredAt?.includes('T17:30:00')).toBe(true)
+    expect(r?.[0]?.title).toBe('meeting prep')
+    expect(r?.[1]?.title).toBe('meeting snacks')
+  })
+
+  it('drops empty items from a doubled or trailing comma', () => {
+    const r = pm('salon: 450 detan,, 100 cutting,')
+    expect(r).toHaveLength(2)
+  })
+
+  it('works with no label at all — just a colon and a comma list', () => {
+    const r = pm(': 450 detan, 100 cutting')
+    expect(r?.[0]?.title).toBe('detan')
+    expect(r?.[1]?.title).toBe('cutting')
+  })
+
+  it('carries a leading + into every item, since each item is read from scratch', () => {
+    const r = pm('+salon: 450 detan, 100 cutting')
+    expect(r?.every((entry) => entry.kind === 'event')).toBe(true)
   })
 })

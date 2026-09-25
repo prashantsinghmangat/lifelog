@@ -212,6 +212,20 @@ describe('logging a reminder', () => {
   })
 })
 
+describe('one line, several entries', () => {
+  it('saves every item and confirms the batch, not one entry at a time', async () => {
+    scheduleResult = 'skipped'
+    const box = await open()
+    await userEvent.type(box, 'salon: 450 detan, 100 cutting, beard cutting{Enter}')
+
+    // One combined toast for the batch, total included — not one per row.
+    await waitFor(() => expect(screen.getByText('3 entries saved · ₹550')).toBeTruthy())
+    expect(await screen.findByText('salon detan')).toBeTruthy()
+    expect(screen.getByText('salon cutting')).toBeTruthy()
+    expect(screen.getByText('salon beard cutting')).toBeTruthy()
+  })
+})
+
 describe('deleting and taking it back', () => {
   const row = {
     id: 'server-1',

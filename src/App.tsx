@@ -516,6 +516,54 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
       })
   }
 
+  /**
+   * `label: item, item, ...` saved as one gesture — see `parseMulti`. Each row
+   * is added exactly as `submit` would add it alone, but the toast has to
+   * speak for the whole batch at once: a save has never offered Undo, so this
+   * does not invent one just because there are several, and reminders are
+   * armed silently rather than narrated one at a time, which a single toast
+   * could only ever show the last of anyway. A problem across the batch still
+   * gets said — silence stays reserved for the case where nothing went wrong.
+   */
+  function submitMany(parsedList: ParsedEntry[]) {
+    const rows = parsedList.map((parsed) => add(parsed))
+    setCorpus(null)
+    const current = new Date()
+    setNow(current)
+
+    const total = rows.reduce((sum, row) => sum + (row.amount_paise ?? 0), 0)
+    const events = rows.filter((row) => row.kind === 'event')
+    const calendar =
+      !isNative() && events.length > 0
+        ? { label: 'Add to calendar', run: () => void addToCalendar(events, 'lifelog-events.ics') }
+        : undefined
+
+    setToast({
+      text: `${rows.length} entries saved${total > 0 ? ` · ${rupees(total)}` : ''}`,
+      action: calendar,
+    })
+
+    // One combined outcome for the whole batch, not one attempt per row: a
+    // toast can only show the last of several anyway, and reporting each
+    // failure alongside the save that already succeeded would say less than
+    // a single sentence naming the worst thing that happened.
+    void Promise.all(
+      rows.map((row) =>
+        scheduleReminder(row, current)
+          .then((result) => result)
+          .catch((failure: unknown) => ({ failed: message(failure) })),
+      ),
+    ).then((results) => {
+      const failed = results.find((result) => typeof result === 'object')
+      if (failed !== undefined) {
+        setToast({ text: `Saved, but a reminder failed: ${failed.failed}` })
+      } else if (results.includes('blocked')) {
+        setNotify('denied')
+        setToast({ text: 'Saved, but some reminders are blocked' })
+      }
+    })
+  }
+
   function deleteRow(row: Row) {
     // Undo has to put the alarm back as well as the row. The delete cancels
     // every id this entry owns, and `restore` only rewrites the log — so a
@@ -802,6 +850,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                 onLeaveAsk={() => setView('today')}
                 showExamples={view === 'today' && !loading && shown.length === 0}
                 onSubmit={submit}
+                onSubmitMulti={submitMany}
                 corpus={corpus}
                 onNeedCorpus={loadCorpus}
                 prefill={prefill}

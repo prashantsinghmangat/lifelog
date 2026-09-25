@@ -530,6 +530,21 @@ consistent is the only version where they agree. The cost is a wobble at month b
 month before 28 Feb" lands on 29 January, not 28 — invisible at the point of use because the editor
 shows the resolved date rather than the arithmetic behind it.
 
+**`label: item, item, ...` is one line and several rows, gated behind a colon so no existing line
+reads any differently.** `parse()` already treats `Lunch, 350.` as one entry, and splitting on a
+bare comma would break exactly that — the colon is what makes `parseMulti` opt-in, the same way `?`
+opts into a question and `every` opts into a repeat. The label is prepended to every item and each
+is then handed to the ordinary, untouched `parse()`: a date, a time or a leading `+` typed in the
+label reaches every item for free, because each item is — textually — the same line with a
+different tail, and the items can never disagree about what day they land on. The colon must be
+followed by whitespace, or a clock's own colon (`5:30pm: prep, snacks`) is read as the boundary —
+`5:30` never has a space after it in anything this parser accepts, which is what tells the two
+apart without `parseMulti` needing to know anything about `takeTime`'s patterns. Requires two items:
+`salon: 450 detan` alone is a label typed out of habit, not an instruction to split, and `parse()`
+already reads it as one entry, colon included. Saving a batch has never offered the single save
+path's Undo, either — a save was never undoable one at a time, and a batch does not invent the
+exception.
+
 **A silent reminder is worse than a broken one.** Every path through `reminders.ts` reports an
 outcome (`scheduled` / `blocked` / `skipped`) or a caught message, because three separate bugs here
 were invisible for exactly as long as their promises rejected into nothing.
