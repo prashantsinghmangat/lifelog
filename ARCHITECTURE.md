@@ -1200,16 +1200,22 @@ TypeScript strict with `noUncheckedIndexedAccess`. No `any`, no non-null asserti
 layout — no barrel files, no `index.ts` re-exports, no directory per component.
 
 **The runtime dependency list is `react`, `react-dom`, `@supabase/supabase-js`, `date-fns` and
-Capacitor (`core`, `android`, `local-notifications`, `app`, `filesystem`, `share`). Ask before
-adding anything else.**
+Capacitor (`core`, `android`, `local-notifications`, `app`, `filesystem`, `share`, `haptics`). Ask
+before adding anything else.**
 The original "four dependencies only" rule was retired deliberately when the Android app was
 added, not broken by accident: Capacitor plugins are runtime dependencies, and each one was argued
 for on its own — `local-notifications` because no web API can raise an alarm with the app closed,
-`app` because Android's back button reaches nothing without it, and `filesystem` + `share`
+`app` because Android's back button reaches nothing without it, `filesystem` + `share`
 because a WebView has neither a download nor a share sheet, so without them the only manual backup
-this app has did nothing on a phone. The bar is unchanged for everything else: no component library, no state manager, no data-fetching library, no icon
+this app has did nothing on a phone, and `haptics` because capture is the product — the one act
+the app exists for should confirm itself in the hand, and no web API reaches a phone's vibration
+motor with the intent a native impact carries. Reached the same way `local-notifications` is:
+`src/lib/haptics.ts` imports it dynamically behind `isNative()`, exactly like `reminders.ts`,
+`back.ts` and `deliver.ts`, so it never reaches the web bundle and costs nothing of the budget
+below. The bar is unchanged for everything else: no component library, no state manager, no data-fetching library, no icon
 package; icons are inline SVG. Comments only where the *why* is unobvious. Plain, dense, fast UI: system
-fonts, one 100ms fade on new rows, nothing else animated.
+fonts, one 100ms fade on new rows, a short spring on the sheet's entrance and exit, nothing else
+animated.
 
 ## Deliberately not built
 

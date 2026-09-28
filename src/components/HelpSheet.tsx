@@ -83,6 +83,8 @@ type Props = {
 export function HelpSheet({ onPick, onClose }: Props) {
   return (
     <Sheet label="How to use lifelog" onClose={onClose}>
+      {(requestClose) => (
+      <>
       <h2 className="text-sm font-semibold">How to use lifelog</h2>
       <p className="mt-1 text-xs text-muted">
         One box. Type what happened and press send. Tap any example to try it.
@@ -100,7 +102,10 @@ export function HelpSheet({ onPick, onClose }: Props) {
               <li key={example.text}>
                 <button
                   type="button"
-                  onClick={() => onPick(example.text)}
+                  onClick={() => {
+                    onPick(example.text)
+                    requestClose()
+                  }}
                   // `min-h-11`, because `py-2` on a 20px line is 36px and there
                   // are 34 of these stacked — the densest run of targets in the
                   // app, on the surface where reading about something and
@@ -126,6 +131,8 @@ export function HelpSheet({ onPick, onClose }: Props) {
         Deleting is undoable, editing an entry moves its reminder with it, and swiping sideways
         changes the day.
       </p>
+      </>
+      )}
     </Sheet>
   )
 }

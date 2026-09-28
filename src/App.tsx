@@ -35,6 +35,7 @@ import {
   rowValue,
   rupees,
 } from './lib/format'
+import { light, medium } from './lib/haptics'
 import { byClock, onThisDay } from './lib/history'
 import { forget } from './lib/identity'
 import { forCalendar, toIcs } from './lib/ics'
@@ -458,6 +459,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
 
   function submit(parsed: ParsedEntry) {
     const row = add(parsed)
+    void light()
     // Answers are computed from a cached copy of the log, so a new entry has to
     // invalidate it or the next question quietly ignores what was just added.
     setCorpus(null)
@@ -527,6 +529,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
    */
   function submitMany(parsedList: ParsedEntry[]) {
     const rows = parsedList.map((parsed) => add(parsed))
+    void light()
     setCorpus(null)
     const current = new Date()
     setNow(current)
@@ -581,10 +584,13 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
       run: () => {
         restore(row)
         rearmRow(row, new Date())
+        void light()
       },
     }
+    void medium()
     remove(row)
-    setEditing(null)
+    // Closing is the Delete button's own job now, through `requestClose`,
+    // called right after this returns.
     setToast({ text: 'Entry deleted', action: undo })
 
     // Caught, not voided into nothing. An alarm the plugin refused to cancel is
@@ -1068,7 +1074,8 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
             // Against the real clock, not the state one: `now` is refreshed on a
             // 30-second tick, and `alarms` drops anything already due.
             rearmRow({ ...editing, ...patch }, new Date())
-            setEditing(null)
+            // Closing is `EntryEditor`'s own job now, through `requestClose` —
+            // called right after this, from inside its own `save()`.
           }}
           onDelete={() => deleteRow(editing)}
           onAddToCalendar={() => void addToCalendar([editing], 'lifelog-event.ics')}
@@ -1080,20 +1087,17 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
         <AheadSheet
           upcoming={upcoming}
           now={now}
-          onPick={(picked) => {
-            setDay(picked)
-            setAheadOpen(false)
-          }}
+          // Closing is `AheadSheet`'s own job now, through `requestClose`.
+          onPick={(picked) => setDay(picked)}
           onClose={() => setAheadOpen(false)}
         />
       )}
 
       {helpOpen && (
         <HelpSheet
-          onPick={(text) => {
-            setPrefill(text)
-            setHelpOpen(false)
-          }}
+          // Closing is `HelpSheet`'s own job now, through `requestClose` —
+          // this only owns what picking an example actually does.
+          onPick={(text) => setPrefill(text)}
           onClose={() => setHelpOpen(false)}
         />
       )}

@@ -32,6 +32,8 @@ function when(at: Date, now: Date): string {
 export function AheadSheet({ upcoming, now, onPick, onClose }: Props) {
   return (
     <Sheet label="What is coming" onClose={onClose}>
+      {(requestClose) => (
+      <>
       <p className="mb-2 text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
         Coming up
       </p>
@@ -54,7 +56,10 @@ export function AheadSheet({ upcoming, now, onPick, onClose }: Props) {
             <button
               key={`${entry.id}-${at.getTime()}`}
               type="button"
-              onClick={() => onPick(dayKey(at))}
+              onClick={() => {
+                onPick(dayKey(at))
+                requestClose()
+              }}
               className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
             >
               <KindMark kind={entry.kind} />
@@ -73,6 +78,8 @@ export function AheadSheet({ upcoming, now, onPick, onClose }: Props) {
             </button>
           )
         })
+      )}
+      </>
       )}
     </Sheet>
   )

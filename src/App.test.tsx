@@ -278,8 +278,10 @@ describe('deleting and taking it back', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByText('Entry deleted')).toBeNull()
-    // Dismissed, not undone: the entry stays deleted.
-    expect(screen.queryByText('lunch swiggy')).toBeNull()
+    // Dismissed, not undone: the entry stays deleted. The editor's own close
+    // is deferred behind its exit spring, so the title surviving in its still-
+    // open textarea for a moment longer is that animation, not an undo.
+    await waitFor(() => expect(screen.queryByText('lunch swiggy')).toBeNull())
   })
 })
 

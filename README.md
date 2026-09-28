@@ -32,11 +32,11 @@ Single user. No sharing, no onboarding, no settings.
 
 The browser bundle has exactly four dependencies: `react`, `react-dom`,
 `@supabase/supabase-js`, `date-fns`. Capacitor (`@capacitor/core`, `@capacitor/android`,
-`@capacitor/local-notifications`, `@capacitor/app`, `@capacitor/filesystem`, `@capacitor/share`)
-was added with the Android app and reaches the web bundle only through the dynamic imports in
-`reminders.ts`, `back.ts` and `deliver.ts`; `@netlify/blobs` is used by the backup
-functions and never by the app. No component library, no state manager, no data-fetching
-library, no icon package. The handful of icons are inline SVG.
+`@capacitor/local-notifications`, `@capacitor/app`, `@capacitor/filesystem`, `@capacitor/share`,
+`@capacitor/haptics`) was added with the Android app and reaches the web bundle only through the
+dynamic imports in `reminders.ts`, `back.ts`, `deliver.ts` and `haptics.ts`; `@netlify/blobs` is
+used by the backup functions and never by the app. No component library, no state manager, no
+data-fetching library, no icon package. The handful of icons are inline SVG.
 
 ## Setup
 

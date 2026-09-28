@@ -166,7 +166,7 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
     data: nextData,
   }
 
-  function save(event: FormEvent) {
+  function save(event: FormEvent, requestClose: () => void) {
     event.preventDefault()
     if (!cleaned) {
       setProblem('An entry needs a title.')
@@ -208,6 +208,11 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
 
     setProblem(null)
     onSave(patch)
+    // The parent's `setEditing(null)` no longer runs from inside `onSave`
+    // itself — it happens here, after the write, through the same spring
+    // exit Cancel and Delete use, rather than unmounting the instant the
+    // patch is handed off.
+    requestClose()
   }
 
   // The date and time are editable below, so repeating them here would be noise.
@@ -294,7 +299,8 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
 
   return (
     <Sheet label={`Edit ${row.title}`} onClose={onClose}>
-      <form onSubmit={save}>
+      {(requestClose) => (
+      <form onSubmit={(event) => save(event, requestClose)}>
         {/* Editable, because the parser guesses and a wrong guess otherwise
             means deleting and retyping the whole entry. */}
         <div
@@ -545,20 +551,24 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
           </button>
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="h-11 rounded-lg px-3 text-sm text-muted transition-colors hover:bg-sunken"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={onDelete}
+            onClick={() => {
+              onDelete()
+              requestClose()
+            }}
             className="h-11 rounded-lg px-3 text-sm text-expense transition-colors hover:bg-sunken"
           >
             Delete
           </button>
         </div>
       </form>
+      )}
     </Sheet>
   )
 }

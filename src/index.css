@@ -143,14 +143,24 @@ body {
   outline: none;
 }
 
+/* The one spring in the app, defined once so the sheet and a new row cannot
+   drift into two different feels. A short overshoot past 1 and back — a
+   linear ease is what makes a sheet read as snapped rather than opened, and
+   the fix has to be this cheap or it risks becoming the bouncy app the plain
+   ease was avoiding in the first place. */
+:root {
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
 @keyframes row-in {
   from {
     opacity: 0;
+    transform: translateY(3px);
   }
 }
 
 .row-in {
-  animation: row-in 100ms ease-out;
+  animation: row-in 140ms var(--ease-spring);
 }
 
 @keyframes sheet-in {
@@ -161,7 +171,23 @@ body {
 }
 
 .sheet-in {
-  animation: sheet-in 120ms ease-out;
+  animation: sheet-in 160ms var(--ease-spring);
+}
+
+/* The reverse of `sheet-in`, not a separate design: same travel, same
+   spring, the other direction. `Sheet.tsx` waits on this animation's own
+   `animationend` before it actually unmounts, so under reduced motion —
+   where the block below collapses the duration to near zero — that wait is
+   also near zero, with no separate code path needed. */
+@keyframes sheet-out {
+  to {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+}
+
+.sheet-out {
+  animation: sheet-out 160ms var(--ease-spring);
 }
 
 /* A horizontal day swipe must not also pan the page sideways. Vertical scroll

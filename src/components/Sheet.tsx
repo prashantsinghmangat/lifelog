@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { onBack, topmost } from '../lib/back'
 
 const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -28,7 +28,13 @@ type Props = {
   /** Accessible name for the dialog. */
   label: string
   onClose: () => void
-  children: ReactNode
+  /**
+   * Plain content, or a function handed this sheet's own `requestClose` — for
+   * a Cancel, Done, or post-Save/Delete control that must play the same exit
+   * spring as the backdrop and Escape, rather than calling `onClose` directly
+   * and skipping it.
+   */
+  children: ReactNode | ((requestClose: () => void) => ReactNode)
 }
 
 /**
@@ -39,6 +45,7 @@ type Props = {
 export function Sheet({ label, onClose, children }: Props) {
   const panel = useRef<HTMLDivElement>(null)
   const returnTo = useRef<HTMLElement | null>(null)
+  const [closing, setClosing] = useState(false)
 
   // Held in a ref, for the same reason the toast holds its dismiss in one:
   // every caller passes an inline `() => setEditing(null)`, which is a new
@@ -50,6 +57,38 @@ export function Sheet({ label, onClose, children }: Props) {
   useEffect(() => {
     close.current = onClose
   }, [onClose])
+
+  /**
+   * Every dismissal — backdrop, Escape, the back button, and whatever a
+   * child calls through the render-prop — funnels through here, so the exit
+   * animation is one thing to get right instead of four. Plays `.sheet-out`
+   * and defers the real `onClose` (which is what actually unmounts this)
+   * until the animation is done. Stable ref, like `close` above, since the
+   * back-button registration below must keep pointing at the same function
+   * for as long as this sheet exists.
+   */
+  const requestClose = useRef(() => setClosing(true))
+
+  useEffect(() => {
+    if (!closing) return
+    const node = panel.current
+    const done = () => close.current()
+    if (node === null) {
+      done()
+      return
+    }
+    node.addEventListener('animationend', done)
+    // A backstop, not a guess at the animation's real duration: `animationend`
+    // never fires at all under `prefers-reduced-motion` in some engines, and
+    // never fires in a test environment that does not run real CSS animations
+    // in the first place. Longer than `.sheet-out`'s own 160ms so the real
+    // event wins whenever one is actually dispatched.
+    const timer = window.setTimeout(done, 250)
+    return () => {
+      node.removeEventListener('animationend', done)
+      window.clearTimeout(timer)
+    }
+  }, [closing])
 
   useEffect(() => {
     returnTo.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -77,7 +116,7 @@ export function Sheet({ label, onClose, children }: Props) {
    * This sheet's own dismiss, stable for its whole life, so the back stack and
    * the Escape handler below are talking about the same sheet.
    */
-  const dismiss = useRef(() => close.current())
+  const dismiss = useRef(() => requestClose.current())
   useEffect(() => onBack(dismiss.current), [])
 
   useEffect(() => {
@@ -86,7 +125,7 @@ export function Sheet({ label, onClose, children }: Props) {
       // without the check a sheet opened from another sheet closed both of them
       // on one press — and returned focus to a control that unmounted with it.
       if (event.key === 'Escape') {
-        if (topmost(dismiss.current)) onClose()
+        if (topmost(dismiss.current)) requestClose.current()
         return
       }
       if (event.key !== 'Tab') return
@@ -115,7 +154,7 @@ export function Sheet({ label, onClose, children }: Props) {
 
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [])
 
   return (
     // Above the toast, not below it. A toast is `fixed bottom-0` at z-30, and a
@@ -128,7 +167,7 @@ export function Sheet({ label, onClose, children }: Props) {
     // and is announced either way.
     <div
       role="presentation"
-      onClick={onClose}
+      onClick={() => requestClose.current()}
       className="fixed inset-0 z-40 flex items-end justify-center bg-black/35 sm:items-center sm:p-4"
     >
       <div
@@ -138,9 +177,9 @@ export function Sheet({ label, onClose, children }: Props) {
         aria-label={label}
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
-        className="sheet-in max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-raised p-5 pb-[max(1.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_-12px_rgb(0_0_0/0.25)] outline-none sm:max-w-sm sm:rounded-2xl sm:pb-5 sm:shadow-[0_24px_60px_-20px_rgb(0_0_0/0.35)]"
+        className={`${closing ? 'sheet-out' : 'sheet-in'} max-h-[85dvh] w-full overflow-y-auto rounded-t-2xl border border-line bg-raised p-5 pb-[max(1.75rem,env(safe-area-inset-bottom))] shadow-[0_-8px_40px_-12px_rgb(0_0_0/0.25)] outline-none sm:max-w-sm sm:rounded-2xl sm:pb-5 sm:shadow-[0_24px_60px_-20px_rgb(0_0_0/0.35)]`}
       >
-        {children}
+        {typeof children === 'function' ? children(() => requestClose.current()) : children}
       </div>
     </div>
   )

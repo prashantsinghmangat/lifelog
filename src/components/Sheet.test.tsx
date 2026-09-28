@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Sheet } from './Sheet'
@@ -13,11 +13,18 @@ import { back } from '../lib/back'
  * The point of testing it *here* rather than only in `back.test.ts` is the
  * wiring: a sheet that forgets to register is a sheet that back walks straight
  * past, and nothing else on the screen would look any different.
+ *
+ * `onClose` itself is now deferred behind the exit spring — jsdom never runs
+ * a real CSS animation, so `animationend` never fires here and every path to
+ * `onClose` resolves through `Sheet`'s own timeout backstop instead. Every
+ * assertion on `onClose` below is therefore a `waitFor`, not a synchronous
+ * check — that delay, not a missing call, is what a bare `expect` would have
+ * reported as failure.
  */
 afterEach(cleanup)
 
 describe('a sheet and the back button', () => {
-  it('closes on back, through the same close everything else uses', () => {
+  it('closes on back, through the same close everything else uses', async () => {
     const onClose = vi.fn()
     render(
       <Sheet label="Edit lunch" onClose={onClose}>
@@ -26,7 +33,7 @@ describe('a sheet and the back button', () => {
     )
 
     expect(back()).toBe('closed')
-    expect(onClose).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 
   it('stops answering once it has gone, so back belongs to the app again', () => {
@@ -50,7 +57,7 @@ describe('a sheet and the back button', () => {
    * those; registering against a stale copy would call a closure that no
    * longer closes anything.
    */
-  it('calls the current close after the page has re-rendered', () => {
+  it('calls the current close after the page has re-rendered', async () => {
     const stale = vi.fn()
     const fresh = vi.fn()
     const { rerender } = render(
@@ -66,13 +73,17 @@ describe('a sheet and the back button', () => {
     )
 
     expect(back()).toBe('closed')
-    expect(fresh).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(fresh).toHaveBeenCalledTimes(1))
     expect(stale).not.toHaveBeenCalled()
   })
 
-  // The three ways out have to stay one way out: back, Escape and the scrim all
-  // reach the same handler, or closing a sheet means three things.
-  it('leaves Escape and the scrim working exactly as before', async () => {
+  // The three ways out have to stay one way out: back, Escape and the scrim
+  // all reach the same handler, or closing a sheet means three things. Two
+  // separate sheets, not one triggered twice — once closing, a second
+  // dismissal on the same sheet is not a fresh close, it is the one already
+  // under way, which `requestClose`'s own guard is what this would actually
+  // be testing rather than the three paths themselves.
+  it('reaches the same close from Escape', async () => {
     const onClose = vi.fn()
     render(
       <Sheet label="What is coming" onClose={onClose}>
@@ -81,12 +92,21 @@ describe('a sheet and the back button', () => {
     )
 
     await userEvent.keyboard('{Escape}')
-    expect(onClose).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  it('reaches the same close from the scrim', async () => {
+    const onClose = vi.fn()
+    render(
+      <Sheet label="What is coming" onClose={onClose}>
+        <p>coming up</p>
+      </Sheet>,
+    )
 
     const scrim = screen.getByRole('dialog').parentElement
     if (scrim === null) throw new Error('no scrim')
     await userEvent.click(scrim)
-    expect(onClose).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
   })
 })
 
@@ -169,7 +189,7 @@ describe('two sheets at once', () => {
 
     await userEvent.keyboard('{Escape}')
 
-    expect(closeOver).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(closeOver).toHaveBeenCalledTimes(1))
     expect(closeUnder).not.toHaveBeenCalled()
   })
 })
