@@ -646,8 +646,12 @@ describe('the four destinations', () => {
     // The sentence the live region announces, which is one node and therefore
     // unambiguous — the card's own lead and the row beneath it both say ₹350.
     await waitFor(() => expect(screen.getByText(/₹350 · 1 entry/)).toBeTruthy())
-    // Answered, not logged: nothing is on the timeline titled with the question.
-    expect(screen.queryByText('how much today')).toBeNull()
+    // Answered, not logged: nothing is on the timeline titled with the
+    // question. Excludes the capture box itself — Enter in Ask mode leaves
+    // the question sitting in it for editing, and unlike the single-line
+    // input this replaced, a textarea's value is a real text node `getByText`
+    // would otherwise match.
+    expect(screen.queryByText('how much today', { ignore: 'textarea' })).toBeNull()
   })
 
   it('opens the entry when a result is tapped, rather than looking like a cleared search', async () => {

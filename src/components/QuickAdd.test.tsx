@@ -68,7 +68,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
   const view = render(<QuickAdd {...props} />)
   // Plain DOM assertions throughout, rather than pulling in jest-dom for
   // sugar: one less dependency, and `.value` reads no worse than a matcher.
-  const box = screen.getByLabelText('What happened?') as HTMLInputElement
+  const box = screen.getByLabelText('What happened?') as HTMLTextAreaElement
   return {
     view,
     box,
@@ -137,6 +137,30 @@ describe('capturing an entry', () => {
     expect(parsed?.kind).toBe('event')
     expect(parsed?.occurredAt).toBeDefined()
     expect(new Date(parsed?.occurredAt ?? 0).getTime()).toBeGreaterThan(Date.now())
+  })
+
+  it('grows with what is typed instead of clipping to one line', async () => {
+    // jsdom computes no real layout, so height itself is not assertable —
+    // what matters here is that the element is one that *can* grow (a
+    // textarea, not the single-line input this replaced) and that a long,
+    // multi-line paste survives in full rather than the box silently
+    // dropping anything.
+    const { box } = setup()
+    expect(box.tagName).toBe('TEXTAREA')
+    const long = 'first line\nsecond line\nthird line, considerably longer than the box is wide'
+    await userEvent.click(box)
+    await userEvent.paste(long)
+    expect(box.value).toBe(long)
+  })
+
+  it('inserts a newline on Shift+Enter instead of submitting', async () => {
+    const { box, onSubmit } = setup()
+    await userEvent.type(box, 'first line')
+    await userEvent.type(box, '{Shift>}{Enter}{/Shift}')
+    await userEvent.type(box, 'second line')
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(box.value).toBe('first line\nsecond line')
   })
 })
 

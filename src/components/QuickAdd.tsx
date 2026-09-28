@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnswerCard } from './AnswerCard'
 import { ArrowUpIcon, MicIcon } from './Icons'
 import { KindMark } from './KindMark'
@@ -197,6 +197,21 @@ export function QuickAdd({
 }: Props) {
   const [text, setText] = useState('')
   const dictation = useDictation(setText)
+  const box = useRef<HTMLTextAreaElement>(null)
+
+  /**
+   * Grows with what's typed or pasted, up to `max-h-40` in the className
+   * below — past that it scrolls internally rather than pushing the preview
+   * row and the rest of the page down. The reset-to-`auto` step is what lets
+   * it shrink back too: reading `scrollHeight` while the old height is still
+   * applied would only ever measure "at least as tall as before".
+   */
+  useEffect(() => {
+    const el = box.current
+    if (el === null) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [text])
 
   // Filled rather than submitted, so an example from the manual can be read,
   // edited and understood before it becomes an entry.
@@ -345,9 +360,10 @@ export function QuickAdd({
           rather than drawn on it: this is the strongest interactive thing on
           the screen and the only one that has to be found without looking. */}
       <div className="capture order-last mt-2 rounded-xl border border-edge bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors focus-within:border-muted lg:order-first lg:mt-0">
-        <input
+        <textarea
           id="quick-add"
-          type="text"
+          ref={box}
+          rows={1}
           value={text}
           autoFocus
           autoCapitalize="none"
@@ -366,7 +382,10 @@ export function QuickAdd({
           onKeyDown={(event) => {
             // Explicit, because implicit form submission on an IME action key
             // is not something every Android keyboard agrees about.
-            if (event.key === 'Enter') {
+            // Shift+Enter falls through to the textarea's own default — a
+            // literal newline — rather than submitting, which is the only
+            // way to type a genuinely multi-line note on purpose.
+            if (event.key === 'Enter' && !event.shiftKey) {
               event.preventDefault()
               // The answer is already on screen — it updates as you type — so
               // there is nothing to send. Dropping the keyboard is the useful
@@ -383,7 +402,10 @@ export function QuickAdd({
               else event.currentTarget.blur()
             }
           }}
-          className="w-full bg-transparent px-4 pt-3 pb-2 text-base text-ink outline-none placeholder:text-faint"
+          // Grows via the effect above; `max-h-40` is where it stops and
+          // starts scrolling internally instead, and `resize-none` keeps
+          // that the only way its height ever changes.
+          className="max-h-40 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3 pb-2 text-base text-ink outline-none placeholder:text-faint"
         />
 
         {/* The second row of the control: what the box does, then how it read
