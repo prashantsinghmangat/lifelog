@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { syncStatusBar } from '../lib/statusbar'
 
 export type Theme = 'system' | 'light' | 'dark'
 
@@ -17,7 +18,8 @@ function stored(): Theme {
 
 /**
  * Resolves `system` against the OS setting and stamps `data-theme` on <html>,
- * which is what the CSS tokens key off. Also keeps the PWA status bar in step.
+ * which is what the CSS tokens key off. Also keeps the PWA's `theme-color`
+ * meta and, on Android, the native status bar in step.
  */
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(stored)
@@ -33,6 +35,7 @@ export function useTheme() {
       // is a continuation of the page, and a dark bar over a paper-coloured
       // page reads as a header the app does not have.
       if (meta) meta.setAttribute('content', resolved === 'dark' ? '#141311' : '#faf9f7')
+      syncStatusBar(resolved === 'dark')
     }
 
     apply()

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The `surface` CSS custom property in src/index.css, dark. Picked up
+         by the OS's own night qualifier before any JS has run, which is the
+         only signal available that early — see StatusBarPlugin for the
+         app's own theme choice, applied once useTheme resolves. -->
+    <color name="surface">#141311</color>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The `surface` CSS custom property in src/index.css, light. The one
+         place this hex lives on the Android side — the splash background
+         and the window background behind the WebView both read it, so they
+         cannot drift apart the way the launcher icon's colours once could.
+         Follows the system's night qualifier, because that is the only
+         theme signal that exists before any JS has run. -->
+    <color name="surface">#faf9f7</color>
+
+    <!-- Fixed, unlike `surface` above: StatusBarPlugin picks between these
+         by the app's *own* resolved theme, which can disagree with the OS
+         the moment someone changes it on the You screen. Neither name is
+         shadowed in values-night, so both always resolve to the same hex
+         regardless of system dark mode. -->
+    <color name="surface_light">#faf9f7</color>
+    <color name="surface_dark">#141311</color>
+</resources>

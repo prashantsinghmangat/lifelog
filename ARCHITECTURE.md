@@ -1122,17 +1122,18 @@ save-and-reopen, and with nothing open the app minimises. **With the keyboard up
 closes the keyboard and the sheet stays** — the IME consumes it before the WebView ever sees it,
 which is what every Android app does and is not something to work around.
 
-**The Android status bar is not `theme-color`, and in light mode it does not match the page.**
-`theme-color` is a browser meta; the native bar is painted by `Theme.AppCompat.DayNight.NoActionBar`
-in `android/app/src/main/res/values/styles.xml`, and there is no `@capacitor/status-bar` plugin
-here. On the emulator the WebView gets 412×839 of a 411×914 screen — the system bars are opaque
-and outside it, which is also why both safe-area insets measure 0. The result is a dark band above
-a paper-coloured page in light mode; dark mode has no seam because the two happen to agree.
-Verified on a Pixel 7 / Android 16 emulator. Fixing it properly means following the *app's* theme
-choice rather than the OS's, since the You screen lets the two disagree — a `values-night`
-qualifier would get that backwards. Making the bar transparent instead is worse: the insets read
-0 here, so the header would sit under the clock, which is the exact bug the safe-area padding
-exists to prevent.
+**The Android status bar follows the app's theme, not `theme-color` and not the OS's.**
+`theme-color` is a browser meta the native bar never reads. `StatusBarPlugin`
+(`android/app/src/main/java/com/prashant/lifelog/StatusBarPlugin.java`) is a first-party plugin —
+not `@capacitor/status-bar`, whose show/hide/overlay surface this app has no use for — called from
+`useTheme.ts`'s `apply()` every time the resolved theme changes, so the bar updates with no
+relaunch even when the You screen picks a theme the OS disagrees with. It paints a fixed
+`surface_light` / `surface_dark` (`values/colors.xml`) rather than the qualifier-driven `surface`
+the splash and window background use, because that pair must follow the app's own choice, and a
+`values-night` qualifier only ever follows the OS's. The bar stays opaque on purpose: on the
+emulator the WebView gets 412×839 of a 411×914 screen, the system bars are opaque and outside it,
+and both safe-area insets measure 0 — so a transparent bar would put the header under the clock,
+the exact bug the safe-area padding exists to prevent.
 
 **A `sticky` element cannot reach past its container's padding, which is how a bottom bar comes to
 float.** The page container carried `pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)]` and the
