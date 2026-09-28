@@ -46,6 +46,13 @@ const ROWS: Entry[] = [
     occurred_on: '2026-09-16',
     occurred_at: '2026-09-16T23:30:00+05:30',
   }),
+  // Three more distinct days, carrying neither money nor duration, so every
+  // figure asserted below stays exactly what it was — these exist only to
+  // clear the chart's own 7-day floor. See "too little data" below for the
+  // state a log still under that floor renders instead of these bars.
+  row({ kind: 'note', occurred_on: '2026-08-05' }),
+  row({ kind: 'note', occurred_on: '2026-08-12' }),
+  row({ kind: 'note', occurred_on: '2026-09-10' }),
 ]
 
 afterEach(cleanup)
@@ -195,6 +202,29 @@ describe('measures', () => {
     const day14 = within(chart).getByRole('button', { name: /^14 September/ })
     expect(day14.querySelectorAll('.bg-expense').length).toBe(1)
     expect(day14.querySelectorAll('.bg-event').length).toBe(0)
+  })
+})
+
+describe('too little data', () => {
+  it('says so instead of drawing bars, under 7 logged days', () => {
+    const sparse: Entry[] = [
+      row({ kind: 'expense', occurred_on: '2026-09-14', amount_paise: 35000 }),
+      row({ kind: 'time', occurred_on: '2026-09-15', duration_minutes: 150 }),
+      row({ kind: 'note', occurred_on: '2026-09-16' }),
+    ]
+    render(<Stats all={sparse} now={NOW} day="2026-09-17" />)
+
+    expect(screen.queryByRole('group', { name: /^Entries by/ })).toBeNull()
+    expect(screen.getByText(/Too little logged yet for a chart to mean anything/)).toBeTruthy()
+    // The figures above it still work off exactly what was logged.
+    expect(lead()).toBe('₹350')
+  })
+
+  it('draws the bars once 7 distinct days are on record', () => {
+    // ROWS spans exactly 7 distinct days — the floor, not comfortably past it.
+    open()
+    expect(screen.getByRole('group', { name: /^Entries by/ })).toBeTruthy()
+    expect(screen.queryByText(/Too little logged yet/)).toBeNull()
   })
 })
 

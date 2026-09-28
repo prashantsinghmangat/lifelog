@@ -849,6 +849,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                 ask={view === 'ask'}
                 onLeaveAsk={() => setView('today')}
                 showExamples={view === 'today' && !loading && shown.length === 0}
+                firstEver={local && all.length === 0}
                 onSubmit={submit}
                 onSubmitMulti={submitMany}
                 corpus={corpus}

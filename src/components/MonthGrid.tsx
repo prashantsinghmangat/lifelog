@@ -57,6 +57,14 @@ export function MonthGrid({ day, now, loadDays, onPick }: Props) {
   const marked = useMarkedDays(dayKey(gridStart), dayKey(gridEnd), loadDays)
   const today = dayKey(now)
 
+  // Only the padding days from neighbouring months are excluded — an empty
+  // grid otherwise looks identical to one that just hasn't loaded yet, and a
+  // walkable empty month reads as data loss the same way an unbounded one
+  // would (see the day scale's own bound, ARCHITECTURE.md:267).
+  const monthEmpty = !eachDayOfInterval({ start: month, end: endOfMonth(month) }).some((date) =>
+    marked.has(dayKey(date)),
+  )
+
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
@@ -103,6 +111,14 @@ export function MonthGrid({ day, now, loadDays, onPick }: Props) {
           />
         ))}
       </div>
+
+      {/* A fact about the month, not a problem to fix — the grid above stays a
+          working way to reach any day in it either way. */}
+      {monthEmpty && (
+        <p className="mt-2 text-center text-xs text-faint">
+          Nothing logged in {format(month, 'MMMM')}.
+        </p>
+      )}
 
       <button
         type="button"

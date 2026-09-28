@@ -206,6 +206,17 @@ export function Stats({ all, now, day }: Props) {
 
   const chosen = columns.find((column) => column.key === hour) ?? null
 
+  /**
+   * Under a week of history, almost every bar is a flat zero and the one or
+   * two that aren't read as noise rather than a picture — the chart is
+   * answering a question the log hasn't lived long enough to have an answer
+   * to. Counted over the whole log, not the visible period: switching scale
+   * or paging back would otherwise make the same three days look like either
+   * "not enough" or "plenty" depending on how they happen to be sliced.
+   */
+  const loggedDays = useMemo(() => new Set(all.map((row) => row.occurred_on)).size, [all])
+  const tooLittleData = loggedDays < 7
+
   /** A bar is a way further in — except an hour, which is the bottom. */
   function tap(column: Column) {
     if (scale === 'day') {
@@ -341,65 +352,75 @@ export function Stats({ all, now, day }: Props) {
         ))}
       </div>
 
-      <div
-        role="group"
-        aria-label={`Entries by ${scale === 'day' ? 'hour' : scale === 'year' ? 'month' : 'day'}, ${label}`}
-        className={`mt-4 flex h-[132px] items-end ${GAP[scale]}`}
-      >
-        {columns.map((column, at) => (
-          <button
-            key={column.key}
-            type="button"
-            aria-label={barName(column)}
-            aria-pressed={scale === 'day' ? column.key === hour : undefined}
-            onClick={() => tap(column)}
-            className="flex h-full min-w-0 flex-1 flex-col justify-end"
-          >
-            <span aria-hidden="true" className="flex w-full flex-col justify-end gap-px">
-              {measure === 'entries' ? (
-                // Stacked by kind so a period's texture is visible. Bottom up,
-                // so the order is reversed for the DOM's top-down flow.
-                [...STACK].reverse().map((kind) =>
-                  column.totals.counts[kind] === 0 ? null : (
-                    <span
-                      key={kind}
-                      className={`w-full rounded-[1px] ${SEGMENT[kind]}`}
-                      style={{ height: height(column.totals.counts[kind], max) }}
-                    />
-                  ),
-                )
-              ) : valueOf(column.totals, measure) === 0 ? null : (
-                <span
-                  className={`w-full rounded-[1px] ${SOLID[measure]}`}
-                  style={{ height: height(valueOf(column.totals, measure), max) }}
-                />
-              )}
-            </span>
-            {/* The whole of the you-are-here treatment: a heavier baseline. */}
-            <span
-              aria-hidden="true"
-              className={`mt-px w-full ${column.isNow ? 'h-0.5 bg-ink' : 'h-px bg-edge'}`}
-            />
-            <span
-              aria-hidden="true"
-              className={`h-[8px] w-full overflow-visible text-center text-[10px] leading-none tabular-nums ${
-                column.isNow ? 'text-ink' : 'text-faint'
-              }`}
+      {tooLittleData ? (
+        // Say so rather than draw it: a handful of spikes in an otherwise flat
+        // grid is not a picture, and the totals above and the breakdowns below
+        // stay meaningful with no bars at all.
+        <p className="mt-4 flex h-[132px] items-center justify-center text-center text-xs text-faint">
+          Too little logged yet for a chart to mean anything —
+          <br />a few more days and this fills in.
+        </p>
+      ) : (
+        <div
+          role="group"
+          aria-label={`Entries by ${scale === 'day' ? 'hour' : scale === 'year' ? 'month' : 'day'}, ${label}`}
+          className={`mt-4 flex h-[132px] items-end ${GAP[scale]}`}
+        >
+          {columns.map((column, at) => (
+            <button
+              key={column.key}
+              type="button"
+              aria-label={barName(column)}
+              aria-pressed={scale === 'day' ? column.key === hour : undefined}
+              onClick={() => tap(column)}
+              className="flex h-full min-w-0 flex-1 flex-col justify-end"
             >
-              {/* Thirty labels do not fit under 10px columns; the month axis
-                  names every fifth day, and today always. */}
-              {scale !== 'month' || column.isNow || at === 0 || (at + 1) % 5 === 0
-                ? column.label
-                : ''}
-            </span>
-          </button>
-        ))}
-      </div>
+              <span aria-hidden="true" className="flex w-full flex-col justify-end gap-px">
+                {measure === 'entries' ? (
+                  // Stacked by kind so a period's texture is visible. Bottom up,
+                  // so the order is reversed for the DOM's top-down flow.
+                  [...STACK].reverse().map((kind) =>
+                    column.totals.counts[kind] === 0 ? null : (
+                      <span
+                        key={kind}
+                        className={`w-full rounded-[1px] ${SEGMENT[kind]}`}
+                        style={{ height: height(column.totals.counts[kind], max) }}
+                      />
+                    ),
+                  )
+                ) : valueOf(column.totals, measure) === 0 ? null : (
+                  <span
+                    className={`w-full rounded-[1px] ${SOLID[measure]}`}
+                    style={{ height: height(valueOf(column.totals, measure), max) }}
+                  />
+                )}
+              </span>
+              {/* The whole of the you-are-here treatment: a heavier baseline. */}
+              <span
+                aria-hidden="true"
+                className={`mt-px w-full ${column.isNow ? 'h-0.5 bg-ink' : 'h-px bg-edge'}`}
+              />
+              <span
+                aria-hidden="true"
+                className={`h-[8px] w-full overflow-visible text-center text-[10px] leading-none tabular-nums ${
+                  column.isNow ? 'text-ink' : 'text-faint'
+                }`}
+              >
+                {/* Thirty labels do not fit under 10px columns; the month axis
+                    names every fifth day, and today always. */}
+                {scale !== 'month' || column.isNow || at === 0 || (at + 1) % 5 === 0
+                  ? column.label
+                  : ''}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* The day view's hint line: the selected hour said in numbers, or how
           many entries have no clock and so stand in no bar. One quiet line —
           a fact about the day, not a problem to fix. */}
-      {scale === 'day' && (chosen !== null || leftOut > 0) && (
+      {!tooLittleData && scale === 'day' && (chosen !== null || leftOut > 0) && (
         <p role="status" aria-live="polite" className="mt-2 text-xs text-faint">
           {chosen !== null ? (
             <>

@@ -45,6 +45,60 @@ const EXAMPLES: { typed: string; becomes: string; kind: Kind }[] = [
 const QUESTIONS = ['how much this month', 'hours worked this week', 'what happened last week']
 
 /**
+ * The same three subject-free questions, offered twice for two different
+ * reasons: switching to an empty Ask box, and a question that came back with
+ * nothing. Both are the grammar naming what it can answer rather than leaving
+ * a dead end — one before anything was typed, one after something was and
+ * found nothing. Shared so the two can never drift into different wording.
+ */
+function AskSuggestions({
+  heading,
+  onPick,
+  onHelp,
+}: {
+  heading: string
+  onPick: (asked: string) => void
+  onHelp: () => void
+}) {
+  return (
+    <div className="mt-5">
+      <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+        {heading}
+      </p>
+
+      <div className="mt-1.5">
+        {QUESTIONS.map((asked) => (
+          <button
+            key={asked}
+            type="button"
+            onClick={() => onPick(asked)}
+            className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
+          >
+            {/* The glyph, not a drawn icon — the same call `KindMark` makes
+                for the rupee, and it sits in the same 20px gutter so these
+                line up with the rows they are standing in for. */}
+            <span className="flex w-5 shrink-0 justify-center text-faint" aria-hidden="true">
+              <span className="text-[0.9375rem] leading-none font-semibold">?</span>
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm text-muted">{asked}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* The manual's Asking section covers the half these three cannot:
+          naming a subject, and a single day. */}
+      <button
+        type="button"
+        onClick={onHelp}
+        className="-ml-1 mt-1 flex h-11 items-center px-1 text-xs text-muted underline decoration-edge underline-offset-2 hover:decoration-muted"
+      >
+        all examples
+      </button>
+    </div>
+  )
+}
+
+/**
  * Shown in the preview row while the field is empty and the mode is Log — the
  * same trick the empty-day examples play, folded into one line since this one
  * runs beside the field on every day, not only an empty one. Static text, not
@@ -102,6 +156,13 @@ type Props = {
   prefill: string | null
   onPrefilled: () => void
   onHelp: () => void
+  /**
+   * A guest whose device has never held a single entry — not just today's.
+   * The single most important screen in the app, seen exactly once: the
+   * empty-day examples below still do the showing, but a returning reader's
+   * "nothing here yet" says nothing about what this box even is.
+   */
+  firstEver: boolean
   /** Jumping to the day an answer points at, which is usually why it was asked. */
   /** Open an entry an answer led to — see `AnswerCard`'s `onPick`. */
   onOpenEntry: (row: Entry) => void
@@ -132,6 +193,7 @@ export function QuickAdd({
   onPrefilled,
   onHelp,
   onOpenEntry,
+  firstEver,
 }: Props) {
   const [text, setText] = useState('')
   const dictation = useDictation(setText)
@@ -476,8 +538,11 @@ export function QuickAdd({
       </div>
 
       {/* Keyed on the text: a new question is a new answer, collapsed again.
-          The 30-second clock tick must not fold up an answer being read. */}
-      {answer !== null && (
+          The 30-second clock tick must not fold up an answer being read.
+          Not for a flat "nothing found": a headline-sized card announcing an
+          absence is the dead end this file's own Log-instead button and
+          AskSuggestions block exist to replace with a next step. */}
+      {answer !== null && answer.lead !== 'nothing found' && (
         <AnswerCard
           key={text}
           answer={answer}
@@ -491,9 +556,16 @@ export function QuickAdd({
         />
       )}
 
-      {/* A question that found nothing, over text the parser plainly understands.
-          One tap rather than "switch mode and type it again". */}
-      {answer !== null && summary !== null && summary.entries === 0 && wouldLog !== null && (
+      {/* A question that found nothing, over text the parser plainly understands
+          as something *actionable* — not merely a `note`, which is what parse()
+          falls back to for any text it recognises nothing else in, a real
+          question among them. Offering "Log instead: note · how much on rent"
+          would be filing the question itself away, not a saved step. */}
+      {answer !== null &&
+        summary !== null &&
+        summary.entries === 0 &&
+        wouldLog !== null &&
+        wouldLog.kind !== 'note' && (
         <button
           type="button"
           onClick={() => {
@@ -522,51 +594,42 @@ export function QuickAdd({
           screen to push down. Gone as soon as there is any text, so it never
           sits under a result. */}
       {mode === 'ask' && trimmed === '' && (
-        <div className="mt-5">
-          <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
-            Try asking
-          </p>
-
-          <div className="mt-1.5">
-            {QUESTIONS.map((asked) => (
-              <button
-                key={asked}
-                type="button"
-                onClick={() => {
-                  setText(asked)
-                  document.getElementById('quick-add')?.focus()
-                }}
-                className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
-              >
-                {/* The glyph, not a drawn icon — the same call `KindMark` makes
-                    for the rupee, and it sits in the same 20px gutter so these
-                    line up with the rows they are standing in for. */}
-                <span className="flex w-5 shrink-0 justify-center text-faint" aria-hidden="true">
-                  <span className="text-[0.9375rem] leading-none font-semibold">?</span>
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm text-muted">{asked}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* The manual's Asking section covers the half these three cannot:
-              naming a subject, and a single day. */}
-          <button
-            type="button"
-            onClick={onHelp}
-            className="-ml-1 mt-1 flex h-11 items-center px-1 text-xs text-muted underline decoration-edge underline-offset-2 hover:decoration-muted"
-          >
-            all examples
-          </button>
-        </div>
+        <AskSuggestions
+          heading="Try asking"
+          onPick={(asked) => {
+            setText(asked)
+            document.getElementById('quick-add')?.focus()
+          }}
+          onHelp={onHelp}
+        />
       )}
+
+      {/* A question the grammar understood but that matched nothing, and
+          could not be offered as Log instead either — the dead end `?` exists
+          to avoid. Same fallback as the empty box above: three questions this
+          log can certainly answer, in place of a flat "nothing found". */}
+      {answer !== null &&
+        summary !== null &&
+        summary.entries === 0 &&
+        (wouldLog === null || wouldLog.kind === 'note') &&
+        trimmed !== '' && (
+          <AskSuggestions
+            heading="Try one of these instead"
+            onPick={(asked) => setText(asked)}
+            onHelp={onHelp}
+          />
+        )}
 
       {/* Only while logging: on an empty day in Ask mode the questions above are
           the useful thing, and both at once is two lists of examples. */}
       {showExamples && mode === 'log' && (
         <div className="mt-5">
           <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
-            Nothing here yet
+            {/* One line of orientation, first launch only — a returning
+                reader's "nothing here yet" says nothing about what this box
+                even is, and the examples below can only show the syntax, not
+                the concept. */}
+            {firstEver ? 'This box is your whole log — try one' : 'Nothing here yet'}
           </p>
 
           <div className="mt-1.5">

@@ -61,6 +61,7 @@ function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
     onPrefilled,
     onHelp,
     onOpenEntry,
+    firstEver: false,
     ...over,
   }
 
@@ -269,6 +270,28 @@ describe('choosing between logging and asking', () => {
       kind: 'expense',
       title: 'lunch swiggy',
     })
+  })
+
+  it('suggests a narrower question rather than Log instead, when the text is not actionable', async () => {
+    // "how much on rent" falls back to a bare note — the parser recognises
+    // nothing else in it — so offering to log it would be filing the question
+    // away, not saving a step. The three guaranteed-answerable questions take
+    // over instead, same as the empty-box moment offers.
+    const { box, onSubmit } = setup({ corpus: [] })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    await userEvent.type(box, 'how much on rent')
+
+    expect(await screen.findByText('Try one of these instead')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Log instead/ })).toBeNull()
+    // The card itself is gone too — a headline-sized "nothing found" is the
+    // dead end this replaces, not something to keep beside the way out of it.
+    // (The screen-reader-only live region still says it, which is correct —
+    // that sentence exists so a reader hears the answer without seeing it.)
+    expect(document.querySelector('.font-display')).toBeNull()
+
+    await userEvent.click(screen.getByRole('button', { name: 'how much this month' }))
+    expect(box.value).toBe('how much this month')
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('leaves Ask on Escape rather than only dropping the keyboard', async () => {
