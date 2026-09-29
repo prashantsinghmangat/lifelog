@@ -55,3 +55,16 @@ describe('sync state', () => {
     expect(screen.queryByRole('button', { name: /^Retry/ })).toBeNull()
   })
 })
+
+describe('local photo indicator', () => {
+  /** Driven by a prop, never by `row` itself — the store, not the synced entry, owns this. */
+  it('shows when the caller says this entry has a photo', () => {
+    render(<EntryRow row={row({})} now={NOW} hasPhoto onOpen={vi.fn()} onRetry={vi.fn()} />)
+    expect(screen.getByText(/has a photo/)).toBeTruthy()
+  })
+
+  it('is absent otherwise', () => {
+    render(<EntryRow row={row({})} now={NOW} onOpen={vi.fn()} onRetry={vi.fn()} />)
+    expect(screen.queryByText(/has a photo/)).toBeNull()
+  })
+})

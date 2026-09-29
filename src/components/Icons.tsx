@@ -128,6 +128,15 @@ export function TodayIcon(props: Props) {
   )
 }
 
+export function CameraIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 8h3l2-2h6l2 2h3v12H4z" />
+      <circle cx="12" cy="14" r="3.5" />
+    </Svg>
+  )
+}
+
 export function AskIcon(props: Props) {
   return (
     <Svg {...props}>

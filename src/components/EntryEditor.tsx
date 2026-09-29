@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react'
-import { CheckIcon } from './Icons'
+import { useRef, useState, type FormEvent } from 'react'
+import { CameraIcon, CheckIcon, CloseIcon } from './Icons'
 import { Sheet } from './Sheet'
+import { useAttachments } from '../hooks/useAttachments'
 import {
   done as isDone,
   leadWords,
@@ -96,6 +97,9 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
    * is the same silence the rest of the app spent three bugs learning to avoid.
    */
   const [problem, setProblem] = useState<string | null>(null)
+
+  const { photos, addState, add, remove: removePhoto } = useAttachments(row.id)
+  const photoInput = useRef<HTMLInputElement>(null)
 
   // Driven by the chosen kind, not the stored one, so switching to an expense
   // reveals the amount field there and then.
@@ -528,6 +532,60 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
             Add to calendar
           </button>
         )}
+
+        {/* Proof or reference for this entry — a bill, a ticket — kept only on
+            this device and never synced. The OS picker already offers camera
+            or gallery, so the action says "Add photo" rather than claiming to
+            be a camera on a desktop that has none. */}
+        <div className="mt-5">
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              const files = event.target.files
+              if (files) for (const file of files) void add(file)
+              event.target.value = ''
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => photoInput.current?.click()}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
+          >
+            <CameraIcon size={16} />
+            Add photo
+          </button>
+          {/* A photo that failed to save is not the same failure as the entry
+              failing to save, and must never read as one. */}
+          {addState === 'failed' && (
+            <p role="alert" className="mt-1.5 text-xs text-expense">
+              Couldn&apos;t save that photo.
+            </p>
+          )}
+          {photos.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {photos.map((photo) => (
+                <div
+                  key={photo.id}
+                  className="relative h-16 w-16 overflow-hidden rounded-lg border border-edge"
+                >
+                  <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => void removePhoto(photo.id)}
+                    aria-label="Remove photo"
+                    className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-surface"
+                  >
+                    <CloseIcon size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {problem !== null && (
           <p role="alert" className="mt-4 text-xs text-expense">

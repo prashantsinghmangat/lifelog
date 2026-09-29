@@ -4,8 +4,24 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EntryEditor } from './EntryEditor'
 import type { Patch, Row } from '../hooks/useEntries'
+import type { AddState, Photo } from '../hooks/useAttachments'
 
 /** Edit → save, the journey where a wrong parse gets corrected. */
+
+// Declared inside the factory: `vi.mock` is hoisted above every top-level
+// binding in this file, so a mock built from one would read it uninitialised.
+// The image pipeline (decode/downscale/encode) needs real browser APIs jsdom
+// doesn't have, so this stands in for the whole hook rather than for IndexedDB.
+vi.mock('../hooks/useAttachments', () => ({
+  useAttachments: vi.fn(() => ({
+    photos: [] as Photo[],
+    addState: 'idle' as AddState,
+    add: vi.fn(async () => {}),
+    remove: vi.fn(async () => {}),
+  })),
+}))
+
+const { useAttachments } = await import('../hooks/useAttachments')
 
 afterEach(cleanup)
 
@@ -509,5 +525,62 @@ describe('a save that cannot go through', () => {
 
     expect(onSave).not.toHaveBeenCalled()
     expect(screen.getByRole('alert').textContent).toContain('title')
+  })
+})
+
+describe('local photos', () => {
+  /**
+   * The picker offers camera or gallery either way — labelling the action
+   * "Camera" would claim a capability the desktop build doesn't have, and
+   * `capture` would take the choice away from the OS on every platform.
+   */
+  it('offers "Add photo" via a plain, uncaptured image picker', () => {
+    setup()
+    const button = screen.getByRole('button', { name: 'Add photo' })
+    expect(button).toBeTruthy()
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    expect(input.accept).toBe('image/*')
+    expect(input.multiple).toBe(true)
+    expect(input.hasAttribute('capture')).toBe(false)
+  })
+
+  it('hands a picked file to the attachment hook', async () => {
+    const add = vi.fn(async () => {})
+    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn() })
+    setup()
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    const file = new File(['x'], 'bill.jpg', { type: 'image/jpeg' })
+    await userEvent.upload(input, file)
+
+    expect(add).toHaveBeenCalledWith(file)
+  })
+
+  it('shows a save-failed state that says nothing about the entry itself', () => {
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [],
+      addState: 'failed',
+      add: vi.fn(),
+      remove: vi.fn(),
+    })
+    const { onSave } = setup()
+
+    expect(screen.getByRole('alert').textContent).toMatch(/couldn.t save that photo/i)
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it('removing a thumbnail calls the attachment hook with that photo\'s id', async () => {
+    const remove = vi.fn(async () => {})
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: '2026-09-05T10:00:00+05:30' }],
+      addState: 'idle',
+      add: vi.fn(),
+      remove,
+    })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove photo' }))
+    expect(remove).toHaveBeenCalledWith('photo-1')
   })
 })

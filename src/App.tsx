@@ -16,12 +16,14 @@ import { Sheet } from './components/Sheet'
 import { You } from './components/You'
 import { Toast, type ToastState } from './components/Toast'
 import { WeekStrip } from './components/WeekStrip'
+import { useHasPhotoMap } from './hooks/useAttachments'
 import { useEntries, type Row } from './hooks/useEntries'
 import { useNudges } from './hooks/useNudges'
 import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { ahead } from './lib/ahead'
+import { sweepOrphans } from './lib/attachments'
 import { arm as armBack, onHome } from './lib/back'
 import { save, shareOrDownload } from './lib/deliver'
 import { nextFireAt, passed } from './lib/events'
@@ -359,6 +361,14 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
   const folded = showEarlier || over < 2 ? 0 : over
   const shownEntries = folded === 0 ? shown : shown.slice(folded)
 
+  // One batched attachment lookup for every row on screen, never one
+  // IndexedDB read per `EntryRow`.
+  const visiblePhotoIds = useMemo(
+    () => [...shownEntries, ...failedElsewhere].map((row) => row.id),
+    [shownEntries, failedElsewhere],
+  )
+  const hasPhotoMap = useHasPhotoMap(visiblePhotoIds)
+
   /** Hands the entry to the OS calendar, which is what actually raises the alarm. */
   async function addToCalendar(rows: Row[], name: string) {
     try {
@@ -432,6 +442,12 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     void fetchAll()
       .then((all) => {
         setHistory(all)
+        // Only from a load that actually completed — never from `.catch`
+        // below, so a network hiccup can never read as "every entry gone"
+        // and sweep away photos that are still owed a real reconnect.
+        void sweepOrphans(all.map((row) => row.id)).catch(() => {
+          // Storage that can't be swept this launch gets another chance next one.
+        })
         return sync(all, new Date())
       })
       .catch(() => {
@@ -972,6 +988,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                   key={row.id}
                   row={row}
                   now={now}
+                  hasPhoto={hasPhotoMap[row.id] === true}
                   onOpen={() => setEditing(asStored(row))}
                   onRetry={retry}
                 />
@@ -1024,6 +1041,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                       row={row}
                       now={now}
                       offDay
+                      hasPhoto={hasPhotoMap[row.id] === true}
                       onOpen={() => setDay(row.occurred_on)}
                       onRetry={retry}
                     />

@@ -9,11 +9,13 @@ type Props = {
   now: Date
   /** True when the row sits on a day other than the one being viewed. */
   offDay?: boolean
+  /** Whether this entry has a locally-stored photo — never read from `row` itself. */
+  hasPhoto?: boolean
   onOpen: () => void
   onRetry: () => void
 }
 
-export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
+export function EntryRow({ row, now, offDay = false, hasPhoto = false, onOpen, onRetry }: Props) {
   const right = rowValue(row)
   const gone = behindYou(row, now)
   const at = row.occurred_at === null ? null : clock(row.occurred_at)
@@ -31,6 +33,9 @@ export function EntryRow({ row, now, offDay = false, onOpen, onRetry }: Props) {
     repeatLabel(row),
     row.category,
     offDay ? relativeDay(row.occurred_on, now) : null,
+    // Same words-not-icon rule as the sync states below — and this is local
+    // metadata about the entry, never anything read off `row` itself.
+    hasPhoto ? 'has a photo' : null,
     // Words, not a colour or an icon: the row is saved on this device and the
     // server has not seen it, which is worth knowing and is not a problem.
     row.status === 'queued' ? 'saved here, not synced' : null,
