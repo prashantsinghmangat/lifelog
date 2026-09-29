@@ -165,17 +165,23 @@ async function open() {
   return box
 }
 
+/** Types a line and submits it via Save — Enter breaks the line now, it never sends. */
+async function log(box: HTMLElement, text: string) {
+  await userEvent.type(box, text)
+  await userEvent.click(screen.getByLabelText('Save entry'))
+}
+
 describe('logging a reminder', () => {
   it('confirms with the time it will fire, not just that it saved', async () => {
     const box = await open()
-    await userEvent.type(box, 'dentist tomorrow 5pm{Enter}')
+    await log(box, 'dentist tomorrow 5pm')
     await waitFor(() => expect(screen.getByText(/Reminder set for/)).toBeTruthy())
   })
 
   it('says so when reminders are blocked, rather than appearing to work', async () => {
     scheduleResult = 'blocked'
     const box = await open()
-    await userEvent.type(box, 'dentist tomorrow 5pm{Enter}')
+    await log(box, 'dentist tomorrow 5pm')
 
     await waitFor(() =>
       expect(screen.getByText('Saved, but reminders are blocked')).toBeTruthy(),
@@ -187,7 +193,7 @@ describe('logging a reminder', () => {
   it('confirms an ordinary entry without mentioning reminders', async () => {
     scheduleResult = 'skipped'
     const box = await open()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await log(box, '350 lunch swiggy')
 
     await waitFor(() => expect(screen.getByText(/Added/)).toBeTruthy())
     expect(screen.queryByText(/Reminder set/)).toBeNull()
@@ -195,7 +201,7 @@ describe('logging a reminder', () => {
 
   it('says where an entry went when it lands on another day', async () => {
     const box = await open()
-    await userEvent.type(box, '320 lunch yesterday{Enter}')
+    await log(box, '320 lunch yesterday')
     await waitFor(() => expect(screen.getByText(/Saved to yesterday/)).toBeTruthy())
   })
 
@@ -204,7 +210,7 @@ describe('logging a reminder', () => {
     // moment ago was missing from the one list whose whole job is to say what
     // is coming.
     const box = await open()
-    await userEvent.type(box, 'standup 10am weekdays{Enter}')
+    await log(box, 'standup 10am weekdays')
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /What is coming/ })).toBeTruthy(),
@@ -216,7 +222,7 @@ describe('one line, several entries', () => {
   it('saves every item and confirms the batch, not one entry at a time', async () => {
     scheduleResult = 'skipped'
     const box = await open()
-    await userEvent.type(box, 'salon: 450 detan, 100 cutting, beard cutting{Enter}')
+    await log(box, 'salon: 450 detan, 100 cutting, beard cutting')
 
     // One combined toast for the batch, total included — not one per row.
     await waitFor(() => expect(screen.getByText('3 entries saved · ₹550')).toBeTruthy())
@@ -392,7 +398,7 @@ describe('with no network', () => {
   it('sets a reminder with nothing to reach', async () => {
     offline()
     const box = await open()
-    await userEvent.type(box, 'ping me tomorrow 5pm{Enter}')
+    await log(box, 'ping me tomorrow 5pm')
 
     // The OS holds the alarm, so this never needed a server or a connection —
     // and the confirmation has to say so, or nobody trusts it fired.
@@ -402,7 +408,7 @@ describe('with no network', () => {
   it('says the entry is saved here rather than showing a failure', async () => {
     offline()
     const box = await open()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await log(box, '350 lunch swiggy')
 
     await waitFor(() => expect(screen.getByText(/waiting to sync/)).toBeTruthy())
     // Saved and waiting, not broken: no Retry chip, and no raw fetch error.
@@ -414,8 +420,8 @@ describe('with no network', () => {
   it('totals the day from what this device holds', async () => {
     offline()
     const box = await open()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
-    await userEvent.type(box, '2h client work{Enter}')
+    await log(box, '350 lunch swiggy')
+    await log(box, '2h client work')
 
     // Arithmetic over local rows. None of it was ever a server's job. The
     // figures carry their own weight now, so each is its own node — asserted on
@@ -435,7 +441,7 @@ describe('with no network', () => {
   it('answers a question about the log with no network', async () => {
     offline()
     const box = await open()
-    await userEvent.type(box, '2h client work{Enter}')
+    await log(box, '2h client work')
     await waitFor(() => expect(screen.getByText('client work')).toBeTruthy())
 
     await userEvent.type(box, '? hours client work')
@@ -1043,8 +1049,14 @@ describe('the sidebar calendar, which stays mounted all day', () => {
 })
 
 describe('an impatient hand', () => {
-  it('makes one entry from two quick presses of Enter', async () => {
-    await open().then((box) => userEvent.type(box, '350 lunch swiggy{Enter}{Enter}'))
+  it('makes one entry from two quick clicks of Save', async () => {
+    // Enter breaks the line now rather than submitting, so the double-tap
+    // this guards against moved from the keyboard to the button — two clicks
+    // close enough together that `text` had not yet cleared for the second.
+    const box = await open()
+    await userEvent.type(box, '350 lunch swiggy')
+    const save = screen.getByLabelText('Save entry')
+    await Promise.all([userEvent.click(save), userEvent.click(save)])
     await waitFor(() => expect(load(localStorage, 'user-1').entries).toHaveLength(1))
   })
 })
@@ -1067,8 +1079,8 @@ describe('what survives a reload with no network', () => {
   it('keeps entries made offline', async () => {
     unreachable = true
     const box = await open()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
-    await userEvent.type(box, '2h client work{Enter}')
+    await log(box, '350 lunch swiggy')
+    await log(box, '2h client work')
     await waitFor(() => expect(load(localStorage, 'user-1').entries).toHaveLength(2))
 
     cleanup()
@@ -1148,7 +1160,7 @@ describe('using the app without an account', () => {
   it('logs and totals with no account at all', async () => {
     who = { id: 'local-guest', email: '', local: true }
     const box = await open()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await log(box, '350 lunch swiggy')
 
     await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
     // The totals line, not the row — both print ₹350, which is the arithmetic
@@ -1162,7 +1174,7 @@ describe('using the app without an account', () => {
     // synced" would be the app apologising for working exactly as designed.
     who = { id: 'local-guest', email: '', local: true }
     const box = await open()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await log(box, '350 lunch swiggy')
 
     await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
     expect(screen.queryByText(/saved here, not synced/)).toBeNull()
@@ -1174,7 +1186,7 @@ describe('using the app without an account', () => {
   it('answers a question from a log no server has ever seen', async () => {
     who = { id: 'local-guest', email: '', local: true }
     const box = await open()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await log(box, '350 lunch swiggy')
     // The control's own toggle, not the nav's destination: both say "Ask", and
     // this test is about the box answering rather than about getting there.
     await userEvent.click(
@@ -1204,7 +1216,7 @@ describe('using the app without an account', () => {
   it('keeps the log behind the sign-in screen it opens', async () => {
     who = { id: 'local-guest', email: '', local: true }
     const box = await open()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await log(box, '350 lunch swiggy')
     await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
 
     await userEvent.click(

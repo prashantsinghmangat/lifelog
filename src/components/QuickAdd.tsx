@@ -369,9 +369,12 @@ export function QuickAdd({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          // "send", not "done": on Android the Done action only dismisses the
-          // keyboard, which left no way at all to save an entry on a phone.
-          enterKeyHint="send"
+          // "done" while asking, since Enter there only dismisses the
+          // keyboard — there is nothing to send, the answer is already on
+          // screen. Never "send" in Log: submitting is the Save button's job
+          // alone now, and a keyboard hinting "send" for a key that breaks
+          // the line instead is the exact mismatch this spec exists to fix.
+          enterKeyHint={asking ? 'done' : 'enter'}
           placeholder={mode === 'ask' ? 'What do you want to know?' : 'What happened?'}
           aria-label={mode === 'ask' ? 'What do you want to know?' : 'What happened?'}
           onChange={(event) => {
@@ -380,18 +383,19 @@ export function QuickAdd({
             if (dictation.error !== null) dictation.clearError()
           }}
           onKeyDown={(event) => {
+            // Enter breaks the line, the way every chat app's keyboard does —
+            // Save is the only way to send now. `enterKeyHint` below matches:
+            // it no longer claims "send" for something Enter no longer does.
             // Explicit, because implicit form submission on an IME action key
-            // is not something every Android keyboard agrees about.
-            // Shift+Enter falls through to the textarea's own default — a
-            // literal newline — rather than submitting, which is the only
-            // way to type a genuinely multi-line note on purpose.
-            if (event.key === 'Enter' && !event.shiftKey) {
+            // is not something every Android keyboard agreed about either.
+            if (event.key === 'Enter' && asking) {
               event.preventDefault()
-              // The answer is already on screen — it updates as you type — so
-              // there is nothing to send. Dropping the keyboard is the useful
-              // thing Enter can do, because the keyboard is covering it.
-              if (asking) event.currentTarget.blur()
-              else submit(event)
+              // A question is single-line and the answer is already on
+              // screen — it updates as you type — so there is nothing to
+              // send and no reason to break its line. Dropping the keyboard
+              // is the useful thing Enter can do, because the keyboard is
+              // covering it.
+              event.currentTarget.blur()
               return
             }
             // The box is autofocused, so without a way out every keyboard

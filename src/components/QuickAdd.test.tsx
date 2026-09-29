@@ -91,9 +91,20 @@ describe('capturing an entry', () => {
     expect(screen.getByText(/expense/).textContent).toContain('food')
   })
 
-  it('submits on Enter and clears the box', async () => {
+  it('inserts a newline on Enter instead of submitting', async () => {
+    // Enter breaks the line, the way every chat app's keyboard does — Save
+    // is the only way to send now, so a stray Enter must never fire it.
     const { box, onSubmit } = setup()
-    await userEvent.type(box, '350 lunch swiggy{Enter}')
+    await userEvent.type(box, '350 lunch swiggy{Enter}more')
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(box.value).toBe('350 lunch swiggy\nmore')
+  })
+
+  it('submits on Save and clears the box', async () => {
+    const { box, onSubmit } = setup()
+    await userEvent.type(box, '350 lunch swiggy')
+    await userEvent.click(screen.getByLabelText('Save entry'))
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ kind: 'expense', amountPaise: 35000 })
@@ -123,7 +134,8 @@ describe('capturing an entry', () => {
   it('files an undated entry on the day being viewed, not today', async () => {
     // Viewing the 1st while it is the 5th: a backfill must land where you are.
     const { box, onSubmit } = setup({ day: '2026-09-01' })
-    await userEvent.type(box, '500 groceries{Enter}')
+    await userEvent.type(box, '500 groceries')
+    await userEvent.click(screen.getByLabelText('Save entry'))
     expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ occurredOn: '2026-09-01' })
   })
 
@@ -131,7 +143,8 @@ describe('capturing an entry', () => {
     // `now` here is 10:00 and deliberately stale; the entry must not be built
     // from it, or the reminder is already overdue and gets dropped.
     const { box, onSubmit } = setup()
-    await userEvent.type(box, 'ping me in 5 minutes{Enter}')
+    await userEvent.type(box, 'ping me in 5 minutes')
+    await userEvent.click(screen.getByLabelText('Save entry'))
 
     const parsed = onSubmit.mock.calls[0]?.[0]
     expect(parsed?.kind).toBe('event')
@@ -191,7 +204,8 @@ describe('one line, several entries', () => {
 
   it('submits the whole batch through onSubmitMulti, not onSubmit', async () => {
     const { box, onSubmit, onSubmitMulti } = setup()
-    await userEvent.type(box, 'salon: 450 detan, 100 cutting, beard cutting{Enter}')
+    await userEvent.type(box, 'salon: 450 detan, 100 cutting, beard cutting')
+    await userEvent.click(screen.getByLabelText('Save entry'))
 
     expect(onSubmit).not.toHaveBeenCalled()
     expect(onSubmitMulti).toHaveBeenCalledTimes(1)
@@ -203,7 +217,8 @@ describe('one line, several entries', () => {
 
   it('falls back to a single entry when the line has no comma to split on', async () => {
     const { box, onSubmit, onSubmitMulti } = setup()
-    await userEvent.type(box, 'salon: 450 detan{Enter}')
+    await userEvent.type(box, 'salon: 450 detan')
+    await userEvent.click(screen.getByLabelText('Save entry'))
 
     expect(onSubmitMulti).not.toHaveBeenCalled()
     expect(onSubmit).toHaveBeenCalledTimes(1)
