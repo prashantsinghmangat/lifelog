@@ -1,10 +1,21 @@
 ﻿// @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QuickAdd } from './QuickAdd'
+import type { Row } from '../hooks/useEntries'
 import type { ParsedEntry } from '../lib/parser'
 import type { Entry } from '../types'
+
+// The image pipeline needs `createImageBitmap` and a real canvas, neither of
+// which jsdom has — the bytes are `attachments.test.ts`'s business. What these
+// tests pin is *which entry id* a staged photo is filed against.
+vi.mock('../lib/attachments', () => ({
+  fromFile: vi.fn(async () => new Blob(['x'], { type: 'image/jpeg' })),
+  put: vi.fn(async () => {}),
+}))
+
+const { put } = await import('../lib/attachments')
 
 /**
  * Journeys, not rendering. Every one of these is a path that has silently
@@ -37,8 +48,15 @@ function entry(over: Partial<Entry>): Entry {
 }
 
 function setup(over: Partial<Parameters<typeof QuickAdd>[0]> = {}) {
-  const onSubmit = vi.fn<(parsed: ParsedEntry) => void>()
-  const onSubmitMulti = vi.fn<(parsed: ParsedEntry[]) => void>()
+  // Returns a row, the way `App`'s own `submit` does: a staged photo is filed
+  // against the id this hands back, so a mock returning nothing would make
+  // every attachment path untestable.
+  const onSubmit = vi.fn<(parsed: ParsedEntry) => Row>((parsed) =>
+    entry({ title: parsed.title, kind: parsed.kind }),
+  )
+  const onSubmitMulti = vi.fn<(parsed: ParsedEntry[]) => Row[]>((list) =>
+    list.map((parsed) => entry({ title: parsed.title, kind: parsed.kind })),
+  )
   const onNeedCorpus = vi.fn()
   const onPrefilled = vi.fn()
   const onHelp = vi.fn()
@@ -530,5 +548,95 @@ describe('examples on an empty day', () => {
     await userEvent.click(screen.getByText('350 lunch swiggy'))
     expect(box.value).toBe('350 lunch swiggy')
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+})
+
+describe('attaching a photo while composing', () => {
+  const jpeg = () => new File(['x'], 'receipt.jpg', { type: 'image/jpeg' })
+
+  /** The one input in the control, whichever row it sits in. */
+  function picker() {
+    return document.querySelector('input[type="file"]') as HTMLInputElement
+  }
+
+  beforeEach(() => {
+    vi.mocked(put).mockClear()
+  })
+
+  it('offers the picker while logging and never while asking', async () => {
+    const { view } = setup()
+    expect(screen.getByLabelText('Add photo')).toBeTruthy()
+    expect(picker().accept).toBe('image/*')
+    expect(picker().hasAttribute('capture')).toBe(false)
+
+    // The `lg` toggle, which is what these tests drive instead of the nav.
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    expect(screen.queryByLabelText('Add photo')).toBeNull()
+    view.unmount()
+  })
+
+  it('shows a removable thumbnail before anything is saved', async () => {
+    setup()
+    await userEvent.upload(picker(), jpeg())
+
+    expect(document.querySelectorAll('img')).toHaveLength(1)
+    // Staged only — nothing may reach the store until there is an entry id.
+    expect(put).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByLabelText('Remove photo'))
+    expect(document.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('files the photo against the id of the row that was just created', async () => {
+    const { box, onSubmit } = setup()
+    await userEvent.upload(picker(), jpeg())
+    await userEvent.type(box, '350 lunch swiggy')
+    await userEvent.click(screen.getByLabelText('Save entry'))
+
+    const saved = onSubmit.mock.results[0]?.value as Row
+    await waitFor(() => expect(put).toHaveBeenCalledWith(saved.id, expect.anything()))
+    // The strip belongs to the composition, which is over.
+    expect(document.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('attaches to the first row of a batch rather than dropping the photo', async () => {
+    const { box, onSubmitMulti } = setup()
+    await userEvent.upload(picker(), jpeg())
+    await userEvent.type(box, 'groceries: milk 60, bread 40')
+    await userEvent.click(screen.getByLabelText('Save entry'))
+
+    const rows = onSubmitMulti.mock.results[0]?.value as Row[]
+    expect(rows.length).toBeGreaterThan(1)
+    await waitFor(() => expect(put).toHaveBeenCalledWith(rows[0]?.id, expect.anything()))
+    expect(put).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * The entry is saved and on the timeline. Saying it failed because a JPEG
+   * would not store is a lie about the thing the user actually came to do —
+   * the same split `EntryEditor` keeps for a photo added after the fact.
+   */
+  it('reports a failed photo without claiming the entry failed', async () => {
+    vi.mocked(put).mockRejectedValueOnce(new Error('quota'))
+    const { box, onSubmit } = setup()
+    await userEvent.upload(picker(), jpeg())
+    await userEvent.type(box, '350 lunch swiggy')
+    await userEvent.click(screen.getByLabelText('Save entry'))
+
+    expect(onSubmit).toHaveBeenCalled()
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toMatch(/entry saved, but/i),
+    )
+  })
+
+  it('still stores the others when one of several fails', async () => {
+    vi.mocked(put).mockRejectedValueOnce(new Error('quota'))
+    const { box } = setup()
+    await userEvent.upload(picker(), [jpeg(), jpeg(), jpeg()])
+    await userEvent.type(box, '350 lunch swiggy')
+    await userEvent.click(screen.getByLabelText('Save entry'))
+
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(3))
+    expect(screen.getByRole('alert').textContent).toMatch(/1 of 3/)
   })
 })

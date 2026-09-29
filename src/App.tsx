@@ -16,7 +16,7 @@ import { Sheet } from './components/Sheet'
 import { You } from './components/You'
 import { Toast, type ToastState } from './components/Toast'
 import { WeekStrip } from './components/WeekStrip'
-import { useHasPhotoMap } from './hooks/useAttachments'
+import { usePhotoThumbnails } from './hooks/useAttachments'
 import { useEntries, type Row } from './hooks/useEntries'
 import { useNudges } from './hooks/useNudges'
 import { useSession } from './hooks/useSession'
@@ -367,7 +367,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     () => [...shownEntries, ...failedElsewhere].map((row) => row.id),
     [shownEntries, failedElsewhere],
   )
-  const hasPhotoMap = useHasPhotoMap(visiblePhotoIds)
+  const photoThumbnails = usePhotoThumbnails(visiblePhotoIds)
 
   /** Hands the entry to the OS calendar, which is what actually raises the alarm. */
   async function addToCalendar(rows: Row[], name: string) {
@@ -473,7 +473,8 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
    */
   const upcoming = useMemo(() => ahead(all, now), [all, now])
 
-  function submit(parsed: ParsedEntry) {
+  /** Returns the saved row, which is what a staged photo has been waiting for. */
+  function submit(parsed: ParsedEntry): Row {
     const row = add(parsed)
     void light()
     // Answers are computed from a cached copy of the log, so a new entry has to
@@ -532,6 +533,8 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
       .catch((failure: unknown) => {
         setToast({ text: `Reminder failed: ${message(failure)}` })
       })
+
+    return row
   }
 
   /**
@@ -543,7 +546,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
    * could only ever show the last of anyway. A problem across the batch still
    * gets said — silence stays reserved for the case where nothing went wrong.
    */
-  function submitMany(parsedList: ParsedEntry[]) {
+  function submitMany(parsedList: ParsedEntry[]): Row[] {
     const rows = parsedList.map((parsed) => add(parsed))
     void light()
     setCorpus(null)
@@ -581,6 +584,8 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
         setToast({ text: 'Saved, but some reminders are blocked' })
       }
     })
+
+    return rows
   }
 
   function deleteRow(row: Row) {
@@ -988,7 +993,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                   key={row.id}
                   row={row}
                   now={now}
-                  hasPhoto={hasPhotoMap[row.id] === true}
+                  photoUrl={photoThumbnails[row.id]}
                   onOpen={() => setEditing(asStored(row))}
                   onRetry={retry}
                 />
@@ -1041,7 +1046,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                       row={row}
                       now={now}
                       offDay
-                      hasPhoto={hasPhotoMap[row.id] === true}
+                      photoUrl={photoThumbnails[row.id]}
                       onOpen={() => setDay(row.occurred_on)}
                       onRetry={retry}
                     />

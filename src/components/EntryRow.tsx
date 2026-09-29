@@ -9,13 +9,13 @@ type Props = {
   now: Date
   /** True when the row sits on a day other than the one being viewed. */
   offDay?: boolean
-  /** Whether this entry has a locally-stored photo — never read from `row` itself. */
-  hasPhoto?: boolean
+  /** A locally-stored photo for this entry — never read from `row` itself. */
+  photoUrl?: string
   onOpen: () => void
   onRetry: () => void
 }
 
-export function EntryRow({ row, now, offDay = false, hasPhoto = false, onOpen, onRetry }: Props) {
+export function EntryRow({ row, now, offDay = false, photoUrl, onOpen, onRetry }: Props) {
   const right = rowValue(row)
   const gone = behindYou(row, now)
   const at = row.occurred_at === null ? null : clock(row.occurred_at)
@@ -33,9 +33,6 @@ export function EntryRow({ row, now, offDay = false, hasPhoto = false, onOpen, o
     repeatLabel(row),
     row.category,
     offDay ? relativeDay(row.occurred_on, now) : null,
-    // Same words-not-icon rule as the sync states below — and this is local
-    // metadata about the entry, never anything read off `row` itself.
-    hasPhoto ? 'has a photo' : null,
     // Words, not a colour or an icon: the row is saved on this device and the
     // server has not seen it, which is worth knowing and is not a problem.
     row.status === 'queued' ? 'saved here, not synced' : null,
@@ -102,6 +99,21 @@ export function EntryRow({ row, now, offDay = false, hasPhoto = false, onOpen, o
             </span>
           )}
         </span>
+
+        {/* The proof, shown rather than described — "has a photo" in the
+            metadata line told you an image existed without letting you see it.
+            A fixed square with `object-cover`: a receipt is portrait and a
+            screenshot is landscape, and a box that took its height from the
+            image would make every row a different height. Decorative, because
+            the row already announces its title, kind, value and state, and
+            "image" on top of that is noise. */}
+        {photoUrl !== undefined && (
+          <img
+            src={photoUrl}
+            alt=""
+            className="h-9 w-9 shrink-0 rounded-md border border-line object-cover"
+          />
+        )}
 
         {/* Metadata, not the headline. At medium weight in full-strength ink a
             number competed with the title on every row, including the many

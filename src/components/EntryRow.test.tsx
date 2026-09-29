@@ -56,15 +56,32 @@ describe('sync state', () => {
   })
 })
 
-describe('local photo indicator', () => {
+describe('local photo thumbnail', () => {
   /** Driven by a prop, never by `row` itself — the store, not the synced entry, owns this. */
-  it('shows when the caller says this entry has a photo', () => {
-    render(<EntryRow row={row({})} now={NOW} hasPhoto onOpen={vi.fn()} onRetry={vi.fn()} />)
-    expect(screen.getByText(/has a photo/)).toBeTruthy()
+  it('renders the image when the caller has one for this entry', () => {
+    render(
+      <EntryRow row={row({})} now={NOW} photoUrl="blob:fake" onOpen={vi.fn()} onRetry={vi.fn()} />,
+    )
+    const img = document.querySelector('img')
+    expect(img?.getAttribute('src')).toBe('blob:fake')
   })
 
-  it('is absent otherwise', () => {
+  it('renders neither an image nor the old text line without one', () => {
     render(<EntryRow row={row({})} now={NOW} onOpen={vi.fn()} onRetry={vi.fn()} />)
+    expect(document.querySelector('img')).toBeNull()
     expect(screen.queryByText(/has a photo/)).toBeNull()
+  })
+
+  /**
+   * The row already announces its title, kind, value and sync state. An
+   * accessible name here would add "image" to all of that and say nothing the
+   * row does not already say.
+   */
+  it('is decorative, so it adds nothing to what the row announces', () => {
+    render(
+      <EntryRow row={row({})} now={NOW} photoUrl="blob:fake" onOpen={vi.fn()} onRetry={vi.fn()} />,
+    )
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(document.querySelector('img')?.getAttribute('alt')).toBe('')
   })
 })

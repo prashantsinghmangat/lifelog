@@ -19,6 +19,52 @@ const DB_NAME = 'lifelog-attachments'
 const STORE = 'attachments'
 const ENTRY_INDEX = 'entryId'
 
+/** Longest side a stored photo is allowed to keep — a camera original is easily 4000px+. */
+const MAX_DIMENSION = 1600
+const JPEG_QUALITY = 0.82
+
+/**
+ * What an image of this size is stored at: capped on the longest side, aspect
+ * ratio kept, never scaled *up*. Pulled out of `fromFile` because it is the
+ * only part of the pipeline that is arithmetic rather than browser plumbing,
+ * and therefore the only part a test can reach — `getContext('2d')` returns
+ * null under jsdom, so the encode itself needs a real browser.
+ */
+export function targetSize(
+  width: number,
+  height: number,
+): { width: number; height: number } {
+  const scale = Math.min(1, MAX_DIMENSION / Math.max(width, height))
+  return { width: Math.round(width * scale), height: Math.round(height * scale) }
+}
+
+/**
+ * Decodes, downscales to at most `MAX_DIMENSION` on the longest side, and
+ * re-encodes as JPEG — so a multi-MB camera original never lands in IndexedDB
+ * whole. Lives here rather than in the hook because a photo can now be picked
+ * before the entry exists: the composer stages files and the editor saves them
+ * against a row, and both have to produce the same bytes.
+ */
+export async function fromFile(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file)
+  const { width, height } = targetSize(bitmap.width, bitmap.height)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D context is not available')
+  ctx.drawImage(bitmap, 0, 0, width, height)
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('Could not encode photo'))),
+      'image/jpeg',
+      JPEG_QUALITY,
+    )
+  })
+}
+
 const changed = new EventTarget()
 
 /** Runs after a write actually commits, so a UI watching for changes never fires early. */
@@ -158,6 +204,39 @@ export async function hasPhotoMap(entryIds: string[]): Promise<Record<string, bo
   const map: Record<string, boolean> = {}
   for (const id of entryIds) map[id] = stored.has(id)
   return map
+}
+
+/**
+ * At most one representative photo per requested entry, for the thumbnails the
+ * timeline draws. One cursor over the whole index rather than a read per row:
+ * the rows on screen are the caller's business, the number of IndexedDB
+ * operations is this function's, and it is always one.
+ */
+export async function firstPhotoBlobs(entryIds: string[]): Promise<Record<string, Blob>> {
+  const wanted = new Set(entryIds)
+  if (wanted.size === 0) return {}
+
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly')
+    const index = tx.objectStore(STORE).index(ENTRY_INDEX)
+    const found: Record<string, Blob> = {}
+    const request = index.openCursor()
+    request.onsuccess = () => {
+      const cursor = request.result
+      if (!cursor) return
+      const photo = cursor.value as Attachment
+      // The oldest photo on an entry wins, because the cursor walks the index
+      // in insertion order and the first one seen is kept.
+      if (wanted.has(photo.entryId) && !(photo.entryId in found)) {
+        found[photo.entryId] = photo.blob
+      }
+      cursor.continue()
+    }
+    request.onerror = () => reject(request.error ?? new Error('Failed to read attachments'))
+    tx.oncomplete = () => resolve(found)
+    tx.onerror = () => reject(tx.error ?? new Error('Failed to read attachments'))
+  })
 }
 
 /**

@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as attachments from '../lib/attachments'
 
-/** Longest side a stored photo is allowed to keep — a camera original is easily 4000px+. */
-const MAX_DIMENSION = 1600
-const JPEG_QUALITY = 0.82
-
 export type Photo = { id: string; url: string; createdAt: string }
 
 /** Outcome of the last `add`, for the sheet to show — separate from entry-save state. */
@@ -12,33 +8,6 @@ export type AddState = 'idle' | 'saving' | 'failed'
 
 function revoke(photos: Photo[]): void {
   for (const photo of photos) URL.revokeObjectURL(photo.url)
-}
-
-/**
- * Decodes, downscales to at most `MAX_DIMENSION` on the longest side, and
- * re-encodes as JPEG — so a multi-MB camera original never lands in
- * IndexedDB whole.
- */
-async function processImage(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height))
-  const width = Math.round(bitmap.width * scale)
-  const height = Math.round(bitmap.height * scale)
-
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas 2D context is not available')
-  ctx.drawImage(bitmap, 0, 0, width, height)
-
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Could not encode photo'))),
-      'image/jpeg',
-      JPEG_QUALITY,
-    )
-  })
 }
 
 /** One entry's local photos: list, add (from a picked file), remove. */
@@ -73,7 +42,7 @@ export function useAttachments(entryId: string) {
     async (file: File) => {
       setAddState('saving')
       try {
-        const blob = await processImage(file)
+        const blob = await attachments.fromFile(file)
         await attachments.put(entryId, blob)
         await refresh()
         setAddState('idle')
@@ -96,26 +65,41 @@ export function useAttachments(entryId: string) {
 }
 
 /**
- * Which of `entryIds` have a stored photo, refreshed whenever the attachment
- * store changes. One batched lookup for a whole list of rows, never one
- * IndexedDB read per row.
+ * A thumbnail URL for each of `entryIds` that has a photo, refreshed whenever
+ * the attachment store changes. One batched lookup for a whole list of rows,
+ * never one IndexedDB read per row.
+ *
+ * The URLs are owned here: a batch replacing an earlier one revokes what it
+ * replaced, and unmounting revokes the lot. A row's `img` src going stale is
+ * the one thing that must not happen, so the revoke is keyed to the batch
+ * rather than to any single row.
  */
-export function useHasPhotoMap(entryIds: string[]): Record<string, boolean> {
-  const [map, setMap] = useState<Record<string, boolean>>({})
+export function usePhotoThumbnails(entryIds: string[]): Record<string, string> {
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const shown = useRef<Record<string, string>>({})
   const key = entryIds.join(',')
 
   useEffect(() => {
     let live = true
     const load = () => {
-      // Same reasoning as `refresh` above: a row's indicator quietly staying
+      // Same reasoning as `refresh` above: a row's thumbnail quietly staying
       // off is fine, an unhandled rejection on every render is not.
       void attachments
-        .hasPhotoMap(entryIds)
-        .then((next) => {
-          if (live) setMap(next)
+        .firstPhotoBlobs(entryIds)
+        .then((blobs) => {
+          const next: Record<string, string> = {}
+          for (const [id, blob] of Object.entries(blobs)) next[id] = URL.createObjectURL(blob)
+          if (!live) {
+            // Nothing will ever render these, so they leak unless dropped here.
+            for (const url of Object.values(next)) URL.revokeObjectURL(url)
+            return
+          }
+          for (const url of Object.values(shown.current)) URL.revokeObjectURL(url)
+          shown.current = next
+          setUrls(next)
         })
         .catch(() => {
-          if (live) setMap({})
+          if (live) setUrls({})
         })
     }
     load()
@@ -127,5 +111,14 @@ export function useHasPhotoMap(entryIds: string[]): Record<string, boolean> {
     // `key` is the real dependency — `entryIds` is a fresh array every render.
   }, [key])
 
-  return map
+  // Unmount only: the effect above already revokes a batch it replaces, and
+  // tying this to `key` would revoke the URLs the current render is using.
+  useEffect(() => {
+    return () => {
+      for (const url of Object.values(shown.current)) URL.revokeObjectURL(url)
+      shown.current = {}
+    }
+  }, [])
+
+  return urls
 }

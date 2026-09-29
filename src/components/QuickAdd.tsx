@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnswerCard } from './AnswerCard'
-import { ArrowUpIcon, MicIcon } from './Icons'
+import { ArrowUpIcon, CameraIcon, CloseIcon, MicIcon } from './Icons'
 import { KindMark } from './KindMark'
 import { useDictation } from '../hooks/useDictation'
+import { fromFile, put } from '../lib/attachments'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, parseMulti, type ParsedEntry } from '../lib/parser'
 import { answer as answerTo, parseQuestion, phrase, summarise as summariseLog } from '../lib/query'
+import type { Row } from '../hooks/useEntries'
 import type { Entry, Kind } from '../types'
 
 /**
@@ -146,9 +148,10 @@ type Props = {
    * looking for it through the DOM would be one more thing to keep in step.
    */
   showExamples: boolean
-  onSubmit: (parsed: ParsedEntry) => void
+  /** Returns the saved row, so a staged photo can be filed against its real id. */
+  onSubmit: (parsed: ParsedEntry) => Row
   /** `label: item, item, ...` — one line, several rows. See `parseMulti`. */
-  onSubmitMulti: (parsed: ParsedEntry[]) => void
+  onSubmitMulti: (parsed: ParsedEntry[]) => Row[]
   /** Every entry, for answering questions. Null until asked for. */
   corpus: Entry[] | null
   onNeedCorpus: () => void
@@ -198,6 +201,85 @@ export function QuickAdd({
   const [text, setText] = useState('')
   const dictation = useDictation(setText)
   const box = useRef<HTMLTextAreaElement>(null)
+
+  /**
+   * Photos picked before the entry exists.
+   *
+   * Held in memory as the `File` the picker handed over, never written to
+   * IndexedDB: there is no entry id to file them under until Save, and a photo
+   * stored against a draft would outlive a composition that is abandoned —
+   * app killed in the background, field cleared, day swiped away. Nothing is
+   * written, so nothing can be orphaned.
+   */
+  const [staged, setStaged] = useState<{ id: string; file: File; url: string }[]>([])
+  const photoInput = useRef<HTMLInputElement>(null)
+  /** A photo the save could not file, said separately from the entry's own outcome. */
+  const [photoProblem, setPhotoProblem] = useState<string | null>(null)
+
+  /**
+   * Unmount only. Every other exit already revokes what it drops — `unstage`
+   * one at a time, `clearStaged` on a save — and this is the last one: the app
+   * being closed or the composer being torn down mid-composition.
+   */
+  const held = useRef(staged)
+  held.current = staged
+  useEffect(() => {
+    return () => {
+      for (const photo of held.current) URL.revokeObjectURL(photo.url)
+    }
+  }, [])
+
+  function stage(files: FileList) {
+    setPhotoProblem(null)
+    setStaged((held) => [
+      ...held,
+      ...[...files].map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        url: URL.createObjectURL(file),
+      })),
+    ])
+  }
+
+  function unstage(id: string) {
+    setStaged((held) => {
+      const going = held.find((photo) => photo.id === id)
+      if (going !== undefined) URL.revokeObjectURL(going.url)
+      return held.filter((photo) => photo.id !== id)
+    })
+  }
+
+  /** Clears the strip and its object URLs — a submit that landed, or a field emptied. */
+  function clearStaged(held: { url: string }[]) {
+    for (const photo of held) URL.revokeObjectURL(photo.url)
+    setStaged([])
+  }
+
+  /**
+   * Files the staged photos against the row that now exists.
+   *
+   * One at a time, and a failure never touches the entry: it is already saved,
+   * already on screen, and telling someone their expense failed because a JPEG
+   * would not encode is a lie about the thing they came here to do. The rest
+   * still go.
+   */
+  async function commitStaged(entryId: string, held: { file: File }[]) {
+    let failures = 0
+    for (const photo of held) {
+      try {
+        await put(entryId, await fromFile(photo.file))
+      } catch {
+        failures += 1
+      }
+    }
+    if (failures > 0) {
+      setPhotoProblem(
+        failures === held.length
+          ? "Entry saved, but the photo couldn't be attached."
+          : `Entry saved, but ${failures} of ${held.length} photos couldn't be attached.`,
+      )
+    }
+  }
 
   /**
    * Grows with what's typed or pasted, up to `max-h-40` in the className
@@ -322,13 +404,23 @@ export function QuickAdd({
     // keyboard's own Enter reaches here, and the re-parse below would happily
     // file "? how many times ping me" away as a note.
     if (asking) return
+    // Captured before the state is cleared: the commit below is async and
+    // would otherwise read an empty strip.
+    const held = staged
+
     // Re-parsed against the real clock, for the same reason the single-entry
     // path below does: `now` is held in state and refreshed only on focus,
     // which is fine for a preview but wrong for saving.
     const freshMulti = parseMulti(text, new Date(), day)
     if (freshMulti !== null) {
-      onSubmitMulti(freshMulti)
+      const rows = onSubmitMulti(freshMulti)
       setText('')
+      clearStaged(held)
+      // The batch shares one line of text, so there is no per-item question to
+      // ask about which row a photo belongs to. The first row is a guess;
+      // dropping the photos entirely is data loss.
+      const first = rows[0]
+      if (held.length > 0 && first !== undefined) void commitStaged(first.id, held)
       return
     }
     // With the app left open, "in 2 minutes" measured from the last focus can
@@ -336,8 +428,10 @@ export function QuickAdd({
     // overdue.
     const fresh = parse(text, new Date(), day)
     if (!fresh) return
-    onSubmit(fresh)
+    const row = onSubmit(fresh)
     setText('')
+    clearStaged(held)
+    if (held.length > 0) void commitStaged(row.id, held)
   }
 
   return (
@@ -411,6 +505,31 @@ export function QuickAdd({
           // that the only way its height ever changes.
           className="max-h-40 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3 pb-2 text-base text-ink outline-none placeholder:text-faint"
         />
+
+        {/* Between the text and the controls, because that is where what you
+            have attached belongs: part of what you are composing, above the
+            row that sends it. Only ever present while something is staged, so
+            the control keeps its usual height on every other keystroke. */}
+        {staged.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-3 pb-2">
+            {staged.map((photo) => (
+              <div
+                key={photo.id}
+                className="relative h-14 w-14 overflow-hidden rounded-lg border border-edge"
+              >
+                <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={() => unstage(photo.id)}
+                  aria-label="Remove photo"
+                  className="absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-surface"
+                >
+                  <CloseIcon size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* The second row of the control: what the box does, then how it read
             what you typed, then the way to send it. The mode lives here rather
@@ -535,6 +654,35 @@ export function QuickAdd({
               Filled once it is live. An outline arrow the same weight as the
               mic beside it said "there is a button here"; it did not say that
               pressing it is the thing you came to do. */}
+          {/* Attaching is only ever about an entry, so it has nothing to offer a
+              question — and in Ask the row belongs to the answer. Beside the
+              mic and send rather than anywhere near the field: capture is the
+              product, and a control that is not in the way costs nothing when
+              it is not used. */}
+          {mode === 'log' && (
+            <>
+              <input
+                ref={photoInput}
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  if (event.target.files) stage(event.target.files)
+                  event.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => photoInput.current?.click()}
+                aria-label="Add photo"
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-faint transition-colors hover:text-muted"
+              >
+                <CameraIcon size={18} />
+              </button>
+            </>
+          )}
+
           {ready ? (
             <button
               type="submit"
@@ -562,6 +710,15 @@ export function QuickAdd({
           )}
         </div>
       </div>
+
+      {/* The entry itself is saved and on the timeline — this says only that
+          its photo is not, which is the one thing the toast must not be made
+          to say for it. */}
+      {photoProblem !== null && (
+        <p role="alert" className="order-last mt-2 text-xs text-expense lg:order-first">
+          {photoProblem}
+        </p>
+      )}
 
       {/* Keyed on the text: a new question is a new answer, collapsed again.
           The 30-second clock tick must not fold up an answer being read.

@@ -1,6 +1,16 @@
 import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it } from 'vitest'
-import { hasPhotoMap, list, orphansOf, put, remove, removeAll, sweepOrphans } from './attachments'
+import {
+  firstPhotoBlobs,
+  hasPhotoMap,
+  list,
+  orphansOf,
+  put,
+  remove,
+  removeAll,
+  sweepOrphans,
+  targetSize,
+} from './attachments'
 
 /**
  * A photo lives entirely off the synced log — this is the one place that
@@ -71,6 +81,44 @@ describe('sweepOrphans', () => {
     expect(await list('sweep-gone')).toHaveLength(0)
 
     await removeAll('sweep-keep')
+  })
+})
+
+describe('targetSize', () => {
+  it('caps the longest side at 1600, keeping the aspect ratio', () => {
+    expect(targetSize(4000, 3000)).toEqual({ width: 1600, height: 1200 })
+    // Portrait: the cap follows the longest side, whichever one that is.
+    expect(targetSize(3000, 4000)).toEqual({ width: 1200, height: 1600 })
+  })
+
+  it('leaves an image already under the cap alone, rather than scaling it up', () => {
+    expect(targetSize(800, 600)).toEqual({ width: 800, height: 600 })
+  })
+})
+
+describe('firstPhotoBlobs', () => {
+  afterEach(async () => {
+    await removeAll('thumb-1')
+    await removeAll('thumb-2')
+  })
+
+  it('returns one representative blob for an entry holding several', async () => {
+    await put('thumb-1', blob())
+    await put('thumb-1', blob())
+
+    const found = await firstPhotoBlobs(['thumb-1'])
+    expect(Object.keys(found)).toEqual(['thumb-1'])
+    expect(found['thumb-1']).toBeInstanceOf(Blob)
+  })
+
+  it('leaves out an entry with no photo, rather than mapping it to nothing', async () => {
+    await put('thumb-1', blob())
+    const found = await firstPhotoBlobs(['thumb-1', 'thumb-2'])
+    expect('thumb-2' in found).toBe(false)
+  })
+
+  it('returns an empty map for an empty request', async () => {
+    expect(await firstPhotoBlobs([])).toEqual({})
   })
 })
 
