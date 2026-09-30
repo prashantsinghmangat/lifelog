@@ -645,6 +645,31 @@ describe('the four destinations', () => {
     expect(screen.getByLabelText('What happened?')).toBeTruthy()
   })
 
+  it('fills the Ask screen from the top', async () => {
+    await open()
+    await go('Ask')
+
+    // What Ask is, then what to try — page content, not an appendix to the
+    // capture control. The footnote is the one thing that sits low.
+    expect(screen.getByText(/nothing leaves this device/)).toBeTruthy()
+    expect(screen.getByText('Try asking')).toBeTruthy()
+    expect(screen.getByText(/works from Today too/)).toBeTruthy()
+    expect(screen.getByText('Answers appear as you type')).toBeTruthy()
+  })
+
+  it('a suggestion fills the box and stands the list down, without submitting', async () => {
+    await open()
+    await go('Ask')
+
+    await userEvent.click(screen.getByRole('button', { name: /how much this month/ }))
+    const box = screen.getByLabelText('What do you want to know?') as HTMLTextAreaElement
+    expect(box.value).toBe('how much this month')
+    // The suggestions never sit under a result.
+    await waitFor(() => expect(screen.queryByText('Try asking')).toBeNull())
+    // And nothing was logged by the tap.
+    expect(screen.queryByText(/entries saved/)).toBeNull()
+  })
+
   it('answers from Ask without filing the question away as an entry', async () => {
     // Ask used to be reachable only through a leading `?`, and the one failure
     // that has actually happened here is a question becoming a note — the send

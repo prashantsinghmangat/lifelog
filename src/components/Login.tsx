@@ -16,7 +16,7 @@ function said(failure: unknown): string {
 type Mode = 'password' | 'otp'
 
 const FIELD =
-  'w-full rounded-lg border border-edge bg-raised px-3.5 py-3 text-base text-ink outline-none transition-colors placeholder:text-faint focus:border-muted'
+  'w-full rounded-lg border border-edge bg-raised px-3.5 py-3 text-base text-ink placeholder:text-faint'
 const LABEL = 'mb-1.5 block text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase'
 const PRIMARY =
   'h-12 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90 disabled:opacity-50'

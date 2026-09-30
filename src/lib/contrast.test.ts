@@ -45,7 +45,7 @@ const MODES = ['light', 'dark'] as const
 const GROUNDS = ['surface', 'raised', 'sunken'] as const
 const TEXT = ['ink', 'muted', 'faint'] as const
 
-/** `focus` and the kind colours are mode-only; read them from the base blocks. */
+/** The kind colours are mode-only; read them from the base blocks. */
 const MODE_ONLY = {
   light: tokensIn('@theme'),
   dark: tokensIn(`[data-theme='dark']`),
@@ -116,8 +116,10 @@ describe('every block clears its contrast floor on every ground', () => {
             contrast(palette[mode].edge, hex),
             `${palette.name}/${mode}/edge on ${ground}`,
           ).toBeGreaterThanOrEqual(3)
+          // Per-palette since the audit: the ring is the palette's own accent,
+          // so it reads as the app's rather than as the browser's default.
           expect(
-            contrast(MODE_ONLY[mode]['focus']!, hex),
+            contrast(palette[mode].focus, hex),
             `${palette.name}/${mode}/focus on ${ground}`,
           ).toBeGreaterThanOrEqual(3)
         }

@@ -7,12 +7,12 @@ import { AheadSheet } from './components/AheadSheet'
 import { BottomNav, type View } from './components/BottomNav'
 import { Calendar } from './components/Calendar'
 import { HelpSheet } from './components/HelpSheet'
-import { BellIcon, Chevron, PersonIcon } from './components/Icons'
+import { BellIcon, Chevron, InfoIcon, PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { OnThisDay } from './components/OnThisDay'
 import { PhotoViewer } from './components/PhotoViewer'
-import { QuickAdd } from './components/QuickAdd'
+import { AskSuggestions, QuickAdd } from './components/QuickAdd'
 import { Sheet } from './components/Sheet'
 import { You } from './components/You'
 import { Toast, type ToastState } from './components/Toast'
@@ -189,6 +189,13 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
    * exists for. Reported by `QuickAdd`, which owns the text.
    */
   const [profileOpen, setProfileOpen] = useState(false)
+  /**
+   * Whether the capture field holds anything, reported by `QuickAdd` — the Ask
+   * destination's own empty state lives in the page body and stands down the
+   * moment a question is being typed, so the suggestions never sit under a
+   * result.
+   */
+  const [askFilled, setAskFilled] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [aheadOpen, setAheadOpen] = useState(false)
   // Whether the day's already-passed reminders have been unfolded.
@@ -954,6 +961,7 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
                 onPrefilled={() => setPrefill(null)}
                 onHelp={() => setHelpOpen(true)}
                 onOpenEntry={openFromAnswer}
+                onFilled={setAskFilled}
               />
             </div>
           )}
@@ -1138,10 +1146,37 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
           </div>
         )}
 
-        {/* Nothing of its own: the answer and the suggestions are drawn by the
-            capture control, above the field, which on a phone is the block along
-            the bottom edge. This is what keeps the block pushed down to it. */}
-        {view === 'ask' && <div className="flex-1" />}
+        {/* The screen fills from the top: what Ask is, then what to try.
+            Bottom-anchored to the capture control this read as a rendering
+            failure — ~700px of nothing over three rows above the box. The
+            answer itself still draws inside the control's block: the input
+            stays docked, and the result stays beside the thing that made it. */}
+        {view === 'ask' && (
+          <div className="mt-4 flex flex-1 flex-col">
+            {!askFilled && (
+              <>
+                <p className="max-w-[38ch] text-sm leading-relaxed text-muted">
+                  Your log answers questions about itself — arithmetic over your own rows, and
+                  nothing leaves this device.
+                </p>
+                {/* Filled, not submitted: `prefill` lands the text in the box
+                    and focuses it, and in Ask the answer computes as you type. */}
+                <AskSuggestions
+                  heading="Try asking"
+                  onPick={(asked) => setPrefill(asked)}
+                  onHelp={() => setHelpOpen(true)}
+                />
+              </>
+            )}
+
+            {/* The one thing that belongs low on this screen: pinned above the
+                capture control, not floating mid-page. */}
+            <p className="mt-auto flex items-center gap-2 pt-6 text-xs text-faint">
+              <InfoIcon size={15} className="shrink-0" />
+              <span>A leading ? works from Today too, so you never have to come here first.</span>
+            </p>
+          </div>
+        )}
 
         {/* The extra floor is for the sticky bottom block: while the screen
             scrolls, the nav rides over whatever is above its resting place,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnswerCard } from './AnswerCard'
-import { ArrowUpIcon, CameraIcon, CloseIcon, ImageIcon, MicIcon } from './Icons'
+import { ArrowUpIcon, CameraIcon, Chevron, CloseIcon, ImageIcon, MicIcon } from './Icons'
 import { KindMark } from './KindMark'
 import { PhotoViewer } from './PhotoViewer'
 import { useDictation } from '../hooks/useDictation'
@@ -55,7 +55,7 @@ const QUESTIONS = ['how much this month', 'hours worked this week', 'what happen
  * a dead end — one before anything was typed, one after something was and
  * found nothing. Shared so the two can never drift into different wording.
  */
-function AskSuggestions({
+export function AskSuggestions({
   heading,
   onPick,
   onHelp,
@@ -65,36 +65,43 @@ function AskSuggestions({
   onHelp: () => void
 }) {
   return (
-    <div className="mt-5">
-      <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+    <div className="mt-[26px]">
+      <p className="mb-2.5 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
         {heading}
       </p>
 
-      <div className="mt-1.5">
-        {QUESTIONS.map((asked) => (
-          <button
-            key={asked}
-            type="button"
-            onClick={() => onPick(asked)}
-            className="-mx-2 flex min-h-12 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
-          >
-            {/* The glyph, not a drawn icon — the same call `KindMark` makes
-                for the rupee, and it sits in the same 20px gutter so these
-                line up with the rows they are standing in for. */}
-            <span className="flex w-5 shrink-0 justify-center text-faint" aria-hidden="true">
-              <span className="text-[0.9375rem] leading-none font-semibold">?</span>
-            </span>
-            <span className="min-w-0 flex-1 truncate text-sm text-muted">{asked}</span>
-          </button>
+      <div>
+        {QUESTIONS.map((asked, at) => (
+          // The hairline sits between rows, on the wrapper — a rule on the
+          // inset button would run 8px wider than every other rule on screen.
+          <div key={asked} className={at > 0 ? 'border-t border-line' : ''}>
+            <button
+              type="button"
+              onClick={() => onPick(asked)}
+              className="-mx-2 flex min-h-[52px] w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
+            >
+              <span
+                className="flex w-[22px] shrink-0 justify-center text-[15px] leading-none font-semibold text-accent"
+                aria-hidden="true"
+              >
+                ?
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{asked}</span>
+              {/* Fills the box, it does not submit — but it does lead
+                  somewhere, and the chevron says so. */}
+              <Chevron dir="right" size={16} className="shrink-0 text-faint" />
+            </button>
+          </div>
         ))}
       </div>
 
       {/* The manual's Asking section covers the half these three cannot:
-          naming a subject, and a single day. */}
+          naming a subject, and a single day. A text button on the rows' own
+          left axis, not an underlined web link. */}
       <button
         type="button"
         onClick={onHelp}
-        className="-ml-1 mt-1 flex h-11 items-center px-1 text-xs text-muted underline decoration-edge underline-offset-2 hover:decoration-muted"
+        className="flex h-11 items-center text-sm font-medium text-accent"
       >
         all examples
       </button>
@@ -167,6 +174,13 @@ type Props = {
   onPrefilled: () => void
   onHelp: () => void
   /**
+   * Whether the field holds anything, reported upward — the Ask destination
+   * draws its own empty state in the page body now, and it has to stand down
+   * the moment there is text, or the suggestions sit under a result. Told
+   * rather than read, like `showExamples`: the text lives here.
+   */
+  onFilled?: (filled: boolean) => void
+  /**
    * A guest whose device has never held a single entry — not just today's.
    * The single most important screen in the app, seen exactly once: the
    * empty-day examples below still do the showing, but a returning reader's
@@ -203,6 +217,7 @@ export function QuickAdd({
   onPrefilled,
   onHelp,
   onOpenEntry,
+  onFilled,
   firstEver,
 }: Props) {
   const [text, setText] = useState('')
@@ -376,6 +391,13 @@ export function QuickAdd({
   }
 
   const trimmed = text.trim()
+
+  // One boolean, so the effect fires on the empty/filled edge and not on
+  // every keystroke's re-render.
+  const filled = trimmed !== ''
+  useEffect(() => {
+    onFilled?.(filled)
+  }, [filled, onFilled])
 
   /**
    * Asking is a mode *and* a prefix.
@@ -650,6 +672,15 @@ export function QuickAdd({
             {mode === 'log' && trimmed === '' && !asking && (
               <span className="text-faint">{HINT}</span>
             )}
+            {/* The row exists to hold the control's height, so in Ask it says
+                what the control does rather than sitting visibly empty. Plain
+                text outside the live region, exactly like the hint above. */}
+            {mode === 'ask' && trimmed === '' && (
+              <span className="flex items-center gap-1.5 text-faint">
+                <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+                Answers appear as you type
+              </span>
+            )}
             {/* Announced politely: the parse changes as you type, and a screen
                 reader should hear the result without losing your place in the
                 field. */}
@@ -854,8 +885,11 @@ export function QuickAdd({
       {/* Switched to Ask with nothing typed yet — the one moment where saying
           what the box can answer costs nothing, because there is no answer on
           screen to push down. Gone as soon as there is any text, so it never
-          sits under a result. */}
-      {mode === 'ask' && trimmed === '' && (
+          sits under a result. Only where the mode came from the control's own
+          toggle (`lg`): on a phone Ask is a destination, and the destination
+          fills its screen from the top with the same suggestions — two lists
+          at once would say less than either. */}
+      {mode === 'ask' && !ask && trimmed === '' && (
         <AskSuggestions
           heading="Try asking"
           onPick={(asked) => {

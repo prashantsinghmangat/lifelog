@@ -148,6 +148,17 @@ export function ImageIcon(props: Props) {
   )
 }
 
+/** Beside a footnote: information, not a warning. */
+export function InfoIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 7.5h.01" />
+    </Svg>
+  )
+}
+
 export function AskIcon(props: Props) {
   return (
     <Svg {...props}>

@@ -43,7 +43,7 @@ type Props = {
 
 const LABEL = 'mb-1.5 block text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase'
 const FIELD =
-  'w-full rounded-lg border border-edge bg-surface px-3 text-base text-ink outline-none transition-colors focus:border-muted'
+  'w-full rounded-lg border border-edge bg-surface px-3 text-base text-ink'
 // 44px, like everything else. `text-base` with `py-2.5` measured 42 on a Galaxy
 // S21 FE — the app's own rule, missed by two pixels in the one place an entry is
 // corrected. The height is set rather than the padding, because the same base is

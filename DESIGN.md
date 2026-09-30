@@ -70,9 +70,13 @@ and nothing in the app is legible only because of a border. All of it is compute
 **Six palettes, selectable in You → Appearance, Amber the default.** Mode and palette are
 orthogonal axes (`data-theme` × `data-palette`); every palette ships a light and a dark block so
 System keeps resolving whichever is chosen. The single source is `src/lib/palettes.ts` — the CSS
-blocks and the picker's swatches both come from it, kept equal by test. `focus` and the four kind
-colours are mode-only: a palette must not repaint what a kind means. Paper is the original warm
-palette, preserved; Graphite and Sea are deliberate cool departures a reader opts into.
+blocks and the picker's swatches both come from it, kept equal by test. The four kind colours are
+mode-only: a palette must not repaint what a kind means. `focus` is each palette's own, anchored
+to its accent and checked at 3:1 on all three grounds like `edge` — it was a fixed blue, which
+read as the browser's default ring on every non-blue palette, and text fields always match
+`:focus-visible`, so on a phone that ring is a constant companion of the capture box and has to
+read as the app's. Paper is the original warm palette, preserved; Graphite and Sea are deliberate
+cool departures a reader opts into.
 
 **The four kind colours are scanning accents, not four UI colours.** Deep enough to read as ink
 with a hue rather than as a highlight, at 15px in a 20px gutter. They mark a row so the expenses

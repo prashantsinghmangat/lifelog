@@ -38,7 +38,7 @@
   --color-line: #EBE4D9;
   --color-edge: #8A8680;
   --color-accent: #9E4A12;
-  --color-focus: #1f5ed4;
+  --color-focus: #9E4A12;
 
   /* Four scanning accents, not four UI colours. Each is deep enough to read as
      ink with a hue rather than as a highlight — at 15px these mark a row, they
@@ -63,7 +63,7 @@
   --color-line: #2B2826;
   --color-edge: #6F6D6A;
   --color-accent: #F0913F;
-  --color-focus: #7fa6ff;
+  --color-focus: #F0913F;
 
   /* Lifted and desaturated: the light-mode hues go muddy on a dark ground, and
      a fully saturated one glows. */
@@ -78,8 +78,13 @@
 
 /* The six palettes, light then dark, written from `src/lib/palettes.ts`.
    A palette-light block outranks the defaults by order; a palette-dark block
-   outranks everything by carrying both attributes. `focus` and the four kind
-   colours are deliberately absent — they are mode-only and stay above. */
+   outranks everything by carrying both attributes. The four kind colours are
+   deliberately absent — they are mode-only and stay above: a palette must not
+   repaint what a kind means. `focus` is in each block since the audit: the
+   ring is the palette's own accent, because a fixed blue read as the
+   browser's default ring on every non-blue palette — text fields always
+   match `:focus-visible`, so on a phone the ring shows on every tap into the
+   capture box, and it has to read as the app's. */
 
 [data-palette='amber'] {
   --color-surface: #F2EEE6;
@@ -91,6 +96,7 @@
   --color-line: #EBE4D9;
   --color-edge: #8A8680;
   --color-accent: #9E4A12;
+  --color-focus: #9E4A12;
 }
 
 [data-palette='amber'][data-theme='dark'] {
@@ -103,6 +109,7 @@
   --color-line: #2B2826;
   --color-edge: #6F6D6A;
   --color-accent: #F0913F;
+  --color-focus: #F0913F;
 }
 
 [data-palette='paper'] {
@@ -115,6 +122,7 @@
   --color-line: #E7E0D4;
   --color-edge: #88847E;
   --color-accent: #1E1A15;
+  --color-focus: #1E1A15;
 }
 
 [data-palette='paper'][data-theme='dark'] {
@@ -127,6 +135,7 @@
   --color-line: #332D27;
   --color-edge: #76716A;
   --color-accent: #EFE8DC;
+  --color-focus: #EFE8DC;
 }
 
 [data-palette='graphite'] {
@@ -139,6 +148,7 @@
   --color-line: #DDE1E5;
   --color-edge: #7F8284;
   --color-accent: #0B737A;
+  --color-focus: #0B737A;
 }
 
 [data-palette='graphite'][data-theme='dark'] {
@@ -151,6 +161,7 @@
   --color-line: #282C31;
   --color-edge: #6D7072;
   --color-accent: #3FC1C9;
+  --color-focus: #3FC1C9;
 }
 
 [data-palette='plum'] {
@@ -163,6 +174,7 @@
   --color-line: #E5DEEA;
   --color-edge: #858189;
   --color-accent: #A82F5C;
+  --color-focus: #A82F5C;
 }
 
 [data-palette='plum'][data-theme='dark'] {
@@ -175,6 +187,7 @@
   --color-line: #2C2636;
   --color-edge: #706C76;
   --color-accent: #F2789F;
+  --color-focus: #F2789F;
 }
 
 [data-palette='espresso'] {
@@ -187,6 +200,7 @@
   --color-line: #E5DDCE;
   --color-edge: #85817A;
   --color-accent: #85660E;
+  --color-focus: #85660E;
 }
 
 [data-palette='espresso'][data-theme='dark'] {
@@ -199,6 +213,7 @@
   --color-line: #302720;
   --color-edge: #757069;
   --color-accent: #E3B24A;
+  --color-focus: #E3B24A;
 }
 
 [data-palette='sea'] {
@@ -211,6 +226,7 @@
   --color-line: #DCE3E0;
   --color-edge: #7F8381;
   --color-accent: #0F6B6B;
+  --color-focus: #0F6B6B;
 }
 
 [data-palette='sea'][data-theme='dark'] {
@@ -223,6 +239,7 @@
   --color-line: #243230;
   --color-edge: #6C7371;
   --color-accent: #46C8B8;
+  --color-focus: #46C8B8;
 }
 
 /* There is no `--dock`, and that is deliberate.

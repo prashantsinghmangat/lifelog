@@ -749,3 +749,40 @@ describe('attaching a photo while composing', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/1 of 3/)
   })
 })
+
+describe('the focus ring lands on the control, not the field', () => {
+  // jsdom applies no stylesheets, so this pins the contract the CSS keys off:
+  // the field is `#quick-add`, it sits inside `.capture`, and `index.css`
+  // still carries the three handover rules. Break any of the three and the
+  // ring is back around a field inside a bordered box.
+  it('keeps the field inside the capture control under its known id', () => {
+    setup()
+    const control = document.querySelector('.capture')
+    expect(control).toBeTruthy()
+    const field = control!.querySelector('#quick-add')
+    expect(field).toBeTruthy()
+    expect(field!.tagName).toBe('TEXTAREA')
+  })
+
+  it('keeps the handover rules in index.css', async () => {
+    // From the project root: under the jsdom environment `import.meta.url`
+    // is not a file: URL, so the contrast test's URL trick does not carry.
+    const { readFileSync } = await import('node:fs')
+    const css = readFileSync('src/index.css', 'utf8')
+    expect(css).toMatch(/#quick-add:focus-visible \{\s*outline: none;/)
+    expect(css).toMatch(/\.capture:focus-within \{\s*outline: 2px solid var\(--color-focus\);/)
+    expect(css).toMatch(/\.capture:focus-within:not\(:has\(#quick-add:focus-visible\)\)/)
+  })
+})
+
+describe('the second row while asking', () => {
+  it('carries a status line instead of sitting empty', async () => {
+    const { box } = setup()
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    expect(screen.getByText('Answers appear as you type')).toBeTruthy()
+
+    // Gone once there is a question — the live preview owns the row then.
+    await userEvent.type(box, '? how much')
+    expect(screen.queryByText('Answers appear as you type')).toBeNull()
+  })
+})

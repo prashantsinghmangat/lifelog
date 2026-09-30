@@ -618,7 +618,13 @@ the SVG is the source of truth and the PNGs regenerate from it.
 `raised`, `sunken`, `ink`, `muted`, `faint`, `line`, `edge`, `accent`, `focus`, plus the four
 kind colours — swapped by `[data-palette]` × `[data-theme]` blocks: six palettes, each with a
 light and a dark set, written from the single source `src/lib/palettes.ts` and held equal to it
-by `contrast.test.ts`. Components write `text-muted`, `bg-raised`, `border-line`. **Do not add
+by `contrast.test.ts`. `focus` rides those blocks too, anchored to each palette's accent: it
+was a fixed mode-only blue, and the S21 audit read it as the browser's default ring — on the
+one control the Ask screen exists for. The handover rules in `index.css` were doing their job;
+the colour was the tell. Text fields always match `:focus-visible`, so on a phone the ring
+shows on every tap into the capture box — it cannot be made touch-silent without going
+keyboard-silent, so it has to look like the app's own. Only the four kind colours stay
+mode-only. Components write `text-muted`, `bg-raised`, `border-line`. **Do not add
 `dark:` variants or palette-specific classes**; the token swap covers every combination, so a new
 `text-gray-500` is a bug that will look fine in one combination and unreadable in eleven others.
 The "third theme is one more block" promise was called in by spec 015 — twelve blocks, zero
