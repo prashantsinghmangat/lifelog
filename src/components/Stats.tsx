@@ -1,8 +1,9 @@
-import { format, parseISO } from 'date-fns'
+import { format, getHours, parseISO } from 'date-fns'
 import { useMemo, useState } from 'react'
 import { Chevron } from './Icons'
 import {
   columnsFor,
+  dailyAverage,
   peak,
   periodLabel,
   spanOf,
@@ -12,9 +13,8 @@ import {
   type Column,
   type Measure,
   type Scale,
-  type Totals,
 } from '../lib/stats'
-import { dayKey, minutes, rupees } from '../lib/format'
+import { dayKey, minutes, rupees, rupeesCompact } from '../lib/format'
 import type { Entry, Kind } from '../types'
 
 /**
@@ -31,8 +31,8 @@ import type { Entry, Kind } from '../types'
  * a way further in. There is no date picker.
  */
 
-/** The drawable part of the chart. The remaining 8px of the 132 is the axis. */
-const BAR_AREA = 124
+/** The plot's height. Bars scale into it; the axis labels sit below. */
+const BAR_AREA = 158
 
 /** Written out, never interpolated: Tailwind only compiles what it can see. */
 const SEGMENT: Record<Kind, string> = {
@@ -42,7 +42,7 @@ const SEGMENT: Record<Kind, string> = {
   note: 'bg-note',
 }
 
-/** Stacking order, bottom up. Money sits on the baseline. */
+/** The kinds block's order. Money first, as everywhere. */
 const STACK: Kind[] = ['expense', 'time', 'event', 'note']
 
 const KIND_NAME: Record<Kind, string> = {
@@ -52,26 +52,17 @@ const KIND_NAME: Record<Kind, string> = {
   note: 'Notes',
 }
 
-const MEASURES: { value: Measure; label: string }[] = [
-  { value: 'entries', label: 'Entries' },
-  { value: 'spent', label: 'Spent' },
-  { value: 'hours', label: 'Hours' },
+/**
+ * One colour per measure. The kind palette fails colour-vision separation
+ * between time and event, which is why the per-kind breakdown is the text
+ * block below and never a stacked bar. `entries` reads as "How often" on
+ * screen — a count, told in ink.
+ */
+const MEASURES: { value: Measure; label: string; fill: string }[] = [
+  { value: 'spent', label: 'Spent', fill: 'bg-expense' },
+  { value: 'hours', label: 'Hours', fill: 'bg-time' },
+  { value: 'entries', label: 'How often', fill: 'bg-ink' },
 ]
-
-/** The one colour a single-measure bar takes. Stacking a rupee total by kind
- *  would be a lie, so Spent is the expense colour and Hours the time colour. */
-const SOLID: Record<Exclude<Measure, 'entries'>, string> = {
-  spent: 'bg-expense',
-  hours: 'bg-time',
-}
-
-/** What the secondary figures say, as format.ts words them. */
-function said(totals: Totals, measure: Measure): { value: string; name: string } {
-  if (measure === 'hours')
-    return { value: totals.minutes === 0 ? '0m' : minutes(totals.minutes), name: 'logged' }
-  const count = valueOf(totals, 'entries')
-  return { value: String(count), name: count === 1 ? 'entry' : 'entries' }
-}
 
 const SCALES: { value: Scale; label: string }[] = [
   { value: 'day', label: 'Day' },
@@ -80,19 +71,10 @@ const SCALES: { value: Scale; label: string }[] = [
   { value: 'year', label: 'Year' },
 ]
 
-/** Bar gaps, per scale: a month's thirty columns need tighter air. */
-const GAP: Record<Scale, string> = {
-  day: 'gap-[3px]',
-  week: 'gap-1.5',
-  month: 'gap-0.5',
-  year: 'gap-1.5',
-}
-
-/** A non-zero value never renders shorter than this, or a day with one entry
- *  disappears from its month. */
+/** A non-zero value never renders shorter than the 3px stub a zero draws. */
 function height(value: number, max: number): number {
   if (value === 0) return 0
-  return Math.max(2, (value / max) * BAR_AREA)
+  return Math.max(3, (value / max) * BAR_AREA)
 }
 
 /**
@@ -120,6 +102,13 @@ function barName(column: Column): string {
   ].join(', ')
 }
 
+/** What the axis chips print for one measure's value. */
+function said(measure: Measure, value: number): string {
+  if (measure === 'spent') return rupeesCompact(value)
+  if (measure === 'hours') return value === 0 ? '0m' : minutes(value)
+  return String(value)
+}
+
 type Props = {
   /** The whole local log. Never fetched for; the device already holds it. */
   all: Entry[]
@@ -140,7 +129,7 @@ export function Stats({ all, now, day }: Props) {
    */
   const [scale, setScale] = useState<Scale>('month')
   const [anchor, setAnchor] = useState(() => (day < today ? day : today))
-  const [measure, setMeasure] = useState<Measure>('entries')
+  const [measure, setMeasure] = useState<Measure>('spent')
 
   /**
    * The hour picked out of the day view — the one bar tap that goes nowhere,
@@ -204,7 +193,8 @@ export function Stats({ all, now, day }: Props) {
       : valueOf(dayTotal, 'entries') -
         columns.reduce((sum, column) => sum + valueOf(column.totals, 'entries'), 0)
 
-  const chosen = columns.find((column) => column.key === hour) ?? null
+  const chosenAt = columns.findIndex((column) => column.key === hour)
+  const chosen = chosenAt === -1 ? null : columns[chosenAt]!
 
   /**
    * Under a week of history, almost every bar is a flat zero and the one or
@@ -228,29 +218,34 @@ export function Stats({ all, now, day }: Props) {
     setAnchor(column.drillTo.anchor)
   }
 
+  /** A period after today draws nothing — not even a stub. */
+  function future(column: Column): boolean {
+    if (scale === 'day') return anchor === today && Number(column.key) + 6 > getHours(now)
+    return column.key > today
+  }
+
+  const live = MEASURES.find((option) => option.value === measure)!
+  const average = dailyAverage(totals)
+
   return (
     <div>
-      {/* The same negative-margin trick as Log · Ask: a 40px pill inside a
-          44px target, so the control the artboard drew at 40 still meets the
-          app's own rule. */}
-      <div
-        role="group"
-        aria-label="Scale"
-        className="flex rounded-[11px] bg-sunken p-0.5"
-      >
+      {/* The period selector: four equal buttons, not a second full-width
+          segmented control stacked under Grid | Chart. The live one is a
+          filled `sunken` pill at 600; the pill is 40px inside a 44px target. */}
+      <div role="group" aria-label="Scale" className="flex gap-2">
         {SCALES.map((option) => (
           <button
             key={option.value}
             type="button"
             aria-pressed={scale === option.value}
             onClick={() => setScale(option.value)}
-            className="-my-0.5 flex h-11 min-w-0 flex-1 items-center justify-center"
+            className="flex h-11 min-w-0 flex-1 items-center justify-center"
           >
             <span
-              className={`flex h-10 w-full items-center justify-center rounded-[9px] text-sm transition-colors ${
+              className={`flex h-10 w-full items-center justify-center rounded-[10px] text-sm transition-colors ${
                 scale === option.value
-                  ? 'border border-edge bg-raised font-medium text-ink'
-                  : 'text-muted'
+                  ? 'bg-sunken font-semibold text-ink'
+                  : 'text-muted hover:text-ink'
               }`}
             >
               {option.label}
@@ -259,20 +254,32 @@ export function Stats({ all, now, day }: Props) {
         ))}
       </div>
 
+      {/* The headline. The lead figure is always the period's money — the
+          measure buttons change the picture, never the headline — and the
+          eyebrow names that measure with the period, so the figure is never a
+          bare number. The serif display face, like an answer's own lead. */}
       <div className="mt-4 flex items-end justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
-            {SCALES.find((option) => option.value === scale)?.label}
-          </p>
-          <h3 className="mt-0.5 truncate text-[1.375rem] leading-tight font-semibold tracking-[-0.012em] text-ink">
-            {label}
+          <h3 className="truncate text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+            Spent · {label}
           </h3>
+          <p className="mt-1 font-display text-[2.5rem] leading-none tracking-[-0.01em] text-ink tabular-nums">
+            {rupees(totals.paise)}
+          </p>
+          {/* 13px: the average over the days that hold entries, and how many. */}
+          {scale !== 'day' && totals.activeDays > 0 && (
+            <p className="mt-1.5 text-[0.8125rem] text-muted">
+              <span className="tabular-nums">{rupees(average)}</span> a day across{' '}
+              <span className="tabular-nums">{totals.activeDays}</span>{' '}
+              {totals.activeDays === 1 ? 'day' : 'days'} with entries
+            </p>
+          )}
         </div>
 
         {/* Paired right, like the day header's own: one place to aim. Disabled
             at the bounds rather than scrolling into empty months a reader
             would take for data loss. */}
-        <div className="flex shrink-0 items-center">
+        <div className="flex shrink-0 items-center pb-1">
           <button
             type="button"
             aria-label="Previous period"
@@ -306,137 +313,163 @@ export function Stats({ all, now, day }: Props) {
         )} spent, ${totals.minutes === 0 ? 'no time logged' : minutes(totals.minutes)}`}
       </p>
 
-      {/* Figures lead and their names sit back, as everywhere else. Money is
-          the lead whatever the bars measure — the measure changes the picture,
-          never the headline — with the count and the hours at the right. */}
-      <div className="mt-4 flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
-            Spent
-          </p>
-          <p className="mt-0.5 text-3xl font-semibold tracking-[-0.022em] text-ink tabular-nums">
-            {rupees(totals.paise)}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-0.5 pb-0.5">
-          {(['entries', 'hours'] as const).map((of) => {
-            const secondary = said(totals, of)
-            return (
-              <p key={of} className="text-right">
-                <span className="text-sm font-medium text-ink tabular-nums">
-                  {secondary.value}
-                </span>{' '}
-                <span className="text-xs text-faint">{secondary.name}</span>
-              </p>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* What bar height measures. On Entries the bars stack by kind; on Spent
-          and Hours they are one colour, because stacking a rupee total by kind
-          would be a lie. */}
-      <div role="group" aria-label="Measure" className="mt-1 flex gap-1">
-        {MEASURES.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={measure === option.value}
-            onClick={() => setMeasure(option.value)}
-            className={`-mx-1 -my-[10px] flex h-11 items-center px-2 text-xs transition-colors ${
-              measure === option.value ? 'font-medium text-ink' : 'text-faint hover:text-muted'
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
       {tooLittleData ? (
         // Say so rather than draw it: a handful of spikes in an otherwise flat
         // grid is not a picture, and the totals above and the breakdowns below
         // stay meaningful with no bars at all.
-        <p className="mt-4 flex h-[132px] items-center justify-center text-center text-xs text-faint">
+        <p className="mt-4 flex h-[158px] items-center justify-center text-center text-xs text-faint">
           Too little logged yet for a chart to mean anything —
           <br />a few more days and this fills in.
         </p>
       ) : (
-        <div
-          role="group"
-          aria-label={`Entries by ${scale === 'day' ? 'hour' : scale === 'year' ? 'month' : 'day'}, ${label}`}
-          className={`mt-4 flex h-[132px] items-end ${GAP[scale]}`}
-        >
-          {columns.map((column, at) => (
-            <button
-              key={column.key}
-              type="button"
-              aria-label={barName(column)}
-              aria-pressed={scale === 'day' ? column.key === hour : undefined}
-              onClick={() => tap(column)}
-              className="flex h-full min-w-0 flex-1 flex-col justify-end"
-            >
-              <span aria-hidden="true" className="flex w-full flex-col justify-end gap-px">
-                {measure === 'entries' ? (
-                  // Stacked by kind so a period's texture is visible. Bottom up,
-                  // so the order is reversed for the DOM's top-down flow.
-                  [...STACK].reverse().map((kind) =>
-                    column.totals.counts[kind] === 0 ? null : (
-                      <span
-                        key={kind}
-                        className={`w-full rounded-[1px] ${SEGMENT[kind]}`}
-                        style={{ height: height(column.totals.counts[kind], max) }}
-                      />
-                    ),
-                  )
-                ) : valueOf(column.totals, measure) === 0 ? null : (
+        <div className="relative mt-5">
+          {/* Two dashed guides at the peak and its half, labelled on surface
+              chips at the right so a label never sits on a bar. Drawn first:
+              the bar row after them is positioned, so it paints on top. */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-line"
+          />
+          {max > 1 && (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-line"
+            />
+          )}
+
+          <div
+            role="group"
+            aria-label={`Entries by ${scale === 'day' ? 'hour' : scale === 'year' ? 'month' : 'day'}, ${label}`}
+            className="relative flex h-[158px] items-end gap-[2px]"
+          >
+            {columns.map((column) => {
+              const value = valueOf(column.totals, measure)
+              const selected = scale === 'day' && column.key === hour
+              return (
+                <button
+                  key={column.key}
+                  type="button"
+                  aria-label={barName(column)}
+                  aria-pressed={scale === 'day' ? column.key === hour : undefined}
+                  onClick={() => tap(column)}
+                  className="flex h-full min-w-0 flex-1 flex-col justify-end"
+                >
+                  {/* One colour per measure; today takes the accent and the
+                      selected bar takes ink. Radius on the data end only,
+                      anchored to the baseline. A zero in the past is a stub in
+                      `sunken`, never a gap — a gap reads as a day that did not
+                      exist. After today, nothing. */}
+                  {!future(column) && (
+                    <span
+                      aria-hidden="true"
+                      className={`w-full rounded-t-[3px] ${
+                        value === 0
+                          ? 'bg-sunken'
+                          : selected
+                            ? 'bg-ink'
+                            : column.isNow
+                              ? 'bg-accent'
+                              : live.fill
+                      }`}
+                      style={{ height: value === 0 ? 3 : height(value, max) }}
+                    />
+                  )}
+                  <span aria-hidden="true" className="mt-px h-px w-full bg-edge" />
                   <span
-                    className={`w-full rounded-[1px] ${SOLID[measure]}`}
-                    style={{ height: height(valueOf(column.totals, measure), max) }}
-                  />
-                )}
+                    aria-hidden="true"
+                    className={`h-[8px] w-full overflow-visible text-center text-[10px] leading-none tabular-nums ${
+                      column.isNow ? 'font-medium text-ink' : 'text-faint'
+                    }`}
+                  >
+                    {/* Thirty labels do not fit under 10px columns; the month
+                        axis names every fifth day, and today always. */}
+                    {scale !== 'month' ||
+                    column.isNow ||
+                    column.key.endsWith('-01') ||
+                    Number(column.key.slice(-2)) % 5 === 0
+                      ? column.label
+                      : ''}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* The axis chips, after the bars so a label never sits under one. */}
+          <span
+            aria-hidden="true"
+            className="absolute top-0 right-0 -translate-y-1/2 rounded bg-surface px-1 text-[10px] text-faint tabular-nums"
+          >
+            {said(measure, max)}
+          </span>
+          {max > 1 && (
+            <span
+              aria-hidden="true"
+              className="absolute top-1/2 right-0 -translate-y-1/2 rounded bg-surface px-1 text-[10px] text-faint tabular-nums"
+            >
+              {said(measure, Math.round(max / 2))}
+            </span>
+          )}
+
+          {/* The callout on the selected bar: the value, then the hour and its
+              count — in place of printing a number on every bar. Clamped so
+              the chip stays inside the plot at any font scale, and a live
+              region so the selection is also said aloud. */}
+          {chosen !== null && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="pointer-events-none absolute top-2 -translate-x-1/2"
+              style={{
+                left: `${Math.min(86, Math.max(14, ((chosenAt + 0.5) / columns.length) * 100))}%`,
+              }}
+            >
+              <span className="block w-max rounded-md bg-sunken px-2 py-1 text-center shadow-[0_1px_2px_rgb(0_0_0/0.08)]">
+                <span className="block text-sm font-semibold text-ink tabular-nums">
+                  {measure === 'spent'
+                    ? rupees(chosen.totals.paise)
+                    : said(measure, valueOf(chosen.totals, measure))}
+                </span>
+                <span className="block text-[0.6875rem] text-muted">
+                  {chosen.label} · {valueOf(chosen.totals, 'entries')}{' '}
+                  {valueOf(chosen.totals, 'entries') === 1 ? 'entry' : 'entries'}
+                </span>
               </span>
-              {/* The whole of the you-are-here treatment: a heavier baseline. */}
-              <span
-                aria-hidden="true"
-                className={`mt-px w-full ${column.isNow ? 'h-0.5 bg-ink' : 'h-px bg-edge'}`}
-              />
-              <span
-                aria-hidden="true"
-                className={`h-[8px] w-full overflow-visible text-center text-[10px] leading-none tabular-nums ${
-                  column.isNow ? 'text-ink' : 'text-faint'
-                }`}
-              >
-                {/* Thirty labels do not fit under 10px columns; the month axis
-                    names every fifth day, and today always. */}
-                {scale !== 'month' || column.isNow || at === 0 || (at + 1) % 5 === 0
-                  ? column.label
-                  : ''}
-              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* The measure row sits below the chart: the picture is read first and
+          adjusted second. The live one is the accent fill; the others are a
+          hairline outline. */}
+      {!tooLittleData && (
+        <div role="group" aria-label="Measure" className="mt-3 flex gap-2">
+          {MEASURES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={measure === option.value}
+              onClick={() => setMeasure(option.value)}
+              className={`h-11 min-w-0 flex-1 rounded-[10px] px-2 text-sm transition-colors ${
+                measure === option.value
+                  ? 'bg-accent font-medium text-surface'
+                  : 'border border-line text-muted hover:text-ink'
+              }`}
+            >
+              {option.label}
             </button>
           ))}
         </div>
       )}
 
-      {/* The day view's hint line: the selected hour said in numbers, or how
-          many entries have no clock and so stand in no bar. One quiet line —
-          a fact about the day, not a problem to fix. */}
-      {!tooLittleData && scale === 'day' && (chosen !== null || leftOut > 0) && (
+      {/* The day view's reconciliation line: how many entries stand in no
+          hourly bar. One quiet line — a fact about the day, not a problem. */}
+      {!tooLittleData && scale === 'day' && leftOut > 0 && (
         <p role="status" aria-live="polite" className="mt-2 text-xs text-faint">
-          {chosen !== null ? (
-            <>
-              <span className="font-medium text-muted">{chosen.label}</span>
-              {` — ${barName(chosen).split(', ').slice(1).join(', ')}`}
-            </>
-          ) : (
-            // Both reasons, because `leftOut` counts both and the line used to
-            // name only one: an entry logged at 11:30pm plainly *has* a time,
-            // and was being told it did not. A line that exists to reconcile
-            // the bars with the day's total cannot itself be wrong about why
-            // they differ.
-            `${leftOut} ${
-              leftOut === 1 ? 'entry is' : 'entries are'
-            } not in the bars — no time, or outside 6am–10pm`
-          )}
+          {`${leftOut} ${
+            leftOut === 1 ? 'entry is' : 'entries are'
+          } not in the bars — no time, or outside 6am–10pm`}
         </p>
       )}
 
@@ -445,20 +478,23 @@ export function Stats({ all, now, day }: Props) {
       {entries === 0 && <p className="mt-4 text-xs text-faint">Nothing was logged.</p>}
 
       {/* The same two blocks under every scale, so the shape of the answer
-          never changes as you move — only the numbers. First the four kinds. */}
-      <div className="mt-5 border-t border-line pt-3">
+          never changes as you move — only the numbers. First the four kinds:
+          this text block *is* the per-kind breakdown, and it is text rather
+          than a stacked bar because the kind palette fails CVD separation
+          between time and event. */}
+      <p className="mt-[26px] mb-1 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+        What made it up
+      </p>
+      <div>
         {STACK.map((kind) => {
           const count = totals.counts[kind]
           return (
             <div key={kind} className="flex h-[30px] items-center gap-2.5">
-              <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${SEGMENT[kind]}`} />
-              <span className="w-24 shrink-0 text-sm text-muted">{KIND_NAME[kind]}</span>
-              <span aria-hidden="true" className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-sunken">
-                <span
-                  className={`block h-full rounded-full ${SEGMENT[kind]}`}
-                  style={{ width: entries === 0 ? 0 : `${(count / entries) * 100}%` }}
-                />
-              </span>
+              <span
+                aria-hidden="true"
+                className={`h-2 w-2 shrink-0 rounded-full ${SEGMENT[kind]}`}
+              />
+              <span className="min-w-0 flex-1 text-sm text-muted">{KIND_NAME[kind]}</span>
               <span className="shrink-0 text-right text-sm text-muted tabular-nums">
                 {count}
                 {kind === 'expense' && totals.paise !== 0 && ` · ${rupees(totals.paise)}`}
@@ -469,33 +505,52 @@ export function Stats({ all, now, day }: Props) {
         })}
       </div>
 
-      {/* Then the top three categories by spend. The bucket with no name sorts
-          last even when largest, because it is an absence, not a category. */}
+      {/* Then where the money went: name, share, amount, and a 4px bar on a
+          sunken track — scaled against the largest category, not against
+          100%, so the biggest fills the track and the rest read relative to
+          it. The bucket with no name sorts last even when largest, because it
+          is an absence, not a category. */}
       {totals.byCategory.length > 0 && (
-        <div className="mt-3 border-t border-line pt-3">
-          {totals.byCategory.slice(0, 3).map((category) => {
-            const widest = Math.max(
-              1,
-              ...totals.byCategory.slice(0, 3).map((held) => Math.abs(held.paise)),
-            )
-            return (
-              <div key={category.name ?? ''} className="flex h-[28px] items-center gap-2.5">
-                <span className={`w-24 shrink-0 truncate text-sm ${category.name === null ? 'text-faint' : 'text-muted'}`}>
-                  {category.name ?? 'uncategorised'}
-                </span>
-                <span aria-hidden="true" className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-sunken">
-                  <span
-                    className="block h-full rounded-full bg-expense"
-                    style={{ width: `${(Math.abs(category.paise) / widest) * 100}%` }}
-                  />
-                </span>
-                <span className="shrink-0 text-right text-sm text-muted tabular-nums">
-                  {rupees(category.paise)}
-                </span>
-              </div>
-            )
-          })}
-        </div>
+        <>
+          <p className="mt-[26px] mb-1 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+            Where it went
+          </p>
+          <div>
+            {totals.byCategory.slice(0, 4).map((category) => {
+              const widest = Math.max(
+                1,
+                ...totals.byCategory.slice(0, 4).map((held) => Math.abs(held.paise)),
+              )
+              const share =
+                totals.paise === 0
+                  ? 0
+                  : Math.round((Math.abs(category.paise) / Math.abs(totals.paise)) * 100)
+              return (
+                <div key={category.name ?? ''} className="py-2">
+                  <div className="flex items-baseline gap-3">
+                    <span
+                      className={`min-w-0 flex-1 truncate text-sm ${
+                        category.name === null ? 'text-faint' : 'text-ink'
+                      }`}
+                    >
+                      {category.name ?? 'uncategorised'}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted tabular-nums">{share}%</span>
+                    <span className="shrink-0 text-right text-sm text-muted tabular-nums">
+                      {rupees(category.paise)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-sunken">
+                    <span
+                      className="block h-full rounded-full bg-expense"
+                      style={{ width: `${(Math.abs(category.paise) / widest) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </>
       )}
     </div>
   )

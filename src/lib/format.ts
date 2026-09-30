@@ -37,6 +37,19 @@ export function rupees(paise: number): string {
   return `${sign}₹${whole}${rest === 0 ? '' : `.${String(rest).padStart(2, '0')}`}`
 }
 
+/**
+ * '₹2.2k' — the chart's axis chips, where '₹2,180' does not fit beside a bar.
+ * Under a thousand rupees the full form is already short and stays exact.
+ * Money still only becomes a string here.
+ */
+export function rupeesCompact(paise: number): string {
+  const abs = Math.abs(paise)
+  if (abs < 100_000) return rupees(paise)
+  const sign = paise < 0 ? '-' : ''
+  const thousands = Math.round(abs / 10_000) / 10
+  return `${sign}₹${Number.isInteger(thousands) ? String(thousands) : thousands.toFixed(1)}k`
+}
+
 /** The inverse, for the editor. "347.5" → 34750. Empty or unreadable input → null. */
 export function paiseFrom(text: string): number | null {
   const cleaned = text.replace(/[₹,\s]/g, '')

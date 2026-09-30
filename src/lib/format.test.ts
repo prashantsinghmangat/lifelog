@@ -9,6 +9,7 @@ import {
   paiseFrom,
   relativeDay,
   rupees,
+  rupeesCompact,
   timeValue,
   until,
 } from './format'
@@ -177,5 +178,22 @@ describe('how long until something today', () => {
     // "in 19h 20m" is arithmetic nobody asked for; "tomorrow" is the answer.
     expect(until(new Date(2026, 8, 15, 4, 20, 0), now)).toBeNull()
     expect(until(new Date(2026, 8, 13, 23, 59, 0), now)).toBeNull()
+  })
+})
+
+describe('rupeesCompact', () => {
+  it('stays exact under a thousand rupees', () => {
+    expect(rupeesCompact(35000)).toBe('₹350')
+    expect(rupeesCompact(0)).toBe('₹0')
+  })
+
+  it('compacts to one decimal of a thousand', () => {
+    expect(rupeesCompact(218000)).toBe('₹2.2k')
+    expect(rupeesCompact(100000)).toBe('₹1k')
+    expect(rupeesCompact(1842000)).toBe('₹18.4k')
+  })
+
+  it('keeps the sign outside the rupee mark, as rupees does', () => {
+    expect(rupeesCompact(-218000)).toBe('-₹2.2k')
   })
 })

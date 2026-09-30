@@ -261,6 +261,18 @@ export function columnsFor(rows: Entry[], scale: Scale, anchor: string, now: Dat
   })
 }
 
+/**
+ * Whole rupees a day over the days that actually hold entries — the
+ * headline's subline. Integer paise out, so only `format.ts` prints it, and
+ * rounded to the rupee the way an answer's `avg` is: paise are right for a
+ * figure somebody typed and wrong for a derived one. Zero active days is
+ * zero, never NaN.
+ */
+export function dailyAverage(totals: Totals): number {
+  if (totals.activeDays === 0) return 0
+  return Math.round(totals.paise / totals.activeDays / 100) * 100
+}
+
 /** The one number a bar's height comes from. Absolute, because a refund must
  *  not draw a negative pixel height — the sign survives in the figures. */
 export function valueOf(totals: Totals, measure: Measure): number {

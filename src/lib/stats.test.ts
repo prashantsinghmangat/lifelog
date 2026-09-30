@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   columnsFor,
+  dailyAverage,
   peak,
   periodLabel,
   spanOf,
@@ -9,6 +10,7 @@ import {
   valueOf,
 } from './stats'
 import SOURCE from './stats.ts?raw'
+import { rupees } from './format'
 import type { Entry, Kind } from '../types'
 
 /**
@@ -304,5 +306,22 @@ describe('ranking the categories', () => {
     expect(totals.byCategory.map((bucket) => bucket.name)).toEqual(['refunds', 'food', 'tea'])
     // And the sign survives into the figure, exactly as before.
     expect(totals.byCategory[0]?.paise).toBe(-50000)
+  })
+})
+
+describe('dailyAverage', () => {
+  const base = { minutes: 0, counts: { expense: 0, time: 0, event: 0, note: 0 }, byCategory: [] }
+
+  it('averages over days with entries and rounds to the rupee', () => {
+    expect(dailyAverage({ ...base, paise: 1842000, activeDays: 22 })).toBe(83700)
+    expect(rupees(dailyAverage({ ...base, paise: 1842000, activeDays: 22 }))).toBe('₹837')
+  })
+
+  it('is zero over no active days, never NaN', () => {
+    expect(dailyAverage({ ...base, paise: 50000, activeDays: 0 })).toBe(0)
+  })
+
+  it('keeps a refund-heavy period signed', () => {
+    expect(dailyAverage({ ...base, paise: -30000, activeDays: 3 })).toBe(-10000)
   })
 })

@@ -267,8 +267,13 @@ nothing is worse than stopping.
 **The day scale's bars can disagree with the day's total, and the hint line is what reconciles
 them.** `occurred_at` is optional, so most rows have no hour to stand in; they are left out of
 the hourly bars and counted out loud rather than silently dropped. The lead figure is always the
-period's money — the measure buttons change the picture, never the headline — and on Spent and
-Hours the bars are one colour, because stacking a rupee total by kind would be a lie. A refund
+period's money — the measure buttons change the picture, never the headline; the eyebrow simply
+names that measure beside the period. The bars are **one colour per measure** on every measure
+now, not only Spent and Hours: stacking a rupee total by kind was always a lie, and the stacked
+How-often bars went with the S21 audit because the kind palette fails CVD separation between
+time and event — the per-kind breakdown is the text block, where the names carry it. Today's bar
+takes the accent and a selected bar takes ink; a past zero draws a 3px `sunken` stub, never a
+gap, and a period after today draws nothing. A refund
 keeps its sign in every figure while bars and tracks use its size, so a negative never draws a
 negative pixel. Browsing is bounded at both ends: nothing may start after today (a walkable empty
 November reads as data loss), and the past stops at the log's earliest row.

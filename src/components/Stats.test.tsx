@@ -61,14 +61,15 @@ function open(day = '2026-09-17') {
   render(<Stats all={ROWS} now={NOW} day={day} />)
 }
 
-/** The period label — the accessible heading of the screen. */
+/** The period label — the accessible heading of the screen. The eyebrow
+ *  names the headline's measure with it; the tests read the period half. */
 function heading(): string {
-  return screen.getByRole('heading', { level: 3 }).textContent ?? ''
+  return (screen.getByRole('heading', { level: 3 }).textContent ?? '').replace(/^Spent · /, '')
 }
 
 /** The lead figure alone — ₹350 also appears in the blocks below it. */
 function lead(): string {
-  return document.querySelector('.text-3xl')?.textContent ?? ''
+  return document.querySelector('.font-display')?.textContent ?? ''
 }
 
 describe('drilling', () => {
@@ -102,10 +103,10 @@ describe('drilling', () => {
     await userEvent.click(bar)
     expect(heading()).toBe('Mon 14 Sep')
     expect(bar.getAttribute('aria-pressed')).toBe('true')
-    // Named in the hint line with its numbers — the axis also says 10a, so
-    // the assertion reads the status line rather than the first match.
+    // Named in the callout chip with its numbers — a live region, so the
+    // selection is said aloud as well as drawn.
     const hints = screen.getAllByRole('status')
-    expect(hints.some((line) => line.textContent?.startsWith('10a'))).toBe(true)
+    expect(hints.some((line) => line.textContent?.includes('10a · 1 entry'))).toBe(true)
 
     // Tapping again clears the selection.
     await userEvent.click(bar)
@@ -188,20 +189,38 @@ describe('switching scale', () => {
 })
 
 describe('measures', () => {
-  it('keeps the lead figure while the bars change to one colour', async () => {
+  it('keeps the lead figure while the bars change colour, one per measure', async () => {
     open()
+    // Spent is the default and the headline is always the period's money.
     expect(lead()).toBe('₹350')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Spent' }))
+    const chart = () => screen.getByRole('group', { name: /Entries by day/ })
+    const day14 = () => within(chart()).getByRole('button', { name: /^14 September/ })
+    // One solid bar in the expense colour — never a stack: the kind palette
+    // fails CVD separation between time and event, so the breakdown is text.
+    expect(day14().querySelectorAll('.bg-expense').length).toBe(1)
+    expect(day14().querySelectorAll('.bg-event').length).toBe(0)
+
+    await userEvent.click(screen.getByRole('button', { name: 'How often' }))
     // The measure changes the picture, never the headline.
     expect(lead()).toBe('₹350')
+    expect(day14().querySelectorAll('.bg-ink').length).toBe(1)
+    expect(day14().querySelectorAll('.bg-event').length).toBe(0)
+  })
 
-    // One solid segment in the expense colour, where Entries stacked two kinds
-    // on the 14th.
+  it('draws a stub for a past zero and nothing after today', async () => {
+    open()
     const chart = screen.getByRole('group', { name: /Entries by day/ })
-    const day14 = within(chart).getByRole('button', { name: /^14 September/ })
-    expect(day14.querySelectorAll('.bg-expense').length).toBe(1)
-    expect(day14.querySelectorAll('.bg-event').length).toBe(0)
+    // 2 September holds nothing and is behind now (the 17th): a 3px sunken
+    // stub, never a gap.
+    const day2 = within(chart).getByRole('button', { name: /^2 September/ })
+    const stub = day2.querySelector('span[style]') as HTMLElement
+    expect(stub).toBeTruthy()
+    expect(stub.className).toContain('bg-sunken')
+    expect(stub.style.height).toBe('3px')
+    // 20 September has not happened: no bar element at all.
+    const day20 = within(chart).getByRole('button', { name: /^20 September/ })
+    expect(day20.querySelector('span[style]')).toBeNull()
   })
 })
 
