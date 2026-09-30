@@ -1,5 +1,5 @@
 import { addDays, parseISO, subDays } from 'date-fns'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
 import { EntryRow } from './components/EntryRow'
@@ -27,7 +27,7 @@ import { ahead } from './lib/ahead'
 import { sweepOrphans } from './lib/attachments'
 import { arm as armBack, onHome } from './lib/back'
 import { save, shareOrDownload } from './lib/deliver'
-import { nextFireAt, passed } from './lib/events'
+import { nextFireAt, passed, stillAhead } from './lib/events'
 import {
   clock,
   clockAt,
@@ -83,6 +83,32 @@ const TITLES: Record<View, string> = {
 /** Whatever was thrown, as something a person can read. */
 function message(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure)
+}
+
+/**
+ * The cut in Today's spine at the current time: a 9px accent dot in a 4px
+ * accent glow on the line, a rule fading to the right, and the moment as an
+ * accent eyebrow. Entries above it have happened; entries below are coming.
+ * It renders from the same `now` the 30-second tick refreshes — placing it is
+ * `Day`'s job (see `markerAt`), and it holds no state and no timer of its own.
+ */
+function NowMarker({ now }: { now: Date }) {
+  return (
+    <div className="flex h-9 items-center gap-3">
+      <span aria-hidden="true" className="relative flex w-7 shrink-0 justify-center">
+        <span className="flex h-[17px] w-[17px] items-center justify-center rounded-full bg-accent/25">
+          <span className="h-[9px] w-[9px] rounded-full bg-accent" />
+        </span>
+      </span>
+      <span
+        aria-hidden="true"
+        className="h-px min-w-0 flex-1 bg-linear-to-r from-accent/40 to-transparent"
+      />
+      <span className="shrink-0 text-[0.6875rem] font-semibold tracking-[0.1em] text-accent uppercase tabular-nums">
+        Now · {clockAt(now)}
+      </span>
+    </div>
+  )
 }
 
 export default function App() {
@@ -377,6 +403,25 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
   }
   const folded = showEarlier || over < 2 ? 0 : over
   const shownEntries = folded === 0 ? shown : shown.slice(folded)
+
+  /**
+   * Where the now marker cuts the spine: before the first row whose own
+   * moment is still ahead — the same comparison `passed()` makes, without its
+   * kind gate (see `stillAhead`). Entries above have happened, entries below
+   * are coming. Absent on any day that is not today, never parked at an edge;
+   * after the last row when everything today has been. Recomputed on the
+   * existing 30-second tick because `now` is, with no timer of its own — the
+   * same reason `until` has none.
+   */
+  const cut =
+    day === dayKey(now) && shown.length > 0
+      ? (() => {
+          const at = shown.findIndex((row) => stillAhead(row, now))
+          return at === -1 ? shown.length : at
+        })()
+      : null
+  // The fold holds only passed reminders, so the cut is never inside it.
+  const markerAt = cut === null ? null : Math.max(0, cut - folded)
 
   // One batched attachment lookup for every row on screen, never one
   // IndexedDB read per `EntryRow`.
@@ -1051,32 +1096,62 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
                   two upwards: hiding a single row behind a tap costs a row and
                   saves none. `passed` is true of events alone, so nothing carrying
                   money or time is ever inside the fold. */}
-              {folded > 0 && (
-                <button
-                  type="button"
-                  aria-expanded={showEarlier}
-                  onClick={() => setShowEarlier(true)}
-                  className="-mx-2 flex h-11 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
-                >
-                  <span aria-hidden="true" className="flex w-5 shrink-0 justify-center text-faint">
-                    <Chevron dir="down" size={16} />
-                  </span>
-                  {folded} already passed
-                </button>
-              )}
+              {/* The spine: the day as one line, in order — the documented
+                  exception in DESIGN §5. It spans the fold and the rows (the
+                  fold is part of the day, so the line runs through it) and
+                  fades over its last 18% so it never collides with the totals
+                  below. Positioned first in the wrapper, so the rows' own
+                  positioned nodes paint over it. */}
+              <div className="relative">
+                {shown.length > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-y-0 left-[14px] w-px bg-linear-to-b from-line via-line via-[82%] to-transparent"
+                  />
+                )}
 
-              {shownEntries.map((row) => (
-                <EntryRow
-                  key={row.id}
-                  row={row}
-                  now={now}
-                  photoUrl={photoThumbnails[row.id]?.url}
-                  photoCount={photoThumbnails[row.id]?.count}
-                  onOpenPhoto={() => openPhotos(row.id)}
-                  onOpen={() => setEditing(asStored(row))}
-                  onRetry={retry}
-                />
-              ))}
+                {/* The day opened on what was already over: struck-through
+                    reminders keep full size and position, so the loudest thing
+                    at the top was frequently the part that no longer matters.
+                    Folded into one line, the day opens on what is still live.
+
+                    Only a *leading run* of them, so nothing is reordered — a
+                    passed reminder later in the day stays where it happened.
+                    And only from two upwards: hiding a single row behind a tap
+                    costs a row and saves none. `passed` is true of events
+                    alone, so nothing carrying money or time is ever inside
+                    the fold. */}
+                {folded > 0 && (
+                  <button
+                    type="button"
+                    aria-expanded={showEarlier}
+                    onClick={() => setShowEarlier(true)}
+                    className="-mx-2 flex h-11 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
+                  >
+                    <span aria-hidden="true" className="relative flex w-7 shrink-0 justify-center text-faint">
+                      <Chevron dir="down" size={16} />
+                    </span>
+                    {folded} already passed
+                  </button>
+                )}
+
+                {shownEntries.map((row, at) => (
+                  <Fragment key={row.id}>
+                    {markerAt === at && <NowMarker now={now} />}
+                    <EntryRow
+                      row={row}
+                      now={now}
+                      spine
+                      photoUrl={photoThumbnails[row.id]?.url}
+                      photoCount={photoThumbnails[row.id]?.count}
+                      onOpenPhoto={() => openPhotos(row.id)}
+                      onOpen={() => setEditing(asStored(row))}
+                      onRetry={retry}
+                    />
+                  </Fragment>
+                ))}
+                {markerAt === shownEntries.length && <NowMarker now={now} />}
+              </div>
 
               {/* Under the rows, not over them: read as a header it looked like a
                   label for the box you were about to type into, when it is a

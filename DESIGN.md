@@ -242,6 +242,21 @@ dot means something happened, not that a *note* happened.
 
 Every row draws the same way wherever it appears — timeline, answer, bell, memories.
 
+**The one exception is Today's spine, and it is an exception on purpose.** The spine — a 1px
+`line` rule running 30px from the screen edge, fading over its last 18%, with each entry an 11px
+node on it in its kind's colour (filled for anything logged; hollow, 1.5px ring on a `surface`
+centre, for an event) and a now marker cutting it at the current time — means *one day, in
+order*. That is true of Today and false of everywhere else a row appears: an answer spans four
+months, the bell lists next week, a memory is another year. Those keep the 15px kind mark, and
+the spine appears nowhere else. Do not "fix" the inconsistency in either direction — a spine
+under an answer draws a day-line through something that is not a day, and taking Today's away
+returns the timeline to a list of icons. The node replaces the mark, never the words: the
+`sr-only` kind name stays, and nothing is carried by colour alone. On the spine, content starts
+56px from the screen edge; the row's anatomy is otherwise unchanged. The now marker derives its
+position from the same moment comparison `passed()` makes and recomputes on the existing
+30-second tick — it has no state and no timer of its own, for the same reason `until` does not —
+and on a day that is not today it is absent, not parked at an edge.
+
 ```
 [kind mark 20px] [ title, two lines max              ] [ one number ]
                  [ 9:15 am · in 47m · repeat · category ]

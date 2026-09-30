@@ -273,6 +273,23 @@ export function passed(entry: Entry, now: Date): boolean {
 }
 
 /**
+ * The clock comparison `passed` makes, without the kind gate: whether this
+ * row's own moment is still ahead of now.
+ *
+ * The now marker on Today is the boundary of this over a day sorted by
+ * `byClock` — entries above it have happened, entries below are coming.
+ * `passed` itself cannot place the marker: it is false of every non-event and
+ * of every repeat, so a 9:49 standup that already rang would sit "coming" and
+ * drag the marker above the afternoon. This shares the one comparison and
+ * gates nothing; a row with no clock is never ahead within its own day, since
+ * an untimed entry was logged, not scheduled.
+ */
+export function stillAhead(entry: Entry, now: Date): boolean {
+  if (entry.occurred_at !== null) return parseISO(entry.occurred_at) > now
+  return entry.occurred_on > dayKey(now)
+}
+
+/**
  * Ticked off by hand.
  *
  * `passed` covers the reminder whose moment has simply gone by, which needs no

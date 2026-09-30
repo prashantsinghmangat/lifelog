@@ -1481,3 +1481,19 @@ describe('the palette', () => {
     }
   })
 })
+
+describe('the now marker', () => {
+  it('cuts the spine today, and is absent on any other day', async () => {
+    const box = await open()
+    await log(box, '350 lunch swiggy')
+    await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
+    // Everything logged has happened, so the marker sits under the last row.
+    expect(screen.getByText(/^Now · /)).toBeTruthy()
+
+    // Absent on a day that is not today — not parked at an edge.
+    await userEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+    await log(box, '100 chai')
+    await waitFor(() => expect(screen.getByText('chai')).toBeTruthy())
+    expect(screen.queryByText(/^Now · /)).toBeNull()
+  })
+})

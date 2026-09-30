@@ -149,3 +149,40 @@ describe('local photo thumbnail', () => {
     expect(screen.getByRole('button', { name: 'View 3 photos on lunch' })).toBeTruthy()
   })
 })
+
+describe('on the spine', () => {
+  it('draws a filled node in the kind colour instead of the glyph, keeping the words', () => {
+    render(<EntryRow row={row({})} now={NOW} spine onOpen={vi.fn()} onRetry={vi.fn()} />)
+
+    // The node replaces the 15px mark entirely: the only ₹ left is the value.
+    expect(screen.getAllByText(/₹/)).toHaveLength(1)
+    expect(screen.getByText('₹350')).toBeTruthy()
+    const node = document.querySelector('.bg-expense') as HTMLElement
+    expect(node).toBeTruthy()
+    expect(node.className).toContain('h-[11px]')
+    // Nothing rides on colour alone: the sr-only kind name is untouched.
+    expect(screen.getByText(/Expense/)).toBeTruthy()
+  })
+
+  it('draws an event hollow — a ring on a surface centre', () => {
+    render(
+      <EntryRow
+        row={row({ kind: 'event', amount_paise: null, title: 'dentist' })}
+        now={NOW}
+        spine
+        onOpen={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    )
+
+    const node = document.querySelector('.border-event') as HTMLElement
+    expect(node).toBeTruthy()
+    expect(node.className).toContain('bg-surface')
+  })
+
+  it('keeps the glyph everywhere the spine is not', () => {
+    render(<EntryRow row={row({})} now={NOW} onOpen={vi.fn()} onRetry={vi.fn()} />)
+    // The kind mark's rupee glyph, distinct from the value at the right.
+    expect(screen.getAllByText(/₹/).length).toBeGreaterThan(1)
+  })
+})

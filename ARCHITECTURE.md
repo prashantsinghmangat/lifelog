@@ -746,6 +746,20 @@ stays out for the reason below, and the fact it would have carried is not lost. 
 number — money if the row has any, otherwise duration —
 right-aligned, `tabular-nums`, and in `muted` at regular weight.
 
+**Today draws its rows on a spine, and only Today — the exception is load-bearing.** "Every row
+draws the same way wherever it appears" stands, with one reasoned carve-out: the spine — a 1px
+`line` 30px from the screen edge, an 11px node per entry in its kind's colour (filled for
+anything logged, hollow for an event), a now marker cutting it at the current time — means *one
+day, in order*. That is true of Today and false of an answer spanning four months, the bell's
+next week, a memory's other year; those keep the 15px kind mark. The next person to notice the
+inconsistency must not "fix" it in either direction. The marker's position is the boundary of
+`stillAhead` in `events.ts` — the same clock comparison `passed()` makes, without its kind gate,
+because `passed` is deliberately false of repeats and non-events and would drag the marker above
+a standup that already rang. It recomputes on the existing 30-second tick and holds no state and
+no timer of its own, for the same reason `until` does not; on a day that is not today it is
+absent, never parked at an edge. The node replaces the mark, not the words: the `sr-only` kind
+name stays.
+
 **A row is directly manipulable and says so without an icon.** Its button is inset past the page
 gutter (`-mx-2 px-2 rounded-lg`) and takes `hover:bg-sunken active:bg-sunken`, so the feedback
 reads as the row lighting up rather than as a box appearing round the title. The *separator* stays

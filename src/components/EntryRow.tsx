@@ -3,10 +3,27 @@ import { KIND_NAME, KindMark } from './KindMark'
 import { behindYou, repeatLabel } from '../lib/events'
 import { clock, relativeDay, rowValue, until } from '../lib/format'
 import type { Row } from '../hooks/useEntries'
+import type { Kind } from '../types'
+
+/** Written out, never interpolated: Tailwind only compiles what it can see. */
+const NODE: Record<Kind, string> = {
+  expense: 'bg-expense',
+  time: 'bg-time',
+  event: 'bg-event',
+  note: 'bg-note',
+}
 
 type Props = {
   row: Row
   now: Date
+  /**
+   * Drawn as a node on Today's spine instead of carrying the 15px kind mark —
+   * the documented exception in DESIGN §5. An 11px circle in the kind's
+   * colour, filled for anything logged and hollow for an event (a ring on a
+   * `surface` centre: logged is solid fact, scheduled is an outline). The
+   * `sr-only` kind name below is untouched; nothing rides on colour alone.
+   */
+  spine?: boolean
   /** True when the row sits on a day other than the one being viewed. */
   offDay?: boolean
   /** A locally-stored photo for this entry — never read from `row` itself. */
@@ -22,6 +39,7 @@ type Props = {
 export function EntryRow({
   row,
   now,
+  spine = false,
   offDay = false,
   photoUrl,
   photoCount = 1,
@@ -70,7 +88,20 @@ export function EntryRow({
         onClick={onOpen}
         className="-mx-2 flex min-h-[3.25rem] min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-sunken active:bg-sunken"
       >
-        <KindMark kind={row.kind} />
+        {spine ? (
+          // The node column is 28px so its centre sits at 30px from the screen
+          // edge — on the spine — and the title lands at 56px. `relative`, or
+          // the absolutely-positioned spine paints over the node.
+          <span className="relative flex w-7 shrink-0 justify-center" aria-hidden="true">
+            <span
+              className={`h-[11px] w-[11px] rounded-full ${
+                row.kind === 'event' ? 'border-[1.5px] border-event bg-surface' : NODE[row.kind]
+              }`}
+            />
+          </span>
+        ) : (
+          <KindMark kind={row.kind} />
+        )}
 
         <span className="min-w-0 flex-1">
           {/* Behind you — the moment went by, or you ticked it off. Struck

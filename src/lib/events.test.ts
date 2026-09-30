@@ -10,6 +10,7 @@ import {
   recurring,
   repeatLabel,
   repeatOnly,
+  stillAhead,
   weeklyDays,
   withLead,
 } from './events'
@@ -422,5 +423,33 @@ describe('the moment an entry next happens', () => {
     // armed, and it is not this function. The editor says "done" in its own words.
     const row = entry({ occurred_on: '2026-09-07', data: { done: true } })
     expect(nextFireAt(row, NOW)?.getDate()).toBe(7)
+  })
+})
+
+describe('stillAhead — the now marker’s half of passed', () => {
+  it('shares the clock comparison without the kind gate', () => {
+    const spent = entry({ kind: 'expense', occurred_on: '2026-09-05', occurred_at: at('2026-09-05', '13:20:00') })
+    const coming = entry({ occurred_on: '2026-09-05', occurred_at: at('2026-09-05', '17:00:00') })
+    expect(stillAhead(spent, NOW)).toBe(false)
+    expect(stillAhead(coming, NOW)).toBe(true)
+  })
+
+  it('counts a repeat’s rung occurrence as happened, where passed cannot', () => {
+    const standup = entry({
+      occurred_on: '2026-09-05',
+      occurred_at: at('2026-09-05', '10:00:00'),
+      data: { rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' },
+    })
+    // `passed` is deliberately false of a repeat; the marker still has to sit
+    // below a standup that rang this morning.
+    expect(passed(standup, NOW)).toBe(false)
+    expect(stillAhead(standup, NOW)).toBe(false)
+  })
+
+  it('treats an untimed row as logged, not scheduled', () => {
+    const note = entry({ kind: 'note', occurred_on: '2026-09-05' })
+    expect(stillAhead(note, NOW)).toBe(false)
+    const tomorrow = entry({ occurred_on: '2026-09-06' })
+    expect(stillAhead(tomorrow, NOW)).toBe(true)
   })
 })
