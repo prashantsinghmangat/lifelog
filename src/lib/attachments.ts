@@ -221,13 +221,21 @@ export async function hasPhotoMap(entryIds: string[]): Promise<Record<string, bo
   return map
 }
 
+/** The photo a row draws, and how many that entry holds in total. */
+export type Representative = { blob: Blob; count: number }
+
 /**
- * At most one representative photo per requested entry, for the thumbnails the
- * timeline draws. One cursor over the whole index rather than a read per row:
- * the rows on screen are the caller's business, the number of IndexedDB
- * operations is this function's, and it is always one.
+ * At most one representative photo per requested entry, and the count it
+ * stands for, so a row carrying three can say so.
+ *
+ * One cursor over the whole index rather than a read per row: the rows on
+ * screen are the caller's business, the number of IndexedDB operations is this
+ * function's, and it is always one. The count is tallied in that same walk —
+ * asking for it separately would be a second pass over the same records.
  */
-export async function firstPhotoBlobs(entryIds: string[]): Promise<Record<string, Blob>> {
+export async function firstPhotoBlobs(
+  entryIds: string[],
+): Promise<Record<string, Representative>> {
   const wanted = new Set(entryIds)
   if (wanted.size === 0) return {}
 
@@ -235,16 +243,19 @@ export async function firstPhotoBlobs(entryIds: string[]): Promise<Record<string
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly')
     const index = tx.objectStore(STORE).index(ENTRY_INDEX)
-    const found: Record<string, Blob> = {}
+    const found: Record<string, Representative> = {}
     const request = index.openCursor()
     request.onsuccess = () => {
       const cursor = request.result
       if (!cursor) return
       const photo = cursor.value as Attachment
-      // The oldest photo on an entry wins, because the cursor walks the index
-      // in insertion order and the first one seen is kept.
-      if (wanted.has(photo.entryId) && !(photo.entryId in found)) {
-        found[photo.entryId] = photo.blob
+      if (wanted.has(photo.entryId)) {
+        const held = found[photo.entryId]
+        // The oldest photo on an entry wins, because the cursor walks the
+        // index in insertion order and the first one seen is kept — every one
+        // after it only adds to the count.
+        if (held === undefined) found[photo.entryId] = { blob: photo.blob, count: 1 }
+        else held.count += 1
       }
       cursor.continue()
     }

@@ -325,11 +325,6 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
 
   return (
     <>
-    {/* Outside the editor's own Sheet, so it stacks *over* it rather than
-        scrolling inside it — and `topmost` then gives the back button and
-        Escape to the viewer alone, closing the photo back to the entry
-        instead of closing both. */}
-    {viewing !== null && <PhotoViewer url={viewing} onClose={() => setViewing(null)} />}
     <Sheet label={`Edit ${row.title}`} onClose={onClose}>
       {(requestClose) => (
       <form onSubmit={(event) => save(event, requestClose)}>
@@ -680,6 +675,17 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
       </form>
       )}
     </Sheet>
+    {/* **After** the editor's Sheet, and that is the whole of it.** Every sheet
+        in this app shares one `z-40`, so nothing separates these two but
+        document order — rendered first, this painted *underneath* the editor
+        and a tapped thumbnail appeared to do nothing at all. It was opening
+        every time; it had never once been visible.
+
+        The back button and Escape were never the problem: `topmost` reads a
+        registration stack, and the viewer mounts while the editor is already
+        open, so it registers last and is on top whichever order these appear
+        in. Moving it does not disturb that. */}
+    {viewing !== null && <PhotoViewer url={viewing} onClose={() => setViewing(null)} />}
     </>
   )
 }

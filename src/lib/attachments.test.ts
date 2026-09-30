@@ -109,7 +109,19 @@ describe('firstPhotoBlobs', () => {
 
     const found = await firstPhotoBlobs(['thumb-1'])
     expect(Object.keys(found)).toEqual(['thumb-1'])
-    expect(found['thumb-1']).toBeInstanceOf(Blob)
+    expect(found['thumb-1']?.blob).toBeInstanceOf(Blob)
+  })
+
+  /** One thumbnail understated an entry holding three — the row needs the total. */
+  it('counts every photo the entry holds, not just the one it hands back', async () => {
+    await put('thumb-1', blob())
+    await put('thumb-1', blob())
+    await put('thumb-1', blob())
+    await put('thumb-2', blob())
+
+    const found = await firstPhotoBlobs(['thumb-1', 'thumb-2'])
+    expect(found['thumb-1']?.count).toBe(3)
+    expect(found['thumb-2']?.count).toBe(1)
   })
 
   it('leaves out an entry with no photo, rather than mapping it to nothing', async () => {

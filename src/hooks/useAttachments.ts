@@ -3,6 +3,9 @@ import * as attachments from '../lib/attachments'
 
 export type Photo = { id: string; url: string; createdAt: string }
 
+/** What a timeline row draws: one photo, and how many that entry actually holds. */
+export type Thumbnail = { url: string; count: number }
+
 /** Outcome of the last `add`, for the sheet to show — separate from entry-save state. */
 export type AddState = 'idle' | 'saving' | 'failed'
 
@@ -82,9 +85,9 @@ export function useAttachments(entryId: string) {
  * the one thing that must not happen, so the revoke is keyed to the batch
  * rather than to any single row.
  */
-export function usePhotoThumbnails(entryIds: string[]): Record<string, string> {
-  const [urls, setUrls] = useState<Record<string, string>>({})
-  const shown = useRef<Record<string, string>>({})
+export function usePhotoThumbnails(entryIds: string[]): Record<string, Thumbnail> {
+  const [urls, setUrls] = useState<Record<string, Thumbnail>>({})
+  const shown = useRef<Record<string, Thumbnail>>({})
   const key = entryIds.join(',')
 
   useEffect(() => {
@@ -94,15 +97,17 @@ export function usePhotoThumbnails(entryIds: string[]): Record<string, string> {
       // off is fine, an unhandled rejection on every render is not.
       void attachments
         .firstPhotoBlobs(entryIds)
-        .then((blobs) => {
-          const next: Record<string, string> = {}
-          for (const [id, blob] of Object.entries(blobs)) next[id] = URL.createObjectURL(blob)
+        .then((found) => {
+          const next: Record<string, Thumbnail> = {}
+          for (const [id, { blob, count }] of Object.entries(found)) {
+            next[id] = { url: URL.createObjectURL(blob), count }
+          }
           if (!live) {
             // Nothing will ever render these, so they leak unless dropped here.
-            for (const url of Object.values(next)) URL.revokeObjectURL(url)
+            for (const shot of Object.values(next)) URL.revokeObjectURL(shot.url)
             return
           }
-          for (const url of Object.values(shown.current)) URL.revokeObjectURL(url)
+          for (const shot of Object.values(shown.current)) URL.revokeObjectURL(shot.url)
           shown.current = next
           setUrls(next)
         })
@@ -123,7 +128,7 @@ export function usePhotoThumbnails(entryIds: string[]): Record<string, string> {
   // tying this to `key` would revoke the URLs the current render is using.
   useEffect(() => {
     return () => {
-      for (const url of Object.values(shown.current)) URL.revokeObjectURL(url)
+      for (const shot of Object.values(shown.current)) URL.revokeObjectURL(shot.url)
       shown.current = {}
     }
   }, [])

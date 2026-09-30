@@ -113,4 +113,39 @@ describe('local photo thumbnail', () => {
     render(<EntryRow row={row({})} now={NOW} onOpen={vi.fn()} onRetry={vi.fn()} />)
     expect(screen.queryByRole('button', { name: /^View photo/ })).toBeNull()
   })
+
+  it('says nothing about a count when there is only one', () => {
+    render(
+      <EntryRow
+        row={row({})}
+        now={NOW}
+        photoUrl="blob:fake"
+        photoCount={1}
+        onOpen={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText(/^\+/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'View photo on lunch' })).toBeTruthy()
+  })
+
+  /**
+   * The remainder, beside a picture you can already see — and the *total* in
+   * the name, because "+2" read aloud is arithmetic rather than a fact about
+   * the entry.
+   */
+  it('draws the remainder and names the total when there are several', () => {
+    render(
+      <EntryRow
+        row={row({})}
+        now={NOW}
+        photoUrl="blob:fake"
+        photoCount={3}
+        onOpen={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('+2')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'View 3 photos on lunch' })).toBeTruthy()
+  })
 })

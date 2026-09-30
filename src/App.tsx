@@ -996,8 +996,9 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                   key={row.id}
                   row={row}
                   now={now}
-                  photoUrl={photoThumbnails[row.id]}
-                  onOpenPhoto={() => setViewingPhoto(photoThumbnails[row.id] ?? null)}
+                  photoUrl={photoThumbnails[row.id]?.url}
+                  photoCount={photoThumbnails[row.id]?.count}
+                  onOpenPhoto={() => setViewingPhoto(photoThumbnails[row.id]?.url ?? null)}
                   onOpen={() => setEditing(asStored(row))}
                   onRetry={retry}
                 />
@@ -1050,8 +1051,9 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                       row={row}
                       now={now}
                       offDay
-                      photoUrl={photoThumbnails[row.id]}
-                      onOpenPhoto={() => setViewingPhoto(photoThumbnails[row.id] ?? null)}
+                      photoUrl={photoThumbnails[row.id]?.url}
+                      photoCount={photoThumbnails[row.id]?.count}
+                      onOpenPhoto={() => setViewingPhoto(photoThumbnails[row.id]?.url ?? null)}
                       onOpen={() => setDay(row.occurred_on)}
                       onRetry={retry}
                     />

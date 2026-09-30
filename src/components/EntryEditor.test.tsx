@@ -586,7 +586,15 @@ describe('local photos', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/permission/i))
   })
 
-  it('opens a photo full-size when its thumbnail is tapped', async () => {
+  /**
+   * **This is the assertion that was missing, and the bug it let through was
+   * total: the viewer opened every time and was never once visible.** Every
+   * sheet shares one `z-40`, so nothing separates these two but document
+   * order — rendered before the editor, the viewer painted underneath it and
+   * a tapped thumbnail appeared to do nothing at all. jsdom paints nothing,
+   * so "the dialog exists" passed happily throughout. The order *is* the fix.
+   */
+  it('opens a photo full-size, over the editor rather than under it', async () => {
     vi.mocked(useAttachments).mockReturnValue({
       photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: '2026-09-05T10:00:00+05:30' }],
       addState: 'idle',
@@ -596,7 +604,11 @@ describe('local photos', () => {
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: 'View photo' }))
-    expect(screen.getByRole('dialog', { name: 'Photo' })).toBeTruthy()
+
+    const dialogs = screen.getAllByRole('dialog')
+    expect(dialogs).toHaveLength(2)
+    // Last in document order is what paints on top at equal z-index.
+    expect(dialogs[dialogs.length - 1]?.getAttribute('aria-label')).toBe('Photo')
   })
 
   it('hands a picked file to the attachment hook', async () => {

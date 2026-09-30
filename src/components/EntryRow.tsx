@@ -11,6 +11,8 @@ type Props = {
   offDay?: boolean
   /** A locally-stored photo for this entry — never read from `row` itself. */
   photoUrl?: string
+  /** How many that entry holds, which is not always the one being drawn. */
+  photoCount?: number
   onOpen: () => void
   /** Opening the photo, which is not the same act as opening the entry. */
   onOpenPhoto?: () => void
@@ -22,6 +24,7 @@ export function EntryRow({
   now,
   offDay = false,
   photoUrl,
+  photoCount = 1,
   onOpen,
   onOpenPhoto,
   onRetry,
@@ -130,14 +133,35 @@ export function EntryRow({
         <button
           type="button"
           onClick={onOpenPhoto}
-          aria-label={`View photo on ${row.title}`}
+          // The count belongs in the name rather than only in the badge: `+2`
+          // read aloud is "plus two", which is arithmetic rather than a fact
+          // about the entry.
+          aria-label={
+            photoCount > 1
+              ? `View ${photoCount} photos on ${row.title}`
+              : `View photo on ${row.title}`
+          }
           className="-my-2 ml-3 flex h-11 shrink-0 items-center self-center"
         >
-          <img
-            src={photoUrl}
-            alt=""
-            className="h-9 w-9 rounded-md border border-line object-cover"
-          />
+          <span className="relative block h-9 w-9">
+            <img
+              src={photoUrl}
+              alt=""
+              className="h-full w-full rounded-md border border-line object-cover"
+            />
+            {/* One thumbnail understated an entry holding three. The remainder
+                rather than the total, which is what sits beside a picture you
+                can already see — and `aria-hidden` because the button's name
+                above says it properly. */}
+            {photoCount > 1 && (
+              <span
+                aria-hidden="true"
+                className="absolute inset-x-0 bottom-0 rounded-b-md bg-ink/70 text-center text-[0.625rem] leading-[1.1rem] font-medium text-surface tabular-nums"
+              >
+                +{photoCount - 1}
+              </span>
+            )}
+          </span>
         </button>
       )}
 
