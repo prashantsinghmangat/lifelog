@@ -1200,8 +1200,8 @@ TypeScript strict with `noUncheckedIndexedAccess`. No `any`, no non-null asserti
 layout — no barrel files, no `index.ts` re-exports, no directory per component.
 
 **The runtime dependency list is `react`, `react-dom`, `@supabase/supabase-js`, `date-fns` and
-Capacitor (`core`, `android`, `local-notifications`, `app`, `filesystem`, `share`, `haptics`). Ask
-before adding anything else.**
+Capacitor (`core`, `android`, `local-notifications`, `app`, `filesystem`, `share`, `haptics`,
+`camera`). Ask before adding anything else.**
 The original "four dependencies only" rule was retired deliberately when the Android app was
 added, not broken by accident: Capacitor plugins are runtime dependencies, and each one was argued
 for on its own — `local-notifications` because no web API can raise an alarm with the app closed,
@@ -1209,10 +1209,17 @@ for on its own — `local-notifications` because no web API can raise an alarm w
 because a WebView has neither a download nor a share sheet, so without them the only manual backup
 this app has did nothing on a phone, and `haptics` because capture is the product — the one act
 the app exists for should confirm itself in the hand, and no web API reaches a phone's vibration
-motor with the intent a native impact carries. Reached the same way `local-notifications` is:
-`src/lib/haptics.ts` imports it dynamically behind `isNative()`, exactly like `reminders.ts`,
-`back.ts` and `deliver.ts`, so it never reaches the web bundle and costs nothing of the budget
-below. The bar is unchanged for everything else: no component library, no state manager, no data-fetching library, no icon
+motor with the intent a native impact carries, and `camera` because a WebView cannot open a camera
+and **the obvious way of asking it to was tried and provably does not work**: an
+`<input type="file" capture>` opens the photo picker, verified on a Pixel 7 emulator across three
+builds — `capture="environment"`, a bare `capture`, and `capture` with `CAMERA` declared and
+granted — each confirmed by `dumpsys window | grep mCurrentFocus` naming
+`PhotopickerGetContentActivity` rather than a camera. Capacitor's own `FileProvider` was already
+present, so that was not the missing piece. A photo of the bill is the proof an expense is logged
+for, and for two specs the control offering it could only ever pick an old one. Reached the same
+way `local-notifications` is: `src/lib/haptics.ts` and `src/lib/camera.ts` import theirs
+dynamically behind `isNative()`, exactly like `reminders.ts`, `back.ts` and `deliver.ts`, so they
+never reach the web bundle and cost nothing of the budget below. The bar is unchanged for everything else: no component library, no state manager, no data-fetching library, no icon
 package; icons are inline SVG. Comments only where the *why* is unobvious. Plain, dense, fast UI: system
 fonts, one 100ms fade on new rows, a short spring on the sheet's entrance and exit, nothing else
 animated.

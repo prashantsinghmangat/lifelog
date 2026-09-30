@@ -5,6 +5,7 @@ import { KindMark } from './KindMark'
 import { PhotoViewer } from './PhotoViewer'
 import { useDictation } from '../hooks/useDictation'
 import { fromFile, put } from '../lib/attachments'
+import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, parseMulti, type ParsedEntry } from '../lib/parser'
 import { answer as answerTo, parseQuestion, phrase, summarise as summariseLog } from '../lib/query'
@@ -221,7 +222,6 @@ export function QuickAdd({
    */
   const [staged, setStaged] = useState<{ id: string; blob: Blob; url: string }[]>([])
   const gallery = useRef<HTMLInputElement>(null)
-  const camera = useRef<HTMLInputElement>(null)
   /** A photo that could not be filed, said separately from the entry's own outcome. */
   const [photoProblem, setPhotoProblem] = useState<string | null>(null)
   /** The staged photo being looked at full-size, if any. */
@@ -259,6 +259,29 @@ export function QuickAdd({
         setPhotoProblem(`Couldn't add that photo: ${message(failure)}`)
       }
     }
+  }
+
+  /**
+   * A photo taken rather than picked. It arrives already at the stored size,
+   * so it skips the canvas decode `stage` does — cancelling says nothing,
+   * because backing out of the camera is a decision and not a fault.
+   */
+  async function shoot() {
+    setPhotoProblem(null)
+    const taken = await takePhoto()
+    if (taken === 'cancelled') return
+    if (taken === 'denied') {
+      setPhotoProblem('lifelog needs camera permission to take a photo.')
+      return
+    }
+    if (taken === 'unavailable') {
+      setPhotoProblem("Couldn't open the camera.")
+      return
+    }
+    setStaged((held) => [
+      ...held,
+      { id: crypto.randomUUID(), blob: taken, url: URL.createObjectURL(taken) },
+    ])
   }
 
   function unstage(id: string) {
@@ -691,13 +714,11 @@ export function QuickAdd({
               mic and send rather than anywhere near the field: capture is the
               product, and a control that is not in the way costs nothing when
               it is not used. */}
-          {/* Two controls, not one. A bare `accept="image/*"` input was meant
-              to let the OS offer camera or gallery, and on the web it does —
-              but in an Android WebView Capacitor only launches a camera intent
-              when the input carries `capture`, so the camera was simply
-              unreachable and the picker showed files. `capture` on its own
-              would be the opposite trade, losing the gallery. Two inputs is
-              what every chat app on the phone already does. */}
+          {/* Two controls, because they are two different acts and the OS
+              offers no single dialog for both. Gallery is an ordinary file
+              input; Camera cannot be, and the attempt is documented in
+              `camera.ts` — a `capture` input opens the picker, so for two
+              specs this control could only ever pick an old photo. */}
           {mode === 'log' && (
             <>
               <input
@@ -705,17 +726,6 @@ export function QuickAdd({
                 type="file"
                 accept="image/*"
                 multiple
-                className="hidden"
-                onChange={(event) => {
-                  if (event.target.files) void stage(event.target.files)
-                  event.target.value = ''
-                }}
-              />
-              <input
-                ref={camera}
-                type="file"
-                accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={(event) => {
                   if (event.target.files) void stage(event.target.files)
@@ -730,14 +740,19 @@ export function QuickAdd({
               >
                 <ImageIcon size={18} />
               </button>
-              <button
-                type="button"
-                onClick={() => camera.current?.click()}
-                aria-label="Take photo"
-                className="flex h-11 w-9 shrink-0 items-center justify-center text-faint transition-colors hover:text-muted"
-              >
-                <CameraIcon size={18} />
-              </button>
+              {/* Offered only where it can work. In a browser Gallery is the
+                  whole story, and a button that always failed would be worse
+                  than one that is not there. */}
+              {cameraAvailable() && (
+                <button
+                  type="button"
+                  onClick={() => void shoot()}
+                  aria-label="Take photo"
+                  className="flex h-11 w-9 shrink-0 items-center justify-center text-faint transition-colors hover:text-muted"
+                >
+                  <CameraIcon size={18} />
+                </button>
+              )}
             </>
           )}
 

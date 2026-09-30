@@ -3,6 +3,7 @@ import { CameraIcon, CheckIcon, CloseIcon, ImageIcon } from './Icons'
 import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
 import { useAttachments } from '../hooks/useAttachments'
+import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import {
   done as isDone,
   leadWords,
@@ -101,9 +102,26 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
 
   const { photos, addState, add, remove: removePhoto } = useAttachments(row.id)
   const galleryInput = useRef<HTMLInputElement>(null)
-  const cameraInput = useRef<HTMLInputElement>(null)
   /** The photo being looked at full-size, stacked over this sheet. */
   const [viewing, setViewing] = useState<string | null>(null)
+  /** A camera that would not open, said where a failed photo save is already said. */
+  const [cameraProblem, setCameraProblem] = useState<string | null>(null)
+
+  /** Cancelling says nothing: backing out of the camera is a decision, not a fault. */
+  async function shoot() {
+    setCameraProblem(null)
+    const taken = await takePhoto()
+    if (taken === 'cancelled') return
+    if (taken === 'denied') {
+      setCameraProblem('lifelog needs camera permission to take a photo.')
+      return
+    }
+    if (taken === 'unavailable') {
+      setCameraProblem("Couldn't open the camera.")
+      return
+    }
+    await add(taken)
+  }
 
   // Driven by the chosen kind, not the stored one, so switching to an expense
   // reveals the amount field there and then.
@@ -561,18 +579,6 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
               event.target.value = ''
             }}
           />
-          <input
-            ref={cameraInput}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(event) => {
-              const files = event.target.files
-              if (files) for (const file of files) void add(file)
-              event.target.value = ''
-            }}
-          />
           <div className="flex gap-2">
             <button
               type="button"
@@ -582,20 +588,29 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
               <ImageIcon size={16} />
               Gallery
             </button>
-            <button
-              type="button"
-              onClick={() => cameraInput.current?.click()}
-              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
-            >
-              <CameraIcon size={16} />
-              Camera
-            </button>
+            {/* Offered only where it can work — see `camera.ts` for why this
+                cannot be a file input like Gallery is. */}
+            {cameraAvailable() && (
+              <button
+                type="button"
+                onClick={() => void shoot()}
+                className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
+              >
+                <CameraIcon size={16} />
+                Camera
+              </button>
+            )}
           </div>
           {/* A photo that failed to save is not the same failure as the entry
               failing to save, and must never read as one. */}
           {addState === 'failed' && (
             <p role="alert" className="mt-1.5 text-xs text-expense">
               Couldn&apos;t save that photo.
+            </p>
+          )}
+          {cameraProblem !== null && (
+            <p role="alert" className="mt-1.5 text-xs text-expense">
+              {cameraProblem}
             </p>
           )}
           {photos.length > 0 && (

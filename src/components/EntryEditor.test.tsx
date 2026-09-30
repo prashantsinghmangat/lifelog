@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EntryEditor } from './EntryEditor'
 import type { Patch, Row } from '../hooks/useEntries'
 import type { AddState, Photo } from '../hooks/useAttachments'
@@ -21,9 +21,21 @@ vi.mock('../hooks/useAttachments', () => ({
   })),
 }))
 
+// A native plugin; `camera.test.ts` owns its outcomes. What is pinned here is
+// which of them reaches the strip and which reaches the problem line.
+vi.mock('../lib/camera', () => ({
+  available: vi.fn(() => true),
+  takePhoto: vi.fn(async () => new Blob(['x'], { type: 'image/jpeg' })),
+}))
+
 const { useAttachments } = await import('../hooks/useAttachments')
+const { available: cameraAvailable, takePhoto } = await import('../lib/camera')
 
 afterEach(cleanup)
+beforeEach(() => {
+  vi.mocked(cameraAvailable).mockReturnValue(true)
+  vi.mocked(takePhoto).mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }))
+})
 
 /** Saturday, mid-morning — the fixtures sit on this day. */
 const NOW = new Date('2026-09-05T10:30:00+05:30')
@@ -540,13 +552,38 @@ describe('local photos', () => {
     expect(screen.getByRole('button', { name: 'Camera' })).toBeTruthy()
 
     const inputs = [...document.querySelectorAll('input[type="file"]')] as HTMLInputElement[]
-    expect(inputs).toHaveLength(2)
-    // One picks an existing image, one takes a new one. `capture` is the only
-    // thing that reaches the camera in an Android WebView, and it is also what
-    // would lose the gallery if it were the sole input.
-    expect(inputs.filter((input) => input.hasAttribute('capture'))).toHaveLength(1)
-    expect(inputs.every((input) => input.accept === 'image/*')).toBe(true)
-    expect(inputs.find((input) => !input.hasAttribute('capture'))?.multiple).toBe(true)
+    // Gallery is the only file input. A `capture` one opens the photo picker
+    // in an Android WebView — proven on a Pixel 7 — so the camera goes through
+    // the plugin and an input carrying `capture` must never come back.
+    expect(inputs).toHaveLength(1)
+    expect(inputs.some((input) => input.hasAttribute('capture'))).toBe(false)
+    expect(inputs[0]?.accept).toBe('image/*')
+    expect(inputs[0]?.multiple).toBe(true)
+  })
+
+  it('does not offer Camera where there is none', () => {
+    vi.mocked(cameraAvailable).mockReturnValue(false)
+    setup()
+
+    expect(screen.queryByRole('button', { name: 'Camera' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Gallery' })).toBeTruthy()
+  })
+
+  it('hands a photographed blob to the attachment hook', async () => {
+    const add = vi.fn(async () => {})
+    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn() })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Camera' }))
+    await waitFor(() => expect(add).toHaveBeenCalledWith(expect.any(Blob)))
+  })
+
+  it('names a refused camera permission', async () => {
+    vi.mocked(takePhoto).mockResolvedValue('denied')
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Camera' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/permission/i))
   })
 
   it('opens a photo full-size when its thumbnail is tapped', async () => {

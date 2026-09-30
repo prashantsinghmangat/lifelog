@@ -15,7 +15,15 @@ vi.mock('../lib/attachments', () => ({
   put: vi.fn(async () => {}),
 }))
 
+// The camera is a native plugin; what these tests pin is which outcome reaches
+// the strip and which reaches the problem line. `camera.test.ts` owns the rest.
+vi.mock('../lib/camera', () => ({
+  available: vi.fn(() => true),
+  takePhoto: vi.fn(async () => new Blob(['x'], { type: 'image/jpeg' })),
+}))
+
 const { put, fromFile } = await import('../lib/attachments')
+const { available: cameraAvailable, takePhoto } = await import('../lib/camera')
 
 /**
  * Journeys, not rendering. Every one of these is a path that has silently
@@ -556,12 +564,14 @@ describe('attaching a photo while composing', () => {
 
   const inputs = () =>
     [...document.querySelectorAll('input[type="file"]')] as HTMLInputElement[]
-  /** The gallery half — plain, multiple, no `capture`. */
-  const picker = () => inputs().filter((input) => !input.hasAttribute('capture'))[0] as HTMLInputElement
+  const picker = () => inputs()[0] as HTMLInputElement
 
   beforeEach(() => {
     vi.mocked(put).mockClear()
     vi.mocked(fromFile).mockClear()
+    vi.mocked(takePhoto).mockClear()
+    vi.mocked(cameraAvailable).mockReturnValue(true)
+    vi.mocked(takePhoto).mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' }))
   })
 
   it('offers gallery and camera while logging and neither while asking', async () => {
@@ -569,11 +579,12 @@ describe('attaching a photo while composing', () => {
     expect(screen.getByLabelText('Add from gallery')).toBeTruthy()
     expect(screen.getByLabelText('Take photo')).toBeTruthy()
 
-    // `capture` is the only thing that reaches the camera in an Android
-    // WebView, and the only thing that would lose the gallery if it were on
-    // the sole input. One of each, therefore.
-    expect(inputs()).toHaveLength(2)
-    expect(inputs().filter((input) => input.hasAttribute('capture'))).toHaveLength(1)
+    // Gallery is the only file input there is now. A `capture` one opens the
+    // photo picker in an Android WebView — proven on a Pixel 7 — so the camera
+    // goes through the plugin instead, and an input carrying `capture` must
+    // never come back.
+    expect(inputs()).toHaveLength(1)
+    expect(inputs().some((input) => input.hasAttribute('capture'))).toBe(false)
     expect(picker().multiple).toBe(true)
 
     // The `lg` toggle, which is what these tests drive instead of the nav.
@@ -581,6 +592,44 @@ describe('attaching a photo while composing', () => {
     expect(screen.queryByLabelText('Add from gallery')).toBeNull()
     expect(screen.queryByLabelText('Take photo')).toBeNull()
     view.unmount()
+  })
+
+  it('does not offer the camera where there is none', () => {
+    vi.mocked(cameraAvailable).mockReturnValue(false)
+    setup()
+
+    expect(screen.queryByLabelText('Take photo')).toBeNull()
+    // Gallery is the whole story in a browser, and it still works.
+    expect(screen.getByLabelText('Add from gallery')).toBeTruthy()
+  })
+
+  it('stages what the camera hands back', async () => {
+    setup()
+    await userEvent.click(screen.getByLabelText('Take photo'))
+
+    await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(1))
+    // The plugin returns it already downscaled, so the canvas decode that lost
+    // a photo in 007 never runs on this path.
+    expect(fromFile).not.toHaveBeenCalled()
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  /** Backing out of the camera is a decision, and a decision is not an error. */
+  it('says nothing when the camera is cancelled', async () => {
+    vi.mocked(takePhoto).mockResolvedValue('cancelled')
+    setup()
+    await userEvent.click(screen.getByLabelText('Take photo'))
+
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(document.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  it('names a refused camera permission rather than failing silently', async () => {
+    vi.mocked(takePhoto).mockResolvedValue('denied')
+    setup()
+    await userEvent.click(screen.getByLabelText('Take photo'))
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/permission/i))
   })
 
   it('shows a removable thumbnail before anything is saved', async () => {
