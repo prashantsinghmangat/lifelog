@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MonthGrid } from './MonthGrid'
+import { Segmented } from './Segmented'
 import { Stats } from './Stats'
 import type { Entry } from '../types'
 
@@ -34,25 +35,18 @@ export function Calendar({ day, now, all, loadDays, onPick }: Props) {
 
   return (
     <div>
-      {/* The same segmented shape the theme control uses, at 44px: a 40px pill
-          inside a full-height button, so the target never shrinks to fit the
-          decoration. */}
-      <div role="group" aria-label="Calendar view" className="mb-4 flex gap-1 rounded-xl border border-line bg-sunken p-0.5">
-        {(['grid', 'chart'] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            aria-pressed={look === option}
-            onClick={() => setLook(option)}
-            className={`h-11 flex-1 rounded-[11px] px-2 text-sm transition-colors ${
-              look === option
-                ? 'bg-raised font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
-                : 'text-muted hover:text-ink'
-            }`}
-          >
-            {option === 'grid' ? 'Grid' : 'Chart'}
-          </button>
-        ))}
+      {/* The one segmented control — see `Segmented` for the 40px track and
+          the 44px targets inside it. */}
+      <div className="mb-4">
+        <Segmented
+          label="Calendar view"
+          value={look}
+          options={[
+            { value: 'grid', label: 'Grid' },
+            { value: 'chart', label: 'Chart' },
+          ]}
+          onChange={setLook}
+        />
       </div>
 
       {look === 'chart' && <Stats all={all} now={now} day={day} />}

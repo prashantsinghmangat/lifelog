@@ -60,16 +60,17 @@ export function BottomNav({ view, onGo, className }: Props) {
             aria-current={live ? 'page' : undefined}
             onClick={() => onGo(destination)}
             className={`flex h-[60px] flex-1 flex-col items-center justify-center gap-[3px] transition-colors ${
-              live ? 'font-medium text-ink' : 'text-faint hover:text-muted'
+              live ? 'font-semibold text-accent' : 'text-faint hover:text-muted'
             }`}
           >
             {/* Decoration inside the target, never instead of it: the pill is
-                60×30 and the button is the full quarter of the bar by 60 tall,
+                56×28 and the button is the full quarter of the bar by 60 tall,
                 the same trick the day cell's 28px disc uses inside its 44px
-                cell. */}
+                cell. An accent *tint* — the live item is the one place the nav
+                may borrow the palette's own hue. */}
             <span
-              className={`flex h-[30px] w-[60px] items-center justify-center rounded-full transition-colors ${
-                live ? 'bg-sunken' : ''
+              className={`flex h-7 w-14 items-center justify-center rounded-[14px] transition-colors ${
+                live ? 'bg-accent/10' : ''
               }`}
             >
               <Icon size={20} stroke={1.8} />

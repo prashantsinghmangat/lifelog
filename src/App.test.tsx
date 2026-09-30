@@ -610,7 +610,7 @@ describe('the four destinations', () => {
     const reading = document.title
 
     await go('You')
-    expect(screen.getByText('Signed in')).toBeTruthy()
+    expect(screen.getByText('you@example.com · signed in')).toBeTruthy()
 
     await go('Today')
     // The log is not refetched and the day is not reset: `view` is state beside
@@ -810,7 +810,7 @@ describe('taking a copy of the log', () => {
         name: 'You',
       }),
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Export JSON' }))
+    await userEvent.click(screen.getByRole('button', { name: /Export a copy/ }))
 
     await waitFor(() => expect(screen.getByText('1 entry exported')).toBeTruthy())
     expect(made.length).toBe(1)
@@ -1231,7 +1231,7 @@ describe('using the app without an account', () => {
       }),
     )
 
-    expect(screen.getByText('No account')).toBeTruthy()
+    expect(screen.getByText('This log is on this device only')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Sign in to sync' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Sign out' })).toBeNull()
   })
@@ -1444,10 +1444,14 @@ describe('the palette', () => {
       const layers = Array.from(swatch.querySelectorAll('span[style]')) as HTMLElement[]
       const painted = layers.map((layer) => layer.style.backgroundColor)
       // matchMedia is stubbed light in these tests, so the light variant shows.
+      // The miniature of the screen: its ground, the accent dot, two ink
+      // rules standing in for rows, and the raised capture bar at the foot.
       expect(painted, palette.name).toEqual([
         rgb(palette.light.surface),
-        rgb(palette.light.raised),
         rgb(palette.light.accent),
+        rgb(palette.light.ink),
+        rgb(palette.light.ink),
+        rgb(palette.light.raised),
       ])
     }
   })

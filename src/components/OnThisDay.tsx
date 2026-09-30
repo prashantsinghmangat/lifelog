@@ -31,7 +31,7 @@ export function OnThisDay({ found, onPick }: Props) {
 
   return (
     <section className="mt-10 border-t border-line pt-5">
-      <h2 className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+      <h2 className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
         On this day
       </h2>
 

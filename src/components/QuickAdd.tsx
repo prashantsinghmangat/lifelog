@@ -66,7 +66,7 @@ function AskSuggestions({
 }) {
   return (
     <div className="mt-5">
-      <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+      <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
         {heading}
       </p>
 
@@ -886,7 +886,7 @@ export function QuickAdd({
           the useful thing, and both at once is two lists of examples. */}
       {showExamples && mode === 'log' && (
         <div className="mt-5">
-          <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+          <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
             {/* One line of orientation, first launch only — a returning
                 reader's "nothing here yet" says nothing about what this box
                 even is, and the examples below can only show the syntax, not

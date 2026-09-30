@@ -261,7 +261,7 @@ export function Stats({ all, now, day }: Props) {
 
       <div className="mt-4 flex items-end justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+          <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
             {SCALES.find((option) => option.value === scale)?.label}
           </p>
           <h3 className="mt-0.5 truncate text-[1.375rem] leading-tight font-semibold tracking-[-0.012em] text-ink">
@@ -311,7 +311,7 @@ export function Stats({ all, now, day }: Props) {
           never the headline — with the count and the hours at the right. */}
       <div className="mt-4 flex items-end justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+          <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
             Spent
           </p>
           <p className="mt-0.5 text-3xl font-semibold tracking-[-0.022em] text-ink tabular-nums">

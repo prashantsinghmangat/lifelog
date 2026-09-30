@@ -34,7 +34,7 @@ export function AheadSheet({ upcoming, now, onPick, onClose }: Props) {
     <Sheet label="What is coming" onClose={onClose}>
       {(requestClose) => (
       <>
-      <p className="mb-2 text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+      <p className="mb-2 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
         Coming up
       </p>
 

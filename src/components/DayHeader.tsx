@@ -30,7 +30,7 @@ type Props = {
 export function DayHeader({ day, now, onChange, onOpenCalendar, actions }: Props) {
   const said = (
     <>
-      <span className="block text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+      <span className="block text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
         {dayEyebrow(day, now)}
       </span>
       <span className="mt-0.5 block truncate font-display text-[1.375rem] leading-tight font-semibold tracking-tight sm:text-2xl">

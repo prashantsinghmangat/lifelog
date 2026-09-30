@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { CheckIcon } from './Icons'
+import { useEffect, useState, type ReactNode } from 'react'
+import { CheckIcon, Chevron } from './Icons'
+import { Segmented } from './Segmented'
 import { openReminderChannelSettings } from '../lib/openSettings'
-import { PALETTES, type PaletteName } from '../lib/palettes'
+import { PALETTES, type PaletteName, type TokenBlock } from '../lib/palettes'
 import { isNative } from '../lib/platform'
 import { permission, requestPermission } from '../lib/reminders'
 import { supabase } from '../lib/supabase'
@@ -12,6 +13,107 @@ const THEMES: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
 ]
+
+/**
+ * A section eyebrow with the grouping space built in: the gap above a section
+ * must be visibly larger than the gaps inside it, which is what makes the
+ * groups read as groups.
+ */
+function Eyebrow({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <p
+      id={id}
+      className="mt-[26px] mb-2.5 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase"
+    >
+      {children}
+    </p>
+  )
+}
+
+/**
+ * One grouped list: a single raised card whose rows are separated by
+ * hairlines, with none after the last. The border is for the `lg` surface,
+ * where this screen sits inside an equally-raised sheet and the card would
+ * otherwise vanish into it.
+ */
+function Group({ children }: { children: ReactNode }) {
+  return (
+    <div className="divide-y divide-line overflow-hidden rounded-[14px] border border-line bg-raised">
+      {children}
+    </div>
+  )
+}
+
+/** A tappable row: 52px, or 56px when it carries a second line. */
+function Row({
+  title,
+  detail,
+  right,
+  onClick,
+  ...aria
+}: {
+  title: string
+  detail?: string
+  right?: ReactNode
+  onClick: () => void
+  role?: string
+  'aria-checked'?: boolean
+  'aria-label'?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      {...aria}
+      className={`flex w-full items-center justify-between gap-3 px-3.5 py-2 text-left transition-colors hover:bg-sunken active:bg-sunken ${
+        detail === undefined ? 'min-h-[52px]' : 'min-h-14'
+      }`}
+    >
+      <span className="min-w-0">
+        <span className="block text-sm text-ink">{title}</span>
+        {detail !== undefined && (
+          <span className="mt-0.5 block truncate text-xs text-faint">{detail}</span>
+        )}
+      </span>
+      {right !== undefined && <span className="flex shrink-0 items-center">{right}</span>}
+    </button>
+  )
+}
+
+/**
+ * A palette's swatch is a miniature of the screen, not three colour bands: the
+ * palette's own surface, an accent dot, two rules of ink standing in for rows,
+ * and a raised bar pinned along the bottom the way the capture control is. It
+ * reads as "this is what that theme looks like". Inline styles because these
+ * are another palette's tokens, not the live one's — the same table the CSS
+ * blocks are tested against, so the swatch cannot lie about its product.
+ */
+function Swatch({ tokens }: { tokens: TokenBlock }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="relative block h-7 w-[38px] shrink-0 overflow-hidden rounded-[5px] border border-line"
+      style={{ backgroundColor: tokens.surface }}
+    >
+      <span
+        className="absolute top-1 left-1 h-1 w-1 rounded-full"
+        style={{ backgroundColor: tokens.accent }}
+      />
+      <span
+        className="absolute top-[11px] left-1 h-[2px] w-[18px] rounded-full opacity-30"
+        style={{ backgroundColor: tokens.ink }}
+      />
+      <span
+        className="absolute top-[15px] left-1 h-[2px] w-[13px] rounded-full opacity-30"
+        style={{ backgroundColor: tokens.ink }}
+      />
+      <span
+        className="absolute inset-x-[3px] bottom-[3px] h-[7px] rounded-[3px]"
+        style={{ backgroundColor: tokens.raised, boxShadow: `inset 0 0 0 1px ${tokens.line}` }}
+      />
+    </span>
+  )
+}
 
 type Props = {
   email: string
@@ -37,12 +139,14 @@ type Props = {
  * to, the theme, the daily prompts, notification permission, the exports and the
  * manual.
  *
+ * Three groups — Appearance, Reminders, Your log — each one raised card of
+ * hairline-separated rows. The account block at the top is metadata, not a
+ * headline: the largest text on this screen used to be the email address.
+ *
  * Content only, with no surface of its own, because it is shown two ways. On a
- * phone it is a destination in the bottom nav — the account used to be a 20px
- * glyph in the quietest row on the screen, which is not where somebody looks for
- * the one warning that matters here. On a wide screen the nav does not exist and
- * the sidebar already carries the account, so it stays a sheet opened from
- * there. One component either way: there is no `MobileProfile`.
+ * phone it is a destination in the bottom nav; on a wide screen it stays a
+ * sheet opened from the sidebar. One component either way: there is no
+ * `MobileProfile`.
  */
 export function You({
   email,
@@ -112,251 +216,230 @@ export function You({
     }
   }
 
+  // The address's own name is the closest thing an account here has to one; a
+  // guest is called what the sidebar already calls them. No status badge —
+  // there is no tier to display, and "signed in" is one word on the meta line.
+  const name = local ? 'Guest' : (email.split('@')[0] ?? email)
+
   return (
     <>
-    {/* A guest has no address to show and is not signed out either — the log
-        is simply on this phone. Said plainly, because the one thing worth
-        knowing about this state is what happens if the phone is lost. */}
-    <p className="truncate text-base font-semibold tracking-tight">
-      {local ? 'No account' : email}
-    </p>
-    <p className="mt-0.5 text-xs text-faint">
-      {local ? 'This log is on this device only' : 'Signed in'}
-    </p>
-
-    <button
-      type="button"
-      onClick={onHelp}
-      className="mt-5 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
-    >
-      How to use lifelog
-    </button>
-
-    <p className="mt-6 mb-2 text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase" id="appearance">
-      Appearance
-    </p>
-    <div
-      role="group"
-      aria-labelledby="appearance"
-      className="flex gap-1 rounded-xl border border-line bg-sunken p-1"
-    >
-      {THEMES.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          aria-pressed={theme === option.value}
-          onClick={() => onTheme(option.value)}
-          className={`h-11 flex-1 rounded-lg px-2 text-sm transition-colors ${
-            theme === option.value
-              ? 'bg-raised font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
-              : 'text-muted hover:text-ink'
-          }`}
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-accent text-[15px] font-semibold text-surface"
         >
-          {option.label}
-        </button>
-      ))}
-    </div>
-
-    {/* The palette, orthogonal to the mode above: every palette carries a
-        light and a dark block, so System keeps resolving whichever is picked.
-        Swatches render from the same constant the CSS blocks are tested
-        against — a swatch that could drift from the block it applies would
-        be the picker lying about its own product. */}
-    <div role="radiogroup" aria-label="Palette" className="mt-2 grid grid-cols-2 gap-2">
-      {PALETTES.map((option) => {
-        const tokens = resolved === 'dark' ? option.dark : option.light
-        const selected = palette === option.name
-        return (
-          <button
-            key={option.name}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => onPalette(option.name)}
-            className={`flex min-h-11 items-center gap-2.5 rounded-lg border-2 p-2 text-left transition-colors ${
-              selected ? 'border-accent' : 'border-line hover:border-edge'
-            }`}
-          >
-            <span
-              aria-hidden="true"
-              className="flex h-9 w-12 shrink-0 flex-col justify-between rounded-md border border-line p-1"
-              style={{ backgroundColor: tokens.surface }}
-            >
-              <span className="block h-2.5 rounded-sm" style={{ backgroundColor: tokens.raised }} />
-              <span className="block h-2 w-2 rounded-full" style={{ backgroundColor: tokens.accent }} />
-            </span>
-            <span className="text-sm text-ink">{option.label}</span>
-            {selected && <CheckIcon size={14} className="ml-auto shrink-0 text-accent" />}
-          </button>
-        )
-      })}
-    </div>
-    <p className="mt-2 text-xs text-faint">
-      Every palette has a light and a dark set, so System keeps working.
-    </p>
-
-    {/* Only meaningful in the native app; the web has no reminders to grant. */}
-    {isNative() && (
-      <>
-        <p className="mt-6 mb-2 text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase">Reminders</p>
-        {reminders === 'granted' && <p className="text-sm text-time">Notifications allowed.</p>}
-
-        {reminders === 'denied' && (
-          <>
-            <button
-              type="button"
-              onClick={() => void allowReminders()}
-              className="h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90"
-            >
-              Allow notifications
-            </button>
-            <p className="mt-1.5 text-xs text-faint">
-              If nothing happens, Android has stopped asking. Settings → Apps → lifelog →
-              Notifications, and turn them on there.
-            </p>
-          </>
-        )}
-
-        {reminders === 'unavailable' && (
-          <p className="text-sm text-muted">Reminders are not available here.</p>
-        )}
-
-        {/* The sound and vibration a channel uses are Android's to set, not
-            this app's — there is no API for either, only this deep link to
-            the screen that can. Offered regardless of permission, since it is
-            just as useful for finding the channel to turn back on. */}
-        <button
-          type="button"
-          onClick={() => void openReminderChannelSettings()}
-          className="mt-3 flex h-11 w-full items-center justify-between gap-3 rounded-lg border border-edge px-3 text-left"
-        >
-          <span className="min-w-0">
-            <span className="block text-sm text-ink">Reminder sound</span>
-            <span className="block text-xs text-faint">Opens Android's settings for this channel</span>
+          {(name[0] ?? '?').toUpperCase()}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-[15px] leading-snug font-medium text-ink">
+            {name}
           </span>
-        </button>
+          <span className="block truncate text-xs text-muted">
+            {local ? 'This log is on this device only' : `${email} · signed in`}
+          </span>
+        </span>
+      </div>
 
-        {/* Two prompts a day, raised by the phone with nothing on a server
-            involved. A log nobody is reminded to keep is a log that stops
-            after a fortnight — but a daily notification is also the fastest
-            way to get an app muted, so it says exactly when it will arrive
-            and can be switched off in one tap. */}
-        {reminders === 'granted' && (
+      {/* Offered as the thing that actually applies: an account, which is what
+          carries the log to a second device. */}
+      {local && (
+        <>
           <button
             type="button"
-            aria-pressed={nudges}
-            onClick={() => onNudges(!nudges)}
-            className="mt-3 flex h-11 w-full items-center justify-between gap-3 rounded-lg border border-edge px-3 text-left"
+            onClick={onSignIn}
+            className="mt-4 h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90"
           >
-            <span className="min-w-0">
-              <span className="block text-sm text-ink">Daily prompts</span>
-              <span className="block text-xs text-faint">9am and 9pm</span>
-            </span>
-            <span
-              aria-hidden="true"
-              className={`shrink-0 text-xs font-medium ${nudges ? 'text-time' : 'text-faint'}`}
-            >
-              {nudges ? 'On' : 'Off'}
-            </span>
+            Sign in to sync
           </button>
+          <p className="mt-1.5 text-xs text-faint">
+            Everything logged here comes with you. Nothing is lost by waiting.
+          </p>
+        </>
+      )}
+
+      <Eyebrow id="appearance">Appearance</Eyebrow>
+      <div className="rounded-[14px] border border-line bg-raised p-3.5">
+        <Segmented
+          label="Appearance"
+          value={theme}
+          options={THEMES}
+          onChange={onTheme}
+        />
+
+        {/* The palette, orthogonal to the mode above: every palette carries a
+            light and a dark block, so System keeps resolving whichever is
+            picked. Swatches render from the same constant the CSS blocks are
+            tested against. */}
+        <div role="radiogroup" aria-label="Palette" className="mt-3 grid grid-cols-2 gap-2">
+          {PALETTES.map((option) => {
+            const tokens = resolved === 'dark' ? option.dark : option.light
+            const selected = palette === option.name
+            return (
+              <button
+                key={option.name}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => onPalette(option.name)}
+                className={`flex h-14 items-center gap-2.5 rounded-[10px] border-[1.5px] px-3 text-left transition-colors ${
+                  selected ? 'border-accent' : 'border-line hover:border-edge'
+                }`}
+              >
+                <Swatch tokens={tokens} />
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">{option.label}</span>
+                {selected && <CheckIcon size={14} className="shrink-0 text-accent" />}
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-2.5 text-xs text-faint">
+          Every palette has a light and a dark set, so System keeps working.
+        </p>
+      </div>
+
+      {/* Only meaningful in the native app; the web has no reminders to grant. */}
+      {isNative() && (
+        <>
+          <Eyebrow>Reminders</Eyebrow>
+          <Group>
+            {/* Permission is passive status, so it reads as a row rather than
+                as the loudest element in its section. */}
+            {reminders === 'granted' && (
+              <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5">
+                <span className="text-sm text-ink">Notifications</span>
+                <span className="text-sm text-muted">Allowed</span>
+              </div>
+            )}
+            {reminders === 'denied' && (
+              <Row
+                title="Notifications"
+                detail="If tapping does nothing, Android has stopped asking — its own settings has the switch"
+                right={<span className="text-sm font-medium text-accent">Allow</span>}
+                onClick={() => void allowReminders()}
+              />
+            )}
+            {reminders === 'unavailable' && (
+              <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5">
+                <span className="text-sm text-ink">Notifications</span>
+                <span className="text-sm text-muted">Not available here</span>
+              </div>
+            )}
+
+            {/* Two prompts a day, raised by the phone with nothing on a server
+                involved. The whole row is the switch — the drawn control is
+                decoration inside a target that stays row-sized. */}
+            {reminders === 'granted' && (
+              <Row
+                role="switch"
+                aria-checked={nudges}
+                aria-label="Daily prompts"
+                title="Daily prompts"
+                detail="9am and 9pm"
+                right={
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-[25px] w-[42px] items-center rounded-full p-[3px] transition-colors ${
+                      nudges
+                        ? 'bg-accent'
+                        : 'bg-sunken shadow-[inset_0_0_0_1px_var(--color-edge)]'
+                    }`}
+                  >
+                    <span
+                      className={`h-[19px] w-[19px] rounded-full bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.25)] transition-transform ${
+                        nudges ? 'translate-x-[17px]' : ''
+                      }`}
+                    />
+                  </span>
+                }
+                onClick={() => onNudges(!nudges)}
+              />
+            )}
+
+            {/* The sound and vibration a channel uses are Android's to set, not
+                this app's — there is no API for either, only this deep link to
+                the screen that can. Offered regardless of permission, since it
+                is just as useful for finding the channel to turn back on. */}
+            <Row
+              title="Reminder sound"
+              detail="Opens Android's settings for this channel"
+              onClick={() => void openReminderChannelSettings()}
+            />
+          </Group>
+        </>
+      )}
+
+      <Eyebrow id="your-log">Your log</Eyebrow>
+      <Group>
+        {/* The least-used item on the screen, so it is an ordinary row now
+            rather than the loudest control — it was a full-width outlined
+            button above everything it should have sat under. */}
+        <Row
+          title="How to use lifelog"
+          detail="The manual — every example fills the box"
+          right={<Chevron dir="right" size={16} className="text-faint" />}
+          onClick={onHelp}
+        />
+        <Row title="Export a copy" detail="JSON" onClick={onExport} />
+
+        {/* The web's answer only: on the web no API can raise an alarm with
+            the app closed, so the OS calendar has to; natively the reminder is
+            already scheduled, and handing the same events to the calendar is
+            asking for a step the app has taken. */}
+        {!isNative() && (
+          <Row
+            title="Send events to calendar"
+            detail="Upcoming events and birthdays, each with its own reminder"
+            onClick={onExportCalendar}
+          />
         )}
-      </>
-    )}
 
-    {/* Setting a password goes through `updateUser`, which needs a session
-        there is none of here. Offered as the thing that actually applies: an
-        account, which is what carries the log to a second device. */}
-    {local && (
-      <>
-        <button
-          type="button"
-          onClick={onSignIn}
-          className="mt-6 h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90"
-        >
-          Sign in to sync
-        </button>
-        <p className="mt-1.5 text-xs text-faint">
-          Everything logged here comes with you. Nothing is lost by waiting.
-        </p>
-      </>
-    )}
+        {/* Setting a password goes through `updateUser`, which needs a session
+            a guest does not have. */}
+        {!local && (
+          <div className="px-3.5 py-3">
+            <p
+              id="password-label"
+              className="text-[0.6875rem] font-semibold tracking-[0.08em] text-faint uppercase"
+            >
+              Password
+            </p>
+            <div className="mt-2 flex gap-2">
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                aria-labelledby="password-label"
+                placeholder="Set a password"
+                onChange={(event) => setPassword(event.target.value)}
+                className="min-w-0 flex-1 rounded-lg border border-edge bg-surface px-3 py-2.5 text-base text-ink"
+              />
+              <button
+                type="button"
+                disabled={busy || password === ''}
+                onClick={() => void savePassword()}
+                className="h-11 shrink-0 rounded-lg bg-ink px-3 text-sm font-medium text-surface disabled:opacity-50"
+              >
+                {busy ? '…' : 'Save'}
+              </button>
+            </div>
+            <p role="status" aria-live="polite" className="mt-1.5 min-h-4 text-xs text-muted">
+              {note}
+            </p>
+          </div>
+        )}
+      </Group>
 
-    {!local && (
-      <>
-    <p className="mt-6 mb-2 text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase" id="password-label">
-      Password
-    </p>
-    <div className="flex gap-2">
-      <input
-        type="password"
-        autoComplete="new-password"
-        value={password}
-        aria-labelledby="password-label"
-        placeholder="Set a password"
-        onChange={(event) => setPassword(event.target.value)}
-        className="min-w-0 flex-1 rounded-lg border border-edge bg-surface px-3 py-2.5 text-base text-ink outline-none focus:border-ink"
-      />
-      <button
-        type="button"
-        disabled={busy || password === ''}
-        onClick={() => void savePassword()}
-        className="h-11 shrink-0 rounded-lg bg-ink px-3 text-sm font-medium text-surface disabled:opacity-50"
-      >
-        {busy ? '…' : 'Save'}
-      </button>
-    </div>
-    <p role="status" aria-live="polite" className="mt-1.5 min-h-4 text-xs text-muted">
-      {note}
-    </p>
-      </>
-    )}
-
-    {/* The web's answer only, and it is offered nowhere else for the same
-        reason the per-entry "Add to calendar" is not: on the web no API can
-        raise an alarm with the app closed, so the OS calendar has to; in the
-        native app the reminder is already scheduled, and handing the same
-        events to the calendar as well is asking for a step the app has taken.
-        It was shown here on native regardless — and did nothing when pressed,
-        because there is no share sheet in a WebView to hand an .ics to. */}
-    {!isNative() && (
-      <>
-        <button
-          type="button"
-          onClick={onExportCalendar}
-          className="mt-6 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
-        >
-          Send events to calendar
-        </button>
-        <p className="mt-1.5 text-xs text-faint">
-          Upcoming events and birthdays, each with its own reminder. Birthdays repeat yearly and
-          alarm at 9am.
-        </p>
-      </>
-    )}
-
-    {/* The things you leave by, set apart from the things you come here to
-        change. A rule and a quieter row, rather than three more full-width
-        buttons that read as equal in weight to the theme you actually use. */}
-    <div className="mt-6 flex items-center justify-between border-t border-line pt-2">
-      <button
-        type="button"
-        onClick={onExport}
-        className="-ml-2 h-11 rounded-lg px-2 text-sm text-muted transition-colors hover:bg-sunken hover:text-ink"
-      >
-        Export JSON
-      </button>
-      {/* Nothing to sign out of, and the button would read as "delete my log"
-          — which is the one thing it must not do to the only copy there is. */}
+      {/* Nothing to sign out of as a guest, and the button would read as
+          "delete my log" — the one thing it must not do to the only copy. */}
       {!local && (
         <button
           type="button"
           onClick={onSignOut}
-          className="-mr-2 h-11 rounded-lg px-2 text-sm text-expense transition-colors hover:bg-sunken"
+          className="-ml-2 mt-[26px] h-11 rounded-lg px-2 text-sm text-expense transition-colors hover:bg-sunken"
         >
           Sign out
         </button>
       )}
-    </div>
     </>
   )
 }

@@ -890,7 +890,7 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
           // is live, and each of these screens has something of its own that
           // deserves the size — the month's spend, an answer's number, the name
           // on the account. Two big things on one screen is one too many.
-          <h2 className="text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+          <h2 className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
             {TITLES[view]}
           </h2>
         )}
@@ -1143,8 +1143,11 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
             the bottom edge. This is what keeps the block pushed down to it. */}
         {view === 'ask' && <div className="flex-1" />}
 
+        {/* The extra floor is for the sticky bottom block: while the screen
+            scrolls, the nav rides over whatever is above its resting place,
+            and the Password block was what it covered. */}
         {view === 'you' && (
-          <div className="mt-4 flex-1">
+          <div className="mt-4 flex-1 pb-8">
             <You {...youProps} />
           </div>
         )}

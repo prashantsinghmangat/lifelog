@@ -114,8 +114,12 @@ under 16px.
 **There is one eyebrow, and it is written the same way everywhere:**
 
 ```
-text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase
+text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase
 ```
+
+Where an eyebrow heads a **section** it also carries the grouping space: 26px above, 10px below.
+The gap above a section must be visibly larger than the gaps inside it — that is what makes
+grouping read at all.
 
 `TODAY` over the date, `ON THIS DAY`, `COMING UP`, `TRY ASKING`, an answer's caption, a day
 heading inside an answer, and the name each destination that is not a day gives itself. **The one
@@ -269,6 +273,13 @@ the wrapper already exists; in `AnswerCard` one was added for exactly this.
 Tailwind v4 gates `hover:` behind `@media (hover: hover)`, so a hover state does not stick to a
 row after a tap on a phone. No `@media` wrapper of your own is needed.
 
+### A segmented control
+
+One component, `Segmented`: a 40px `sunken` track (radius 11, 3px padding) holding 34px
+`raised` pills (radius 8). At ~68px the old per-screen versions were taller than the 52px rows
+beside them, which is most of why controls looked inconsistent between screens. Each button is
+still `h-11` by negative margin — the pill is decoration inside the target.
+
 ### An answer
 
 Banded, not boxed: `border-y border-edge`, then conclusion first — an uppercase caption, the
@@ -362,9 +373,9 @@ Other invariants here:
 
 - Four items, each a `<button>` filling a quarter of the bar: a 20px inline SVG at stroke 1.8, a
   3px gap, then an 11px label. At 60 by roughly 97 they clear 44px in both directions comfortably.
-- **The live item** is `font-medium text-ink` behind a 60×30 `bg-sunken` pill; the rest are
-  `text-faint`. The pill is decoration inside the target, never instead of it — the same discipline
-  as the day cell's 28px disc inside its 44px cell.
+- **The live item** is `font-semibold text-accent` behind a 56×28 accent-tint pill
+  (`bg-accent/10`); the rest are `text-faint`. The pill is decoration inside the target, never
+  instead of it — the same discipline as the day cell's 28px disc inside its 44px cell.
 - 11px (`text-[0.6875rem]`) is used here as a plain label rather than as an eyebrow. It is the one
   exception to §3's rule, and it is confined to this bar.
 - No per-component focus styles. The one global `:focus-visible` rule covers it.

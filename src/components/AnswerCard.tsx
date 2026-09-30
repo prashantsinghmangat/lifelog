@@ -59,7 +59,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
           eyebrow so it reads as the label on the number rather than as the
           first line of a paragraph the number then interrupts. */}
       {answer.caption !== null && (
-        <p className="truncate text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase">
+        <p className="truncate text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
           {answer.caption}
         </p>
       )}
@@ -112,7 +112,7 @@ export function AnswerCard({ answer, now, onPick }: Props) {
               {heads && (
                 <p
                   aria-hidden="true"
-                  className={`pb-2 text-[0.6875rem] font-medium tracking-[0.1em] text-faint uppercase ${
+                  className={`pb-2 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase ${
                     index === 0 ? '' : 'pt-4'
                   }`}
                 >
