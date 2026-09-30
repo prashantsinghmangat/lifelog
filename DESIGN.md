@@ -48,12 +48,15 @@ light mode and is unreadable in dark — it is a bug, not a shortcut.
 | `focus` | the global focus ring |
 | `expense` `time` `event` `note` | the four kinds, and nothing else |
 
-**Warm paper is Paper's argument, and Amber keeps its light half.** Paper is off-white paper
-with a near-black warm ink in light and warm charcoal in dark — not the light palette inverted.
-A pure-white page with blue-grey text reads as a form to fill in; the same layout on paper reads
-as something to keep, which is what a personal record should be. Amber, the default, holds onto
-that in light mode and trades the charcoal for near-black in dark, paying for the true accent
-hue Paper deliberately does without.
+**Amber is the default because it is the mark's own palette.** `logo.svg` draws the day's spine
+on a near-black tile with its nodes in the kind colours; Amber's dark block is that ground, so
+the icon on the home screen and the app behind it finally match. Its light block keeps Paper's
+character while gaining the accent hue Paper deliberately refuses.
+
+**Warm paper is Paper's argument, and it stands where Paper stands.** A pure-white page with
+blue-grey text reads as a form to fill in; the same layout on paper reads as something to keep,
+which is what a personal record should be — off-white paper and warm charcoal, neither the other
+inverted. That is why Paper exists; it is not why Amber is the default.
 
 **Every text token clears 4.5:1 on every surface it can be placed on — surface, raised and
 sunken.** `faint` used to be 2.9:1, which is what "tertiary" had quietly come to mean — and later

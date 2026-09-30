@@ -628,15 +628,23 @@ native resource resolved before any JS runs — so it stays on Amber's surface, 
 palette that appears not to reach the splash is this, not a bug. The launcher icon does not
 follow it either, deliberately: its colours are frozen with the mark's geometry above.
 
-**The warm-paper argument belongs to Paper, where it was made.** Paper's light is off-white
-paper with a near-black warm ink, its dark a warm charcoal — neither the other inverted — and
-the reasoning stands: a person's own record reads as a form to fill in on pure white with
-blue-grey text, and as something worth keeping on paper. **Amber is the default** because its
-light mode keeps that paper character nearly unchanged while giving the interface a true accent
-hue — the thing Paper deliberately does without — and its dark goes deeper than charcoal, near
-black, for the phone screens the app actually lives on. Every palette's dark block is still
-built from the dark end rather than by flipping its light one, which is how a dark theme ends up
-looking like a lit screen instead of a dim room.
+**Amber is the default because it is the mark's own palette.** `logo.svg` draws the day's spine
+on a near-black tile (`#111827`) with its nodes in the kind colours; until spec 015 no theme in
+the app used that ground, so the icon on the home screen and the app behind it had never
+matched — Paper's warm charcoal was never the thing on the launcher. Amber's dark block is that
+near-black. Its light block keeps Paper's character almost unchanged while gaining the accent
+hue Paper deliberately refuses — Paper's accent is its ink, and that stays true of Paper, which
+ships unchanged as an option. This closes the loop the frozen mark exists for: the launcher
+icon, themed icon and notification silhouette already could not drift from each other, and now
+the app does not drift from them. And Amber is the *default*, rather than merely an option,
+because it was picked — the icon argument made the choice defensible, not inevitable.
+
+**The warm-paper argument is Paper's, and it stands where Paper stands.** Off-white paper with a
+near-black warm ink in light, warm charcoal in dark, neither the other inverted: a person's own
+record reads as a form to fill in on pure white with blue-grey text, and as something worth
+keeping on paper. That reasoning is why Paper exists and remains; it is not why Amber is the
+default. Every palette's dark block is still built from the dark end rather than by flipping its
+light one, which is how a dark theme ends up looking like a lit screen instead of a dim room.
 
 Every *text* token clears 4.5:1 on **every surface it can sit on** — surface, raised and sunken.
 `faint` failed this twice: at 2.9:1 outright, which is what "tertiary" had quietly come to mean
