@@ -577,7 +577,10 @@ export function Stats({ all, now, day }: Props) {
                   Top: {top.name} · <span className="tabular-nums">{rupees(top.paise)}</span>
                 </p>
               )}
-              <div className="mt-2 h-1 overflow-hidden rounded-full bg-sunken">
+              {/* h-1.5 like the grid ribbon's track, not the page-surface
+                  h-1: inside a raised card a 4px sunken track all but
+                  disappears on a phone screen. */}
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-sunken">
                 <span
                   className={`block h-full rounded-full ${SEGMENT[kind]}`}
                   style={{ width: `${(count / most) * 100}%` }}

@@ -248,6 +248,19 @@ describe('measures', () => {
   })
 })
 
+describe('the category breakdown', () => {
+  it('draws a proportional bar under every kind row', () => {
+    open()
+    const card = screen.getByText('Category breakdown').nextElementSibling as HTMLElement
+    const bars = card.querySelectorAll('.bg-sunken > span')
+    expect(bars.length).toBe(4)
+    // September holds two notes and one of everything else: notes fill the
+    // track, the rest draw half of it.
+    expect((bars[0] as HTMLElement).style.width).toBe('50%')
+    expect((bars[3] as HTMLElement).style.width).toBe('100%')
+  })
+})
+
 describe('too little data', () => {
   it('says so instead of drawing bars, under 7 logged days', () => {
     const sparse: Entry[] = [
