@@ -20,13 +20,13 @@ import type { Entry } from '../types'
  * while the days the answer actually covered had to be reassembled by eye; as
  * headings they are the structure instead of the noise.
  *
- * **No box.** This was a bordered, recessed card, and once the day headings
- * took over the grouping the card was drawing a boundary nothing needed: dates
- * separate the information and whitespace groups it. What sets the answer apart
- * from the timeline now is a pair of heavier rules and the size of the number —
- * the same job the card was doing, with less ink. The closing rule is
- * load-bearing: without it the last row of the answer and the first row of the
- * day read as the same list.
+ * **A box again — 016's "No box" reversed by the fidelity pass (018).** 016
+ * took the card off because the day headings made its boundary redundant;
+ * 018's card grammar puts every distinct surface in the same raised
+ * enclosure, and the answer standing as the one bare block undid that. The
+ * enclosure is the pass's single recipe — raised tone and a hairline, no
+ * shadow — and it re-takes the job the border-y rules were doing, so those
+ * went back off.
  *
  * Rows are buttons: the day an answer points at is almost always the next place
  * you want to be, and getting there any other way costs a calendar and a guess.
@@ -99,7 +99,7 @@ export function AnswerCard({ answer, now, onPick, evidence, money = false }: Pro
   }, [money, answer.rows])
 
   return (
-    <div className="mt-3 border-y border-edge py-4">
+    <div className="mt-3 rounded-2xl border border-line bg-raised px-3.5 py-4">
       {/* The conclusion, then its working. Caption set as a small uppercase
           eyebrow so it reads as the label on the number rather than as the
           first line of a paragraph the number then interrupts. The badge

@@ -815,3 +815,20 @@ describe('the Ask topics', () => {
     expect(onPick).toHaveBeenCalledWith('how much this month')
   })
 })
+
+describe('the follow-up pill', () => {
+  it('offers the same question a period back, filling the box without submitting', async () => {
+    const corpus = [
+      entry({ occurred_on: TODAY, kind: 'expense', title: 'lunch swiggy', amount_paise: 35000 }),
+    ]
+    const { box, onSubmit } = setup({ corpus })
+    await userEvent.type(box, '? how much this month')
+
+    await userEvent.click(screen.getByRole('button', { name: /how much last month/ }))
+    // A refill, exactly like a suggestion row — and once shifted there is no
+    // further period to offer, so the pill stands down.
+    expect(box.value).toBe('? how much last month')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /how much last month/ })).toBeNull()
+  })
+})

@@ -63,11 +63,42 @@ function QuestionRow({
   asked,
   first,
   onPick,
+  boxed = false,
 }: {
   asked: string
   first: boolean
   onPick: (asked: string) => void
+  /** Inside a raised card the card draws the hairlines and holds the inset;
+   *  bare on the page the row bleeds past the gutter as every list row does. */
+  boxed?: boolean
 }) {
+  const inner = (
+    <>
+      <span
+        className="flex w-[22px] shrink-0 justify-center text-[15px] leading-none font-semibold text-accent"
+        aria-hidden="true"
+      >
+        ?
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{asked}</span>
+      {/* Fills the box, it does not submit — but it does lead
+          somewhere, and the chevron says so. */}
+      <Chevron dir="right" size={16} className="shrink-0 text-faint" />
+    </>
+  )
+
+  if (boxed) {
+    return (
+      <button
+        type="button"
+        onClick={() => onPick(asked)}
+        className="flex min-h-[52px] w-full items-center gap-3 px-3.5 text-left transition-colors hover:bg-sunken active:bg-sunken"
+      >
+        {inner}
+      </button>
+    )
+  }
+
   return (
     // The hairline sits between rows, on the wrapper — a rule on the
     // inset button would run 8px wider than every other rule on screen.
@@ -77,16 +108,7 @@ function QuestionRow({
         onClick={() => onPick(asked)}
         className="-mx-2 flex min-h-[52px] w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
       >
-        <span
-          className="flex w-[22px] shrink-0 justify-center text-[15px] leading-none font-semibold text-accent"
-          aria-hidden="true"
-        >
-          ?
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{asked}</span>
-        {/* Fills the box, it does not submit — but it does lead
-            somewhere, and the chevron says so. */}
-        <Chevron dir="right" size={16} className="shrink-0 text-faint" />
+        {inner}
       </button>
     </div>
   )
@@ -209,9 +231,11 @@ export function AskTopics({
               {caption[topic.kind]}
             </span>
           </div>
-          <div className="mt-0.5">
+          {/* The group's rows in a raised card — hairline and tone, no
+              shadow, the fidelity pass's one enclosure recipe (018). */}
+          <div className="mt-1.5 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
             {topic.questions.map((asked, at) => (
-              <QuestionRow key={asked} asked={asked} first={at === 0} onPick={onPick} />
+              <QuestionRow key={asked} asked={asked} first={at === 0} onPick={onPick} boxed />
             ))}
           </div>
         </div>
@@ -587,6 +611,19 @@ export function QuickAdd({
   // not be walked through the table that shows it.
   const spoken =
     question === null || summary === null ? null : phrase(summary, question, now)
+
+  /**
+   * One more question the log can certainly answer: the same one, a period
+   * back. A refill exactly like a suggestion row — never an action — and only
+   * over the relative periods where "the one before" is well defined; a
+   * question about 14 Nov has no obvious predecessor worth offering.
+   */
+  const followUp = useMemo(() => {
+    if (question === null) return null
+    if (question.measure !== 'money' && question.measure !== 'hours') return null
+    const shifted = text.replace(/\bthis\s+(week|month|year)\b/i, 'last $1')
+    return shifted === text ? null : shifted.trim()
+  }, [question, text])
 
   /** There is something worth saving, so the send button takes the mic's place. */
   const ready = (parsed !== null || multi !== null) && !asking
@@ -1012,6 +1049,28 @@ export function QuickAdd({
             setText('')
           }}
         />
+      )}
+
+      {/* Under the answer, not inside it: the card is the answer and this is
+          the next question. Fills the box the way every suggestion does. */}
+      {answer !== null && answer.lead !== 'nothing found' && followUp !== null && (
+        <div className="mt-2 flex">
+          <button
+            type="button"
+            onClick={() => {
+              setText(followUp)
+              document.getElementById('quick-add')?.focus()
+            }}
+            className="flex h-11 items-center"
+          >
+            <span className="flex min-h-7 items-center gap-1.5 rounded-full border border-line px-3 text-xs text-muted transition-colors hover:bg-sunken">
+              <span aria-hidden="true" className="font-semibold text-accent">
+                ?
+              </span>
+              {followUp.replace(/^\?\s*/, '')}
+            </span>
+          </button>
+        </div>
       )}
 
       {/* A question that found nothing, over text the parser plainly understands

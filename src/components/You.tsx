@@ -223,39 +223,43 @@ export function You({
 
   return (
     <>
-      <div className="flex items-center gap-3">
-        <span
-          aria-hidden="true"
-          className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-accent text-[15px] font-semibold text-surface"
-        >
-          {(name[0] ?? '?').toUpperCase()}
-        </span>
-        <span className="min-w-0">
-          <span className="block truncate text-[15px] leading-snug font-medium text-ink">
-            {name}
-          </span>
-          <span className="block truncate text-xs text-muted">
-            {local ? 'This log is on this device only' : `${email} · signed in`}
-          </span>
-        </span>
-      </div>
-
-      {/* Offered as the thing that actually applies: an account, which is what
-          carries the log to a second device. */}
-      {local && (
-        <>
-          <button
-            type="button"
-            onClick={onSignIn}
-            className="mt-4 h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90"
+      {/* The account block in its own raised card (018) — still metadata,
+          not a headline: the card gives it a surface, not a louder voice. */}
+      <div className="rounded-2xl border border-line bg-raised p-3.5">
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-accent text-[15px] font-semibold text-surface"
           >
-            Sign in to sync
-          </button>
-          <p className="mt-1.5 text-xs text-faint">
-            Everything logged here comes with you. Nothing is lost by waiting.
-          </p>
-        </>
-      )}
+            {(name[0] ?? '?').toUpperCase()}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[15px] leading-snug font-medium text-ink">
+              {name}
+            </span>
+            <span className="block truncate text-xs text-muted">
+              {local ? 'This log is on this device only' : `${email} · signed in`}
+            </span>
+          </span>
+        </div>
+
+        {/* Offered as the thing that actually applies: an account, which is what
+            carries the log to a second device. */}
+        {local && (
+          <>
+            <button
+              type="button"
+              onClick={onSignIn}
+              className="mt-4 h-11 w-full rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90"
+            >
+              Sign in to sync
+            </button>
+            <p className="mt-1.5 text-xs text-faint">
+              Everything logged here comes with you. Nothing is lost by waiting.
+            </p>
+          </>
+        )}
+      </div>
 
       <Eyebrow id="appearance">Appearance</Eyebrow>
       <div className="rounded-2xl border border-line bg-raised p-3.5">

@@ -265,8 +265,11 @@ export function Stats({ all, now, day }: Props) {
       {/* The headline. The lead figure is always the period's money — the
           measure buttons change the picture, never the headline — and the
           eyebrow names that measure with the period, so the figure is never a
-          bare number. The serif display face, like an answer's own lead. */}
-      <div className="mt-4 flex items-end justify-between gap-2">
+          bare number. The serif display face, like an answer's own lead. In a
+          raised card since the fidelity pass (018) — hairline and tone, never
+          a shadow, which stays the capture control's alone. */}
+      <div className="mt-4 rounded-2xl border border-line bg-raised px-3.5 py-3">
+      <div className="flex items-end justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
             Spent · {label}
@@ -329,6 +332,7 @@ export function Stats({ all, now, day }: Props) {
           </button>
         </div>
       </div>
+      </div>
 
       {/* Announced as one polite sentence when the period or scale moves, the
           way an answer is — never a walk through the bars. */}
@@ -347,14 +351,14 @@ export function Stats({ all, now, day }: Props) {
           <br />a few more days and this fills in.
         </p>
       ) : (
-        <>
+        <div className="mt-4 rounded-2xl border border-line bg-raised px-3.5 pt-3 pb-3.5">
           {/* Only where the bars stack: on one colour per measure the fill is
               named by the live measure button, and a legend would repeat it. */}
           {measure === 'entries' && (
             <div
               role="group"
               aria-label="What the colours mean"
-              className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1"
             >
               {STACK.map((kind) => (
                 <span key={kind} className="flex items-center gap-1.5 text-[0.6875rem] text-muted">
@@ -503,14 +507,11 @@ export function Stats({ all, now, day }: Props) {
             </div>
           )}
           </div>
-        </>
-      )}
 
-      {/* The measure row sits below the chart: the picture is read first and
-          adjusted second. The live one is the accent fill; the others are a
-          hairline outline. */}
-      {!tooLittleData && (
-        <div role="group" aria-label="Measure" className="mt-3 flex gap-2">
+          {/* The measure row shares the plot's card: the picture is read
+              first and adjusted second. The live one is the accent fill; the
+              others are a hairline outline. */}
+          <div role="group" aria-label="Measure" className="mt-4 flex gap-2">
           {MEASURES.map((option) => (
             <button
               key={option.value}
@@ -526,6 +527,7 @@ export function Stats({ all, now, day }: Props) {
               {option.label}
             </button>
           ))}
+          </div>
         </div>
       )}
 
@@ -601,7 +603,8 @@ export function Stats({ all, now, day }: Props) {
           <p className="mt-[26px] mb-1 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
             Where it went
           </p>
-          <div>
+          {/* The breakdown card's exact treatment, so the two blocks match. */}
+          <div className="divide-y divide-line rounded-2xl border border-line bg-raised">
             {totals.byCategory.slice(0, 4).map((category) => {
               const widest = Math.max(
                 1,
@@ -612,7 +615,7 @@ export function Stats({ all, now, day }: Props) {
                   ? 0
                   : Math.round((Math.abs(category.paise) / Math.abs(totals.paise)) * 100)
               return (
-                <div key={category.name ?? ''} className="py-2">
+                <div key={category.name ?? ''} className="px-3.5 py-2.5">
                   <div className="flex items-baseline gap-3">
                     <span
                       className={`min-w-0 flex-1 truncate text-sm ${
@@ -626,7 +629,7 @@ export function Stats({ all, now, day }: Props) {
                       {rupees(category.paise)}
                     </span>
                   </div>
-                  <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-sunken">
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-sunken">
                     <span
                       className="block h-full rounded-full bg-expense"
                       style={{ width: `${(Math.abs(category.paise) / widest) * 100}%` }}

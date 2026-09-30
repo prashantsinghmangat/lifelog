@@ -4,6 +4,7 @@ import { KindMark } from './KindMark'
 import { MonthGrid } from './MonthGrid'
 import { Segmented } from './Segmented'
 import { Stats } from './Stats'
+import { behindYou } from '../lib/events'
 import { byClock } from '../lib/history'
 import { clock, dayKey, minutes, rowValue, rupees } from '../lib/format'
 import { spanOf, totalsFor } from '../lib/stats'
@@ -206,6 +207,14 @@ export function Calendar({ day, now, all, loadDays, onPick }: Props) {
                       </span>
                       {right !== null && (
                         <span className="shrink-0 text-sm text-muted tabular-nums">{right}</span>
+                      )}
+                      {/* Said quietly, the way the strikethrough says it
+                          elsewhere — a fact about the event, not a status
+                          system. */}
+                      {row.kind === 'event' && behindYou(row, now) && (
+                        <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-muted">
+                          Done
+                        </span>
                       )}
                     </button>
                   )
