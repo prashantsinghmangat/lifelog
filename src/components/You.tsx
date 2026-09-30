@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { CheckIcon } from './Icons'
 import { openReminderChannelSettings } from '../lib/openSettings'
+import { PALETTES, type PaletteName } from '../lib/palettes'
 import { isNative } from '../lib/platform'
 import { permission, requestPermission } from '../lib/reminders'
 import { supabase } from '../lib/supabase'
@@ -17,6 +19,10 @@ type Props = {
   local: boolean
   theme: Theme
   onTheme: (theme: Theme) => void
+  palette: PaletteName
+  onPalette: (palette: PaletteName) => void
+  /** The mode actually on screen, so each swatch shows the variant being looked at. */
+  resolved: 'light' | 'dark'
   nudges: boolean
   onNudges: (on: boolean) => void
   onHelp: () => void
@@ -43,6 +49,9 @@ export function You({
   local,
   theme,
   onTheme,
+  palette,
+  onPalette,
+  resolved,
   nudges,
   onNudges,
   onHelp,
@@ -147,6 +156,44 @@ export function You({
         </button>
       ))}
     </div>
+
+    {/* The palette, orthogonal to the mode above: every palette carries a
+        light and a dark block, so System keeps resolving whichever is picked.
+        Swatches render from the same constant the CSS blocks are tested
+        against — a swatch that could drift from the block it applies would
+        be the picker lying about its own product. */}
+    <div role="radiogroup" aria-label="Palette" className="mt-2 grid grid-cols-2 gap-2">
+      {PALETTES.map((option) => {
+        const tokens = resolved === 'dark' ? option.dark : option.light
+        const selected = palette === option.name
+        return (
+          <button
+            key={option.name}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onPalette(option.name)}
+            className={`flex min-h-11 items-center gap-2.5 rounded-lg border-2 p-2 text-left transition-colors ${
+              selected ? 'border-accent' : 'border-line hover:border-edge'
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-12 shrink-0 flex-col justify-between rounded-md border border-line p-1"
+              style={{ backgroundColor: tokens.surface }}
+            >
+              <span className="block h-2.5 rounded-sm" style={{ backgroundColor: tokens.raised }} />
+              <span className="block h-2 w-2 rounded-full" style={{ backgroundColor: tokens.accent }} />
+            </span>
+            <span className="text-sm text-ink">{option.label}</span>
+            {selected && <CheckIcon size={14} className="ml-auto shrink-0 text-accent" />}
+          </button>
+        )
+      })}
+    </div>
+    <p className="mt-2 text-xs text-faint">
+      Every palette has a light and a dark set, so System keeps working.
+    </p>
 
     {/* Only meaningful in the native app; the web has no reminders to grant. */}
     {isNative() && (

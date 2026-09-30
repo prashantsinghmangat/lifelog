@@ -615,12 +615,18 @@ in the mark is an axis-aligned rounded rectangle, so coverage is analytic). It i
 the SVG is the source of truth and the PNGs regenerate from it.
 
 **Colour never appears as a raw grey.** `src/index.css` defines semantic tokens — `surface`,
-`raised`, `sunken`, `ink`, `muted`, `faint`, `line`, `edge`, `focus`, plus the four kind colours —
-and a `[data-theme='dark']` block swaps their values. Components write `text-muted`, `bg-raised`,
-`border-line`. **Do not add `dark:` variants**; the token swap covers both themes, so a new
-`text-gray-500` is a bug that will look fine in light mode and unreadable in dark. A third theme
-would be one more block and no component changes. `useTheme` resolves `system` against
-`prefers-color-scheme` and stamps `data-theme` on `<html>`.
+`raised`, `sunken`, `ink`, `muted`, `faint`, `line`, `edge`, `accent`, `focus`, plus the four
+kind colours — swapped by `[data-palette]` × `[data-theme]` blocks: six palettes, each with a
+light and a dark set, written from the single source `src/lib/palettes.ts` and held equal to it
+by `contrast.test.ts`. Components write `text-muted`, `bg-raised`, `border-line`. **Do not add
+`dark:` variants or palette-specific classes**; the token swap covers every combination, so a new
+`text-gray-500` is a bug that will look fine in one combination and unreadable in eleven others.
+The "third theme is one more block" promise was called in by spec 015 — twelve blocks, zero
+component changes. `useTheme` resolves `system` against `prefers-color-scheme` and stamps
+`data-theme` and `data-palette` on `<html>`. **The splash cannot follow the palette** — it is a
+native resource resolved before any JS runs — so it stays on Amber's surface, the default; a
+palette that appears not to reach the splash is this, not a bug. The launcher icon does not
+follow it either, deliberately: its colours are frozen with the mark's geometry above.
 
 **Both palettes are warm, and neither is the other inverted.** Light is off-white paper with a
 near-black warm ink; dark is warm charcoal with a warm off-white. This is not decoration: an app
@@ -1043,9 +1049,10 @@ one — it has to be removed and re-added.
 **Bundle size must be measured with `.env.local` present.** Without it,
 [src/lib/supabase.ts](src/lib/supabase.ts) throws at module scope, the bundler proves the throw
 unconditional and tree-shakes the entire Supabase SDK away — producing a ~49 KB bundle that
-cannot run. The honest figure is ~138.6 KB gzipped for the main chunk, and **147.5 KB across
-everything the page fetches**, against a 150 KB budget. The headroom is 2.5 KB, not the
-comfortable margin the raw JS figure suggests — count the CSS and the lazy Capacitor chunks.
+cannot run. The honest figure is **126.5 KB across everything the page fetches** (since spec 014
+swapped the umbrella SDK for `@supabase/auth-js` + `@supabase/postgrest-js` direct imports),
+against a 150 KB budget — re-measure it, never project it, because the tree-shaking failure above
+makes a wrong measurement look like a triumph. Count the CSS and the lazy Capacitor chunks.
 
 **Every column of `Entry` must stay in `COLUMNS`.** A write is a full-row upsert now, so a column
 that is read into the type but missing from the select would be sent back as `undefined` and
@@ -1199,7 +1206,7 @@ into both accounts with the wrong one active.
 TypeScript strict with `noUncheckedIndexedAccess`. No `any`, no non-null assertions. Flat file
 layout — no barrel files, no `index.ts` re-exports, no directory per component.
 
-**The runtime dependency list is `react`, `react-dom`, `@supabase/supabase-js`, `date-fns` and
+**The runtime dependency list is `react`, `react-dom`, `@supabase/auth-js` + `@supabase/postgrest-js`, `date-fns` and
 Capacitor (`core`, `android`, `local-notifications`, `app`, `filesystem`, `share`, `haptics`,
 `camera`). Ask before adding anything else.**
 The original "four dependencies only" rule was retired deliberately when the Android app was
@@ -1306,10 +1313,10 @@ at the end of [README.md](README.md).
   slightly taller than its true value and, at the peak, a little taller than the box allows.
 - **`AnswerCard` renders every matching row once expanded.** The container caps its height, not
   the row count, so a question matching thousands of rows commits thousands of nodes.
-- **There is no path from this repository to a signed Android release.** `android/app/build.gradle`
-  has no `signingConfigs`, `versionCode` has never left 1, and both npm scripts build `Debug` — so
-  the only artifact that exists is debuggable, which means anything with ADB access can read
-  `localStorage`: the whole log, and a live Supabase refresh token.
+- **Shipping a release is a manual, local step with no CI.** `npm run android:release` and
+  `android:bundle` produce a signed artifact (see README's *Building a signed release*), but
+  nothing builds one automatically — a release exists only when someone runs the command with the
+  keystore env vars set, on their own machine.
 - **Nothing runs the tests before a deploy.** Netlify runs `npm run build`, so `tsc -b` is a gate;
   the suite is not, and the parser's correctness is the thing that suite exists to hold.
 - **The nightly backup fails silently.** `backup.mts` has no `catch`, so a missing or expired

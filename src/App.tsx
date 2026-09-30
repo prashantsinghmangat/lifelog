@@ -88,7 +88,7 @@ function message(failure: unknown): string {
 export default function App() {
   const { identity, loading, startGuest } = useSession()
   // Resolved before the auth gate, so the login screen honours the choice too.
-  const { theme, choose } = useTheme()
+  const { theme, choose, palette, choosePalette, resolved } = useTheme()
   /** A guest who has *asked* to sign in. The log is still there behind this. */
   const [asked, setAsked] = useState(false)
 
@@ -140,6 +140,9 @@ export default function App() {
       local={identity.local === true}
       theme={theme}
       onTheme={choose}
+      palette={palette}
+      onPalette={choosePalette}
+      resolved={resolved}
       onSignIn={() => setAsked(true)}
     />
   )
@@ -153,10 +156,13 @@ type DayProps = {
   local: boolean
   theme: ReturnType<typeof useTheme>['theme']
   onTheme: ReturnType<typeof useTheme>['choose']
+  palette: ReturnType<typeof useTheme>['palette']
+  onPalette: ReturnType<typeof useTheme>['choosePalette']
+  resolved: ReturnType<typeof useTheme>['resolved']
   onSignIn: () => void
 }
 
-function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
+function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolved, onSignIn }: DayProps) {
   const { nudges, choose: chooseNudges } = useNudges()
   const [now, setNow] = useState(() => new Date())
   const [day, setDay] = useState(() => dayKey(new Date()))
@@ -738,6 +744,9 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     local,
     theme,
     onTheme,
+    palette,
+    onPalette,
+    resolved,
     onSignIn,
     onHelp: () => setHelpOpen(true),
     onExport: () => void exportJson(),

@@ -1391,3 +1391,64 @@ describe('a notification button, pressed', () => {
     expect(vi.mocked(cancelFollowUps).mock.calls.length).toBe(calms)
   })
 })
+
+describe('the palette', () => {
+  const rgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`
+
+  async function openYou() {
+    await open()
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
+    return screen.getByRole('radiogroup', { name: 'Palette' })
+  }
+
+  it('falls back to Amber when the stored value is not a palette', async () => {
+    localStorage.setItem('lifelog.palette', 'tangerine')
+    await open()
+    expect(document.documentElement.dataset['palette']).toBe('amber')
+  })
+
+  it('applies on tap, persists, and survives a remount', async () => {
+    const picker = await openYou()
+    await userEvent.click(within(picker).getByRole('radio', { name: 'Sea' }))
+
+    expect(document.documentElement.dataset['palette']).toBe('sea')
+    expect(localStorage.getItem('lifelog.palette')).toBe('sea')
+    expect(within(picker).getByRole('radio', { name: 'Sea' }).getAttribute('aria-checked')).toBe(
+      'true',
+    )
+
+    cleanup()
+    await open()
+    expect(document.documentElement.dataset['palette']).toBe('sea')
+  })
+
+  it('leaves the mode alone: palette and mode are orthogonal', async () => {
+    const picker = await openYou()
+    const before = document.documentElement.dataset['theme']
+    await userEvent.click(within(picker).getByRole('radio', { name: 'Plum' }))
+    expect(document.documentElement.dataset['theme']).toBe(before)
+    expect(localStorage.getItem('lifelog.theme')).toBeNull()
+  })
+
+  it('paints every swatch from the same table the CSS is tested against', async () => {
+    const picker = await openYou()
+    const { PALETTES } = await import('./lib/palettes')
+
+    for (const palette of PALETTES) {
+      const swatch = within(picker).getByRole('radio', { name: palette.label })
+      const layers = Array.from(swatch.querySelectorAll('span[style]')) as HTMLElement[]
+      const painted = layers.map((layer) => layer.style.backgroundColor)
+      // matchMedia is stubbed light in these tests, so the light variant shows.
+      expect(painted, palette.name).toEqual([
+        rgb(palette.light.surface),
+        rgb(palette.light.raised),
+        rgb(palette.light.accent),
+      ])
+    }
+  })
+})

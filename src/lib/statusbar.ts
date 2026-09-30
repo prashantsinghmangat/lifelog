@@ -9,13 +9,18 @@ import { isNative } from './platform'
  * opaque colour, not that plugin's edge-to-edge/overlay surface.
  */
 interface StatusBarPlugin {
-  setStyle(options: { dark: boolean }): Promise<void>
+  setStyle(options: { dark: boolean; color: string }): Promise<void>
 }
 
 const plugin = registerPlugin<StatusBarPlugin>('StatusBarPlugin')
 
-/** Call whenever `useTheme` resolves, so the bar updates with no relaunch. */
-export function syncStatusBar(dark: boolean): void {
+/**
+ * Call whenever `useTheme` resolves, so the bar updates with no relaunch.
+ * `color` is the resolved palette's surface — the bar follows the palette as
+ * well as the mode, which fixed resources on the native side never could —
+ * and `dark` still picks the icon appearance.
+ */
+export function syncStatusBar(dark: boolean, color: string): void {
   if (!isNative()) return
-  void plugin.setStyle({ dark })
+  void plugin.setStyle({ dark, color })
 }

@@ -1,6 +1,7 @@
 package com.prashant.lifelog;
 
 import android.app.Activity;
+import android.graphics.Color;
 import android.view.Window;
 
 import androidx.core.content.ContextCompat;
@@ -31,6 +32,11 @@ public class StatusBarPlugin extends Plugin {
     @PluginMethod
     public void setStyle(PluginCall call) {
         boolean dark = call.getBoolean("dark", false);
+        // The resolved palette's surface, sent from JS since spec 015 — the
+        // bar follows the palette as well as the mode, which the two fixed
+        // resources below never could. They stay as the fallback for a call
+        // that carries no colour, or one that does not parse.
+        String color = call.getString("color", null);
         Activity activity = getActivity();
         if (activity == null) {
             call.resolve(new JSObject());
@@ -39,8 +45,14 @@ public class StatusBarPlugin extends Plugin {
 
         activity.runOnUiThread(() -> {
             Window window = activity.getWindow();
-            int colorRes = dark ? R.color.surface_dark : R.color.surface_light;
-            window.setStatusBarColor(ContextCompat.getColor(activity, colorRes));
+            int painted;
+            try {
+                painted = Color.parseColor(color);
+            } catch (Exception invalid) {
+                int colorRes = dark ? R.color.surface_dark : R.color.surface_light;
+                painted = ContextCompat.getColor(activity, colorRes);
+            }
+            window.setStatusBarColor(painted);
 
             WindowInsetsControllerCompat controller =
                 WindowCompat.getInsetsController(window, window.getDecorView());

@@ -4,5 +4,5 @@
          by the OS's own night qualifier before any JS has run, which is the
          only signal available that early — see StatusBarPlugin for the
          app's own theme choice, applied once useTheme resolves. -->
-    <color name="surface">#141311</color>
+    <color name="surface">#100F0E</color>
 </resources>

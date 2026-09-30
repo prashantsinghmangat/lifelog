@@ -53,9 +53,21 @@ is off-white paper with a near-black warm ink; dark mode is warm charcoal with a
 not the light palette inverted. A pure-white page with blue-grey text reads as a form to fill in;
 the same layout on paper reads as something to keep, which is what a personal record should be.
 
-**Every text token clears 4.5:1 on the surface it sits on.** `faint` used to be 2.9:1, which is
-what "tertiary" had quietly come to mean. `line` and `edge` are deliberately below that: they
-separate, they do not inform, and nothing in the app is legible only because of a border.
+**Every text token clears 4.5:1 on every surface it can be placed on — surface, raised and
+sunken.** `faint` used to be 2.9:1, which is what "tertiary" had quietly come to mean — and later
+shipped at 4.4:1 on `sunken` because it had only ever been verified against `surface`, which is
+how this rule earned its longer wording. A token that is only safe in some places is a trap, the
+same class as the retired `--dock` constant. `edge` clears 3:1 on all three grounds — an input
+boundary has to be findable — while `line` alone stays below: it separates, it does not inform,
+and nothing in the app is legible only because of a border. All of it is computed in
+`src/lib/contrast.test.ts`, never eyeballed.
+
+**Six palettes, selectable in You → Appearance, Amber the default.** Mode and palette are
+orthogonal axes (`data-theme` × `data-palette`); every palette ships a light and a dark block so
+System keeps resolving whichever is chosen. The single source is `src/lib/palettes.ts` — the CSS
+blocks and the picker's swatches both come from it, kept equal by test. `focus` and the four kind
+colours are mode-only: a palette must not repaint what a kind means. Paper is the original warm
+palette, preserved; Graphite and Sea are deliberate cool departures a reader opts into.
 
 **The four kind colours are scanning accents, not four UI colours.** Deep enough to read as ink
 with a hue rather than as a highlight, at 15px in a 20px gutter. They mark a row so the expenses

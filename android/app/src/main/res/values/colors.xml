@@ -6,13 +6,16 @@
          cannot drift apart the way the launcher icon's colours once could.
          Follows the system's night qualifier, because that is the only
          theme signal that exists before any JS has run. -->
-    <color name="surface">#faf9f7</color>
+    <!-- Amber's surface since spec 015 made Amber the default palette. The
+         splash cannot follow a chosen palette — it is resolved before any JS
+         runs — so it stays on the default's. -->
+    <color name="surface">#F2EEE6</color>
 
     <!-- Fixed, unlike `surface` above: StatusBarPlugin picks between these
          by the app's *own* resolved theme, which can disagree with the OS
          the moment someone changes it on the You screen. Neither name is
          shadowed in values-night, so both always resolve to the same hex
          regardless of system dark mode. -->
-    <color name="surface_light">#faf9f7</color>
-    <color name="surface_dark">#141311</color>
+    <color name="surface_light">#F2EEE6</color>
+    <color name="surface_dark">#100F0E</color>
 </resources>

@@ -3,22 +3,22 @@
 @import 'tailwindcss' source(none);
 @source './**/*.tsx';
 
-/* Semantic tokens, not raw greys. Dark mode swaps the values below, so no
-   component needs a `dark:` variant. A third theme (high contrast) would be
-   another block here and nothing else.
+/* Semantic tokens, not raw greys. `data-theme` carries the mode and
+   `data-palette` the palette; the blocks further down swap the values, so no
+   component ever needs a `dark:` variant or a palette-specific class.
  *
- * The hues are **warm** in both themes, which is the one decision the whole
- * palette hangs off. A log of what happened to somebody is a personal record,
- * not a console: a pure-white page with blue-grey text reads as a form to fill
- * in, and the same layout on warm paper reads as something to keep. Light mode
- * is therefore off-white paper with a near-black warm ink, and dark mode is
- * warm charcoal with an off-white — not the light palette inverted, which is
- * how a dark theme ends up looking like a lit screen rather than a dim room.
+ * The values are the ones in `src/lib/palettes.ts`, which is the single
+ * source — `contrast.test.ts` asserts these blocks equal that table and that
+ * every claim below holds, computed rather than eyeballed.
  *
- * Every text token clears 4.5:1 on the surface it is used over; `faint` in
- * particular used to sit at 2.9:1, which is what "tertiary" had quietly come to
- * mean. `line` and `edge` are deliberately below that — they separate, they do
- * not inform, and nothing in the app is legible only because of a border. */
+ * Every text token clears 4.5:1 on **every surface it can be placed on** —
+ * surface, raised and sunken; `faint` was once verified against surface only
+ * and shipped at 4.4:1 on sunken, which is how that rule earned its wording.
+ * `edge` clears 3:1 on all three grounds (an input boundary has to be
+ * findable); `line` alone stays below — it separates, it does not inform.
+ *
+ * The defaults here are Amber light, the palette the app opens on before any
+ * JS has stamped a choice. */
 @theme {
   --font-sans:
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
@@ -29,19 +29,22 @@
      stack only — no webfont, nothing to fetch. */
   --font-display: 'Iowan Old Style', 'Charter', 'Palatino Linotype', Georgia, serif;
 
-  --color-surface: #faf9f7;
-  --color-raised: #ffffff;
-  --color-sunken: #f1efea;
-  --color-ink: #1b1a18;
-  --color-muted: #5c5851;
-  --color-faint: #726e66;
-  --color-line: #eae6e0;
-  --color-edge: #cbc4b8;
+  --color-surface: #F2EEE6;
+  --color-raised: #FFFCF7;
+  --color-sunken: #F0EAE0;
+  --color-ink: #1E1A15;
+  --color-muted: #5A5247;
+  --color-faint: #6E6559;
+  --color-line: #EBE4D9;
+  --color-edge: #8A8680;
+  --color-accent: #9E4A12;
   --color-focus: #1f5ed4;
 
   /* Four scanning accents, not four UI colours. Each is deep enough to read as
      ink with a hue rather than as a highlight — at 15px these mark a row, they
-     do not decorate it. */
+     do not decorate it. Mode-only, like `focus`: a palette must not repaint
+     what a kind means, and these four are also frozen into the launcher icon's
+     geometry — see ARCHITECTURE.md. */
   --color-expense: #b0452c;
   --color-time: #136b60;
   --color-event: #5a41b5;
@@ -49,14 +52,17 @@
 }
 
 [data-theme='dark'] {
-  --color-surface: #141311;
-  --color-raised: #1e1c1a;
-  --color-sunken: #1a1816;
-  --color-ink: #eeeae3;
-  --color-muted: #a49f97;
-  --color-faint: #8a857c;
-  --color-line: #2a2724;
-  --color-edge: #4a453f;
+  /* Amber dark, so a dark launch before the palette is stamped still lands on
+     the default rather than on light values. */
+  --color-surface: #100F0E;
+  --color-raised: #1B1A18;
+  --color-sunken: #232120;
+  --color-ink: #F2EEE8;
+  --color-muted: #B5ADA2;
+  --color-faint: #938A81;
+  --color-line: #2B2826;
+  --color-edge: #6F6D6A;
+  --color-accent: #F0913F;
   --color-focus: #7fa6ff;
 
   /* Lifted and desaturated: the light-mode hues go muddy on a dark ground, and
@@ -68,6 +74,155 @@
 
   /* Native date inputs, scrollbars and focus rings follow this. */
   color-scheme: dark;
+}
+
+/* The six palettes, light then dark, written from `src/lib/palettes.ts`.
+   A palette-light block outranks the defaults by order; a palette-dark block
+   outranks everything by carrying both attributes. `focus` and the four kind
+   colours are deliberately absent — they are mode-only and stay above. */
+
+[data-palette='amber'] {
+  --color-surface: #F2EEE6;
+  --color-raised: #FFFCF7;
+  --color-sunken: #F0EAE0;
+  --color-ink: #1E1A15;
+  --color-muted: #5A5247;
+  --color-faint: #6E6559;
+  --color-line: #EBE4D9;
+  --color-edge: #8A8680;
+  --color-accent: #9E4A12;
+}
+
+[data-palette='amber'][data-theme='dark'] {
+  --color-surface: #100F0E;
+  --color-raised: #1B1A18;
+  --color-sunken: #232120;
+  --color-ink: #F2EEE8;
+  --color-muted: #B5ADA2;
+  --color-faint: #938A81;
+  --color-line: #2B2826;
+  --color-edge: #6F6D6A;
+  --color-accent: #F0913F;
+}
+
+[data-palette='paper'] {
+  --color-surface: #F6F2EB;
+  --color-raised: #FFFCF7;
+  --color-sunken: #EEE8DE;
+  --color-ink: #1E1A15;
+  --color-muted: #5A5247;
+  --color-faint: #6E6559;
+  --color-line: #E7E0D4;
+  --color-edge: #88847E;
+  --color-accent: #1E1A15;
+}
+
+[data-palette='paper'][data-theme='dark'] {
+  --color-surface: #1A1714;
+  --color-raised: #24201C;
+  --color-sunken: #2D2823;
+  --color-ink: #EFE8DC;
+  --color-muted: #BDB3A4;
+  --color-faint: #9B9184;
+  --color-line: #332D27;
+  --color-edge: #76716A;
+  --color-accent: #EFE8DC;
+}
+
+[data-palette='graphite'] {
+  --color-surface: #EDEFF1;
+  --color-raised: #FBFCFD;
+  --color-sunken: #E2E6E9;
+  --color-ink: #16191C;
+  --color-muted: #4C5257;
+  --color-faint: #5F656A;
+  --color-line: #DDE1E5;
+  --color-edge: #7F8284;
+  --color-accent: #0B737A;
+}
+
+[data-palette='graphite'][data-theme='dark'] {
+  --color-surface: #111316;
+  --color-raised: #1A1D21;
+  --color-sunken: #23272C;
+  --color-ink: #EDF0F2;
+  --color-muted: #A8B0B7;
+  --color-faint: #899097;
+  --color-line: #282C31;
+  --color-edge: #6D7072;
+  --color-accent: #3FC1C9;
+}
+
+[data-palette='plum'] {
+  --color-surface: #F4F0F6;
+  --color-raised: #FFFCFF;
+  --color-sunken: #EAE4EE;
+  --color-ink: #1B1620;
+  --color-muted: #544C5C;
+  --color-faint: #6B6373;
+  --color-line: #E5DEEA;
+  --color-edge: #858189;
+  --color-accent: #A82F5C;
+}
+
+[data-palette='plum'][data-theme='dark'] {
+  --color-surface: #14101A;
+  --color-raised: #1E1926;
+  --color-sunken: #282231;
+  --color-ink: #F0ECF4;
+  --color-muted: #B2A9BE;
+  --color-faint: #948BA0;
+  --color-line: #2C2636;
+  --color-edge: #706C76;
+  --color-accent: #F2789F;
+}
+
+[data-palette='espresso'] {
+  --color-surface: #F3EFE8;
+  --color-raised: #FFFCF6;
+  --color-sunken: #E9E2D6;
+  --color-ink: #1C1710;
+  --color-muted: #554C3E;
+  --color-faint: #6B6253;
+  --color-line: #E5DDCE;
+  --color-edge: #85817A;
+  --color-accent: #85660E;
+}
+
+[data-palette='espresso'][data-theme='dark'] {
+  --color-surface: #16110D;
+  --color-raised: #211A14;
+  --color-sunken: #2C241C;
+  --color-ink: #F4EDE2;
+  --color-muted: #BCAF9C;
+  --color-faint: #988E7E;
+  --color-line: #302720;
+  --color-edge: #757069;
+  --color-accent: #E3B24A;
+}
+
+[data-palette='sea'] {
+  --color-surface: #EEF1EF;
+  --color-raised: #FCFDFC;
+  --color-sunken: #E2E8E5;
+  --color-ink: #151A18;
+  --color-muted: #4B534F;
+  --color-faint: #5E6662;
+  --color-line: #DCE3E0;
+  --color-edge: #7F8381;
+  --color-accent: #0F6B6B;
+}
+
+[data-palette='sea'][data-theme='dark'] {
+  --color-surface: #0E1413;
+  --color-raised: #17201F;
+  --color-sunken: #1F2A28;
+  --color-ink: #E8F0EE;
+  --color-muted: #A3B2AE;
+  --color-faint: #899793;
+  --color-line: #243230;
+  --color-edge: #6C7371;
+  --color-accent: #46C8B8;
 }
 
 /* There is no `--dock`, and that is deliberate.
