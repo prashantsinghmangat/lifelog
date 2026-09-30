@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
-import { CameraIcon, CheckIcon, CloseIcon } from './Icons'
+import { CameraIcon, CheckIcon, CloseIcon, ImageIcon } from './Icons'
+import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
 import { useAttachments } from '../hooks/useAttachments'
 import {
@@ -99,7 +100,10 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
   const [problem, setProblem] = useState<string | null>(null)
 
   const { photos, addState, add, remove: removePhoto } = useAttachments(row.id)
-  const photoInput = useRef<HTMLInputElement>(null)
+  const galleryInput = useRef<HTMLInputElement>(null)
+  const cameraInput = useRef<HTMLInputElement>(null)
+  /** The photo being looked at full-size, stacked over this sheet. */
+  const [viewing, setViewing] = useState<string | null>(null)
 
   // Driven by the chosen kind, not the stored one, so switching to an expense
   // reveals the amount field there and then.
@@ -302,6 +306,12 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
   ]
 
   return (
+    <>
+    {/* Outside the editor's own Sheet, so it stacks *over* it rather than
+        scrolling inside it — and `topmost` then gives the back button and
+        Escape to the viewer alone, closing the photo back to the entry
+        instead of closing both. */}
+    {viewing !== null && <PhotoViewer url={viewing} onClose={() => setViewing(null)} />}
     <Sheet label={`Edit ${row.title}`} onClose={onClose}>
       {(requestClose) => (
       <form onSubmit={(event) => save(event, requestClose)}>
@@ -534,12 +544,13 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
         )}
 
         {/* Proof or reference for this entry — a bill, a ticket — kept only on
-            this device and never synced. The OS picker already offers camera
-            or gallery, so the action says "Add photo" rather than claiming to
-            be a camera on a desktop that has none. */}
+            this device and never synced. Two controls rather than one "Add
+            photo": in an Android WebView the camera is only ever reached by an
+            input carrying `capture`, so a single plain input could pick an
+            existing image and never take a new one. */}
         <div className="mt-5">
           <input
-            ref={photoInput}
+            ref={galleryInput}
             type="file"
             accept="image/*"
             multiple
@@ -550,14 +561,36 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
               event.target.value = ''
             }}
           />
-          <button
-            type="button"
-            onClick={() => photoInput.current?.click()}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
-          >
-            <CameraIcon size={16} />
-            Add photo
-          </button>
+          <input
+            ref={cameraInput}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(event) => {
+              const files = event.target.files
+              if (files) for (const file of files) void add(file)
+              event.target.value = ''
+            }}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => galleryInput.current?.click()}
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
+            >
+              <ImageIcon size={16} />
+              Gallery
+            </button>
+            <button
+              type="button"
+              onClick={() => cameraInput.current?.click()}
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
+            >
+              <CameraIcon size={16} />
+              Camera
+            </button>
+          </div>
           {/* A photo that failed to save is not the same failure as the entry
               failing to save, and must never read as one. */}
           {addState === 'failed' && (
@@ -568,11 +601,15 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
           {photos.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {photos.map((photo) => (
-                <div
-                  key={photo.id}
-                  className="relative h-16 w-16 overflow-hidden rounded-lg border border-edge"
-                >
-                  <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                <div key={photo.id} className="relative h-16 w-16">
+                  <button
+                    type="button"
+                    onClick={() => setViewing(photo.url)}
+                    aria-label="View photo"
+                    className="h-full w-full overflow-hidden rounded-lg border border-edge"
+                  >
+                    <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => void removePhoto(photo.id)}
@@ -628,5 +665,6 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
       </form>
       )}
     </Sheet>
+    </>
   )
 }

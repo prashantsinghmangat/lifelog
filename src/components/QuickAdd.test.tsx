@@ -15,7 +15,7 @@ vi.mock('../lib/attachments', () => ({
   put: vi.fn(async () => {}),
 }))
 
-const { put } = await import('../lib/attachments')
+const { put, fromFile } = await import('../lib/attachments')
 
 /**
  * Journeys, not rendering. Every one of these is a path that has silently
@@ -554,24 +554,32 @@ describe('examples on an empty day', () => {
 describe('attaching a photo while composing', () => {
   const jpeg = () => new File(['x'], 'receipt.jpg', { type: 'image/jpeg' })
 
-  /** The one input in the control, whichever row it sits in. */
-  function picker() {
-    return document.querySelector('input[type="file"]') as HTMLInputElement
-  }
+  const inputs = () =>
+    [...document.querySelectorAll('input[type="file"]')] as HTMLInputElement[]
+  /** The gallery half — plain, multiple, no `capture`. */
+  const picker = () => inputs().filter((input) => !input.hasAttribute('capture'))[0] as HTMLInputElement
 
   beforeEach(() => {
     vi.mocked(put).mockClear()
+    vi.mocked(fromFile).mockClear()
   })
 
-  it('offers the picker while logging and never while asking', async () => {
+  it('offers gallery and camera while logging and neither while asking', async () => {
     const { view } = setup()
-    expect(screen.getByLabelText('Add photo')).toBeTruthy()
-    expect(picker().accept).toBe('image/*')
-    expect(picker().hasAttribute('capture')).toBe(false)
+    expect(screen.getByLabelText('Add from gallery')).toBeTruthy()
+    expect(screen.getByLabelText('Take photo')).toBeTruthy()
+
+    // `capture` is the only thing that reaches the camera in an Android
+    // WebView, and the only thing that would lose the gallery if it were on
+    // the sole input. One of each, therefore.
+    expect(inputs()).toHaveLength(2)
+    expect(inputs().filter((input) => input.hasAttribute('capture'))).toHaveLength(1)
+    expect(picker().multiple).toBe(true)
 
     // The `lg` toggle, which is what these tests drive instead of the nav.
     await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
-    expect(screen.queryByLabelText('Add photo')).toBeNull()
+    expect(screen.queryByLabelText('Add from gallery')).toBeNull()
+    expect(screen.queryByLabelText('Take photo')).toBeNull()
     view.unmount()
   })
 
@@ -579,12 +587,40 @@ describe('attaching a photo while composing', () => {
     setup()
     await userEvent.upload(picker(), jpeg())
 
-    expect(document.querySelectorAll('img')).toHaveLength(1)
+    await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(1))
     // Staged only — nothing may reach the store until there is an entry id.
     expect(put).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByLabelText('Remove photo'))
     expect(document.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  /**
+   * Several multi-MB originals decoding at once on Save is what cost the
+   * second of two camera photos. Spread across the taps that chose them
+   * instead, so only one is ever in the WebView's native heap.
+   */
+  it('processes each photo as it is picked, not in a burst on save', async () => {
+    const { box } = setup()
+    await userEvent.upload(picker(), jpeg())
+
+    await waitFor(() => expect(fromFile).toHaveBeenCalledTimes(1))
+    expect(put).not.toHaveBeenCalled()
+
+    await userEvent.type(box, '350 lunch swiggy')
+    await userEvent.click(screen.getByLabelText('Save entry'))
+    // Saving files what was already processed; it does not decode again.
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
+    expect(fromFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens a staged photo full-size when its thumbnail is tapped', async () => {
+    setup()
+    await userEvent.upload(picker(), jpeg())
+    await waitFor(() => expect(screen.getByLabelText('View photo')).toBeTruthy())
+
+    await userEvent.click(screen.getByLabelText('View photo'))
+    expect(screen.getByRole('dialog', { name: 'Photo' })).toBeTruthy()
   })
 
   it('files the photo against the id of the row that was just created', async () => {
@@ -627,6 +663,30 @@ describe('attaching a photo while composing', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toMatch(/entry saved, but/i),
     )
+  })
+
+  /**
+   * "1 of 2 photos couldn't be attached" named the arithmetic and not the
+   * problem, which is the wrong half to keep when the whole question is why.
+   */
+  it('names the reason a photo could not be attached', async () => {
+    vi.mocked(put).mockRejectedValueOnce(new Error('quota exceeded'))
+    const { box } = setup()
+    await userEvent.upload(picker(), jpeg())
+    await userEvent.type(box, '350 lunch swiggy')
+    await userEvent.click(screen.getByLabelText('Save entry'))
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/quota exceeded/))
+  })
+
+  /** A file that cannot be decoded says so while it is still on screen. */
+  it('reports a photo that could not be processed at pick time', async () => {
+    vi.mocked(fromFile).mockRejectedValueOnce(new Error('too large'))
+    setup()
+    await userEvent.upload(picker(), jpeg())
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/too large/))
+    expect(document.querySelectorAll('img')).toHaveLength(0)
   })
 
   it('still stores the others when one of several fails', async () => {

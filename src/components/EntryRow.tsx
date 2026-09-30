@@ -12,10 +12,20 @@ type Props = {
   /** A locally-stored photo for this entry — never read from `row` itself. */
   photoUrl?: string
   onOpen: () => void
+  /** Opening the photo, which is not the same act as opening the entry. */
+  onOpenPhoto?: () => void
   onRetry: () => void
 }
 
-export function EntryRow({ row, now, offDay = false, photoUrl, onOpen, onRetry }: Props) {
+export function EntryRow({
+  row,
+  now,
+  offDay = false,
+  photoUrl,
+  onOpen,
+  onOpenPhoto,
+  onRetry,
+}: Props) {
   const right = rowValue(row)
   const gone = behindYou(row, now)
   const at = row.occurred_at === null ? null : clock(row.occurred_at)
@@ -100,21 +110,6 @@ export function EntryRow({ row, now, offDay = false, photoUrl, onOpen, onRetry }
           )}
         </span>
 
-        {/* The proof, shown rather than described — "has a photo" in the
-            metadata line told you an image existed without letting you see it.
-            A fixed square with `object-cover`: a receipt is portrait and a
-            screenshot is landscape, and a box that took its height from the
-            image would make every row a different height. Decorative, because
-            the row already announces its title, kind, value and state, and
-            "image" on top of that is noise. */}
-        {photoUrl !== undefined && (
-          <img
-            src={photoUrl}
-            alt=""
-            className="h-9 w-9 shrink-0 rounded-md border border-line object-cover"
-          />
-        )}
-
         {/* Metadata, not the headline. At medium weight in full-strength ink a
             number competed with the title on every row, including the many
             rows where it is incidental — what the entry *is* comes first. */}
@@ -122,6 +117,29 @@ export function EntryRow({ row, now, offDay = false, photoUrl, onOpen, onRetry }
           <span className="shrink-0 text-sm text-muted tabular-nums">{right}</span>
         )}
       </button>
+
+      {/* The proof, shown rather than described — "has a photo" in the metadata
+          line told you an image existed without letting you see it. Its own
+          button beside the row's, the way the Retry chip is: nested buttons are
+          not a thing, and tapping the picture should show the picture rather
+          than open the editor like the rest of the row does. A fixed square
+          with `object-cover`, because a receipt is portrait and a screenshot is
+          landscape and a box sized to the image would make every row a
+          different height. */}
+      {photoUrl !== undefined && (
+        <button
+          type="button"
+          onClick={onOpenPhoto}
+          aria-label={`View photo on ${row.title}`}
+          className="-my-2 ml-3 flex h-11 shrink-0 items-center self-center"
+        >
+          <img
+            src={photoUrl}
+            alt=""
+            className="h-9 w-9 rounded-md border border-line object-cover"
+          />
+        </button>
+      )}
 
       {row.status === 'failed' && (
         <button

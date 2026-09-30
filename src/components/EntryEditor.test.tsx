@@ -534,15 +534,32 @@ describe('local photos', () => {
    * "Camera" would claim a capability the desktop build doesn't have, and
    * `capture` would take the choice away from the OS on every platform.
    */
-  it('offers "Add photo" via a plain, uncaptured image picker', () => {
+  it('offers Gallery and Camera as separate controls', () => {
     setup()
-    const button = screen.getByRole('button', { name: 'Add photo' })
-    expect(button).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Gallery' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Camera' })).toBeTruthy()
 
-    const input = document.querySelector('input[type="file"]') as HTMLInputElement
-    expect(input.accept).toBe('image/*')
-    expect(input.multiple).toBe(true)
-    expect(input.hasAttribute('capture')).toBe(false)
+    const inputs = [...document.querySelectorAll('input[type="file"]')] as HTMLInputElement[]
+    expect(inputs).toHaveLength(2)
+    // One picks an existing image, one takes a new one. `capture` is the only
+    // thing that reaches the camera in an Android WebView, and it is also what
+    // would lose the gallery if it were the sole input.
+    expect(inputs.filter((input) => input.hasAttribute('capture'))).toHaveLength(1)
+    expect(inputs.every((input) => input.accept === 'image/*')).toBe(true)
+    expect(inputs.find((input) => !input.hasAttribute('capture'))?.multiple).toBe(true)
+  })
+
+  it('opens a photo full-size when its thumbnail is tapped', async () => {
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: '2026-09-05T10:00:00+05:30' }],
+      addState: 'idle',
+      add: vi.fn(),
+      remove: vi.fn(),
+    })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: 'View photo' }))
+    expect(screen.getByRole('dialog', { name: 'Photo' })).toBeTruthy()
   })
 
   it('hands a picked file to the attachment hook', async () => {

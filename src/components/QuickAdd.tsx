@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnswerCard } from './AnswerCard'
-import { ArrowUpIcon, CameraIcon, CloseIcon, MicIcon } from './Icons'
+import { ArrowUpIcon, CameraIcon, CloseIcon, ImageIcon, MicIcon } from './Icons'
 import { KindMark } from './KindMark'
+import { PhotoViewer } from './PhotoViewer'
 import { useDictation } from '../hooks/useDictation'
 import { fromFile, put } from '../lib/attachments'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
@@ -119,6 +120,11 @@ const DOT: Record<Kind, string> = {
 
 type Mode = 'log' | 'ask'
 
+/** Whatever was thrown, as something a person can read. */
+function message(failure: unknown): string {
+  return failure instanceof Error ? failure.message : String(failure)
+}
+
 /** The text as the question grammar wants it: exactly one leading `?`. */
 function asQuestion(text: string): string {
   return `? ${text.replace(/^\s*\?+\s*/, '')}`
@@ -205,16 +211,21 @@ export function QuickAdd({
   /**
    * Photos picked before the entry exists.
    *
-   * Held in memory as the `File` the picker handed over, never written to
-   * IndexedDB: there is no entry id to file them under until Save, and a photo
-   * stored against a draft would outlive a composition that is abandoned —
-   * app killed in the background, field cleared, day swiped away. Nothing is
-   * written, so nothing can be orphaned.
+   * Held in memory as the stored JPEG rather than the original `File`: the
+   * decode happens once, here, as each photo is chosen. Doing all of them back
+   * to back on Save meant several multi-MB originals decoding into the
+   * WebView's native heap at once, which is how a second camera photo went
+   * missing. Still never written to IndexedDB — there is no entry id to file
+   * them under until Save, and a photo stored against a draft would outlive a
+   * composition that is abandoned. Nothing is written, so nothing is orphaned.
    */
-  const [staged, setStaged] = useState<{ id: string; file: File; url: string }[]>([])
-  const photoInput = useRef<HTMLInputElement>(null)
-  /** A photo the save could not file, said separately from the entry's own outcome. */
+  const [staged, setStaged] = useState<{ id: string; blob: Blob; url: string }[]>([])
+  const gallery = useRef<HTMLInputElement>(null)
+  const camera = useRef<HTMLInputElement>(null)
+  /** A photo that could not be filed, said separately from the entry's own outcome. */
   const [photoProblem, setPhotoProblem] = useState<string | null>(null)
+  /** The staged photo being looked at full-size, if any. */
+  const [viewing, setViewing] = useState<string | null>(null)
 
   /**
    * Unmount only. Every other exit already revokes what it drops — `unstage`
@@ -229,16 +240,25 @@ export function QuickAdd({
     }
   }, [])
 
-  function stage(files: FileList) {
+  /**
+   * Processed here, one at a time, so the heavy work is spread across the taps
+   * that chose the photos rather than landing in one burst on Save. A file
+   * that cannot be decoded says so now, while the thing it refers to is still
+   * on screen, instead of at the end of an entry the user thought was done.
+   */
+  async function stage(files: FileList) {
     setPhotoProblem(null)
-    setStaged((held) => [
-      ...held,
-      ...[...files].map((file) => ({
-        id: crypto.randomUUID(),
-        file,
-        url: URL.createObjectURL(file),
-      })),
-    ])
+    for (const file of [...files]) {
+      try {
+        const blob = await fromFile(file)
+        setStaged((held) => [
+          ...held,
+          { id: crypto.randomUUID(), blob, url: URL.createObjectURL(blob) },
+        ])
+      } catch (failure) {
+        setPhotoProblem(`Couldn't add that photo: ${message(failure)}`)
+      }
+    }
   }
 
   function unstage(id: string) {
@@ -263,20 +283,25 @@ export function QuickAdd({
    * would not encode is a lie about the thing they came here to do. The rest
    * still go.
    */
-  async function commitStaged(entryId: string, held: { file: File }[]) {
+  async function commitStaged(entryId: string, held: { blob: Blob }[]) {
     let failures = 0
+    // Carried rather than counted: "1 of 2 photos couldn't be attached" named
+    // the arithmetic and not the problem, which is the wrong half to keep when
+    // the whole question is why.
+    let why = ''
     for (const photo of held) {
       try {
-        await put(entryId, await fromFile(photo.file))
-      } catch {
+        await put(entryId, photo.blob)
+      } catch (failure) {
         failures += 1
+        why = message(failure)
       }
     }
     if (failures > 0) {
       setPhotoProblem(
         failures === held.length
-          ? "Entry saved, but the photo couldn't be attached."
-          : `Entry saved, but ${failures} of ${held.length} photos couldn't be attached.`,
+          ? `Entry saved, but the photo couldn't be attached: ${why}`
+          : `Entry saved, but ${failures} of ${held.length} photos couldn't be attached: ${why}`,
       )
     }
   }
@@ -513,11 +538,18 @@ export function QuickAdd({
         {staged.length > 0 && (
           <div className="flex flex-wrap gap-2 px-3 pb-2">
             {staged.map((photo) => (
-              <div
-                key={photo.id}
-                className="relative h-14 w-14 overflow-hidden rounded-lg border border-edge"
-              >
-                <img src={photo.url} alt="" className="h-full w-full object-cover" />
+              <div key={photo.id} className="relative h-14 w-14">
+                {/* The thumbnail is the way in to the photo, not decoration
+                    beside a remove button — a bill attached and never
+                    viewable again is the whole reason this is here. */}
+                <button
+                  type="button"
+                  onClick={() => setViewing(photo.url)}
+                  aria-label="View photo"
+                  className="h-full w-full overflow-hidden rounded-lg border border-edge"
+                >
+                  <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                </button>
                 <button
                   type="button"
                   onClick={() => unstage(photo.id)}
@@ -659,24 +691,50 @@ export function QuickAdd({
               mic and send rather than anywhere near the field: capture is the
               product, and a control that is not in the way costs nothing when
               it is not used. */}
+          {/* Two controls, not one. A bare `accept="image/*"` input was meant
+              to let the OS offer camera or gallery, and on the web it does —
+              but in an Android WebView Capacitor only launches a camera intent
+              when the input carries `capture`, so the camera was simply
+              unreachable and the picker showed files. `capture` on its own
+              would be the opposite trade, losing the gallery. Two inputs is
+              what every chat app on the phone already does. */}
           {mode === 'log' && (
             <>
               <input
-                ref={photoInput}
+                ref={gallery}
                 type="file"
                 accept="image/*"
                 multiple
                 className="hidden"
                 onChange={(event) => {
-                  if (event.target.files) stage(event.target.files)
+                  if (event.target.files) void stage(event.target.files)
+                  event.target.value = ''
+                }}
+              />
+              <input
+                ref={camera}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(event) => {
+                  if (event.target.files) void stage(event.target.files)
                   event.target.value = ''
                 }}
               />
               <button
                 type="button"
-                onClick={() => photoInput.current?.click()}
-                aria-label="Add photo"
-                className="flex h-11 w-11 shrink-0 items-center justify-center text-faint transition-colors hover:text-muted"
+                onClick={() => gallery.current?.click()}
+                aria-label="Add from gallery"
+                className="flex h-11 w-9 shrink-0 items-center justify-center text-faint transition-colors hover:text-muted"
+              >
+                <ImageIcon size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => camera.current?.click()}
+                aria-label="Take photo"
+                className="flex h-11 w-9 shrink-0 items-center justify-center text-faint transition-colors hover:text-muted"
               >
                 <CameraIcon size={18} />
               </button>
@@ -710,6 +768,8 @@ export function QuickAdd({
           )}
         </div>
       </div>
+
+      {viewing !== null && <PhotoViewer url={viewing} onClose={() => setViewing(null)} />}
 
       {/* The entry itself is saved and on the timeline — this says only that
           its photo is not, which is the one thing the toast must not be made

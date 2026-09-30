@@ -47,18 +47,33 @@ export function targetSize(
  */
 export async function fromFile(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file)
-  const { width, height } = targetSize(bitmap.width, bitmap.height)
 
   const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('Canvas 2D context is not available')
-  ctx.drawImage(bitmap, 0, 0, width, height)
+  try {
+    const { width, height } = targetSize(bitmap.width, bitmap.height)
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas 2D context is not available')
+    ctx.drawImage(bitmap, 0, 0, width, height)
+  } finally {
+    // **The second of two camera photos used to be lost here.** An
+    // `ImageBitmap` holds native memory that garbage collection does not
+    // hurry to reclaim, and a 12MP photo decodes to roughly 48MB of it. Two
+    // attached together meant the second `createImageBitmap` asking a WebView
+    // heap the first one was still holding — it failed, and the entry saved
+    // with one of the two photos it was given. Released the moment it has
+    // been drawn, and in a `finally` because a throw between here and there
+    // leaks it just as effectively as forgetting to call it.
+    bitmap.close()
+  }
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) => (blob ? resolve(blob) : reject(new Error('Could not encode photo'))),
+      (blob) =>
+        blob
+          ? resolve(blob)
+          : reject(new Error('the image could not be encoded — it may be too large')),
       'image/jpeg',
       JPEG_QUALITY,
     )

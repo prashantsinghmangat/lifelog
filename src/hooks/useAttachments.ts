@@ -38,11 +38,19 @@ export function useAttachments(entryId: string) {
     return () => revoke(shown.current)
   }, [refresh])
 
+  /**
+   * A picked file, or a blob already through the pipeline.
+   *
+   * The composer processes at pick time — one decode as each photo is chosen,
+   * rather than several back to back on Save — so by the time it gets here the
+   * work is done. Both paths end at the same `put`, which is the point: there
+   * is one way a photo is stored regardless of where it was picked.
+   */
   const add = useCallback(
-    async (file: File) => {
+    async (source: File | Blob) => {
       setAddState('saving')
       try {
-        const blob = await attachments.fromFile(file)
+        const blob = source instanceof File ? await attachments.fromFile(source) : source
         await attachments.put(entryId, blob)
         await refresh()
         setAddState('idle')

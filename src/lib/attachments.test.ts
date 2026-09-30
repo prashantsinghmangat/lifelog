@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   firstPhotoBlobs,
+  fromFile,
   hasPhotoMap,
   list,
   orphansOf,
@@ -119,6 +120,20 @@ describe('firstPhotoBlobs', () => {
 
   it('returns an empty map for an empty request', async () => {
     expect(await firstPhotoBlobs([])).toEqual({})
+  })
+})
+
+describe('fromFile', () => {
+  /**
+   * "1 of 2 photos couldn't be attached" named the arithmetic and not the
+   * problem. The encode path itself needs a real canvas, so what is pinned
+   * here is that whatever it throws is worth showing someone.
+   */
+  it('fails with a message rather than an empty one', async () => {
+    // No `createImageBitmap` under node, which is itself a decode failure.
+    await expect(fromFile(new File(['x'], 'x.jpg', { type: 'image/jpeg' }))).rejects.toThrow(
+      /.+/,
+    )
   })
 })
 

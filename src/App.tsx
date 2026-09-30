@@ -11,6 +11,7 @@ import { BellIcon, Chevron, PersonIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { OnThisDay } from './components/OnThisDay'
+import { PhotoViewer } from './components/PhotoViewer'
 import { QuickAdd } from './components/QuickAdd'
 import { Sheet } from './components/Sheet'
 import { You } from './components/You'
@@ -368,6 +369,8 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     [shownEntries, failedElsewhere],
   )
   const photoThumbnails = usePhotoThumbnails(visiblePhotoIds)
+  /** A row's photo opened full-size, which is a different act from opening the row. */
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null)
 
   /** Hands the entry to the OS calendar, which is what actually raises the alarm. */
   async function addToCalendar(rows: Row[], name: string) {
@@ -994,6 +997,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                   row={row}
                   now={now}
                   photoUrl={photoThumbnails[row.id]}
+                  onOpenPhoto={() => setViewingPhoto(photoThumbnails[row.id] ?? null)}
                   onOpen={() => setEditing(asStored(row))}
                   onRetry={retry}
                 />
@@ -1047,6 +1051,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                       now={now}
                       offDay
                       photoUrl={photoThumbnails[row.id]}
+                      onOpenPhoto={() => setViewingPhoto(photoThumbnails[row.id] ?? null)}
                       onOpen={() => setDay(row.occurred_on)}
                       onRetry={retry}
                     />
@@ -1085,6 +1090,10 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
         <Sheet label="Profile and settings" onClose={() => setProfileOpen(false)}>
           <You {...youProps} />
         </Sheet>
+      )}
+
+      {viewingPhoto !== null && (
+        <PhotoViewer url={viewingPhoto} onClose={() => setViewingPhoto(null)} />
       )}
 
       {editing !== null && (

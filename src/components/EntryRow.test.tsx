@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EntryRow } from './EntryRow'
 import type { Row } from '../hooks/useEntries'
@@ -74,8 +75,8 @@ describe('local photo thumbnail', () => {
 
   /**
    * The row already announces its title, kind, value and sync state. An
-   * accessible name here would add "image" to all of that and say nothing the
-   * row does not already say.
+   * accessible name on the image would add "image" to all of that and say
+   * nothing the row does not — the button around it carries the name instead.
    */
   it('is decorative, so it adds nothing to what the row announces', () => {
     render(
@@ -83,5 +84,33 @@ describe('local photo thumbnail', () => {
     )
     expect(screen.queryByRole('img')).toBeNull()
     expect(document.querySelector('img')?.getAttribute('alt')).toBe('')
+  })
+
+  /**
+   * The whole row opens the editor, so a thumbnail inside that button would
+   * mean tapping the picture does everything except show the picture.
+   */
+  it('opens the photo rather than the entry when it is tapped', async () => {
+    const onOpen = vi.fn()
+    const onOpenPhoto = vi.fn()
+    render(
+      <EntryRow
+        row={row({})}
+        now={NOW}
+        photoUrl="blob:fake"
+        onOpen={onOpen}
+        onOpenPhoto={onOpenPhoto}
+        onRetry={vi.fn()}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'View photo on lunch' }))
+    expect(onOpenPhoto).toHaveBeenCalled()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('has no second target on a row with no photo', () => {
+    render(<EntryRow row={row({})} now={NOW} onOpen={vi.fn()} onRetry={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: /^View photo/ })).toBeNull()
   })
 })
