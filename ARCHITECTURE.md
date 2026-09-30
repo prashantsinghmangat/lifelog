@@ -1087,9 +1087,11 @@ one — it has to be removed and re-added.
 **Bundle size must be measured with `.env.local` present.** Without it,
 [src/lib/supabase.ts](src/lib/supabase.ts) throws at module scope, the bundler proves the throw
 unconditional and tree-shakes the entire Supabase SDK away — producing a ~49 KB bundle that
-cannot run. The honest figure is **126.5 KB across everything the page fetches** (since spec 014
-swapped the umbrella SDK for `@supabase/auth-js` + `@supabase/postgrest-js` direct imports),
-against a 150 KB budget — re-measure it, never project it, because the tree-shaking failure above
+cannot run. The honest figure is **130.8 KB across everything the page fetches** (126.5 after
+spec 014 swapped the umbrella SDK for `@supabase/auth-js` + `@supabase/postgrest-js` direct
+imports, 128.5 after spec 015's palettes, +2.3 for the S21 audit's refinement pass — the spine,
+the chart's plot, the grouped You screen and the per-palette focus values), against a 150 KB
+budget — re-measure it, never project it, because the tree-shaking failure above
 makes a wrong measurement look like a triumph. Count the CSS and the lazy Capacitor chunks.
 
 **Every column of `Entry` must stay in `COLUMNS`.** A write is a full-row upsert now, so a column
