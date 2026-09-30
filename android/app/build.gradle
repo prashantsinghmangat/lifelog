@@ -41,7 +41,7 @@ android {
         // file — Play refuses any upload whose versionCode does not exceed the
         // last, and nothing here increments it on its own.
         versionCode Integer.parseInt(System.getenv('LIFELOG_VERSION_CODE') ?: '1')
-        versionName System.getenv('LIFELOG_VERSION_NAME') ?: '1.0'
+        versionName System.getenv('LIFELOG_VERSION_NAME') ?: '1.0.0'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -67,6 +67,12 @@ android {
             // attach to the WebView and read `localStorage` — which here holds
             // the whole log and a live Supabase refresh token.
             debuggable false
+            // Off deliberately. Nearly all the code here is the web bundle, which
+            // Vite already minifies; R8 would only touch the thin native shell and
+            // the Capacitor plugins, which lean on reflection to bridge JS calls to
+            // Java methods — exactly what R8 strips unless every plugin's keep
+            // rules are collected first. Little to gain, a real way to ship a build
+            // where a plugin silently stops responding.
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (canSignRelease) {

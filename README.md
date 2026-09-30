@@ -379,6 +379,47 @@ at sync time, so a change that is not built and synced is a change the phone wil
 and the copied web assets are gitignored; the rest of `android/` is committed, because it holds
 the manifest and Gradle config that the app actually needs.
 
+### Building a signed release
+
+`npm run android:apk` and `npm run android:install` build **Debug**, which is deliberately
+unsigned and installable only over ADB — fine for testing, never for sharing. `android:release`
+and `android:bundle` build the **Release** variant, which needs a keystore this repo never
+generates and never holds.
+
+Generate the keystore once, keeping it and its passwords outside the repo — for example in a
+password manager plus a private folder such as `~/keystores/`, never inside `d:\Project\lifelog`:
+
+```bash
+keytool -genkeypair -v -keystore lifelog-release.jks -alias lifelog \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+`keytool` will prompt for a keystore password and a key password — pick your own; nothing here
+invents or stores one. Losing this file means losing the ability to ship an update to the same
+`appId`, since Play requires every upload to be signed by the same key.
+
+The release build reads four environment variables (`android/app/build.gradle`) rather than a
+committed properties file, matching how `CAP_DEV_URL`, the `VITE_*` keys and the Netlify backup
+tokens already work here — one mechanism, not two. Set them for the current shell before running
+either script:
+
+```powershell
+$env:LIFELOG_KEYSTORE = 'C:\Users\you\keystores\lifelog-release.jks'
+$env:LIFELOG_KEYSTORE_PASSWORD = '...'
+$env:LIFELOG_KEY_ALIAS = 'lifelog'
+$env:LIFELOG_KEY_PASSWORD = '...'
+npm run android:release   # app-release.apk, for sideloading or apksigner verify
+npm run android:bundle    # app-release.aab, for the Play Console
+```
+
+Missing any of the four fails the build with a clear message rather than writing an unsigned APK
+that looks like a successful release.
+
+**Bumping a version.** `LIFELOG_VERSION_CODE` (a monotonic integer — Play refuses any upload that
+does not exceed the last one) and `LIFELOG_VERSION_NAME` (semver, shown to users) are also read
+from the environment, defaulting to `1` / `1.0.0` when unset. Set both alongside the signing
+variables before `android:release` or `android:bundle` for every release after the first.
+
 Nothing about the web target changed: `@capacitor/core` only reaches the browser bundle if
 application code imports it, and the shell alone imports nothing.
 
