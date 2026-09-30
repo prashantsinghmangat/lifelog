@@ -2,7 +2,8 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { QuickAdd } from './QuickAdd'
+import { AskTopics, QuickAdd } from './QuickAdd'
+import { minutes } from '../lib/format'
 import type { Row } from '../hooks/useEntries'
 import type { ParsedEntry } from '../lib/parser'
 import type { Entry } from '../types'
@@ -784,5 +785,33 @@ describe('the second row while asking', () => {
     // Gone once there is a question — the live preview owns the row then.
     await userEvent.type(box, '? how much')
     expect(screen.queryByText('Answers appear as you type')).toBeNull()
+  })
+})
+
+describe('the Ask topics', () => {
+  it('groups the curated questions under true figures from the log', () => {
+    const all = [
+      entry({ kind: 'expense', amount_paise: 35000 }),
+      entry({ kind: 'expense', amount_paise: 4000 }),
+      entry({ kind: 'time', duration_minutes: 90 }),
+      entry({ kind: 'event' }),
+    ]
+    render(<AskTopics all={all} onPick={vi.fn()} onHelp={vi.fn()} />)
+
+    // Three groups, each captioned by a figure counted from the rows the
+    // answers themselves will read — never a status the app cannot back.
+    expect(screen.getByText('Spending')).toBeTruthy()
+    expect(screen.getByText('2 expenses')).toBeTruthy()
+    expect(screen.getByText('Time & focus')).toBeTruthy()
+    expect(screen.getByText(`${minutes(90)} logged`)).toBeTruthy()
+    expect(screen.getByText('Events & memory')).toBeTruthy()
+    expect(screen.getByText('1 event')).toBeTruthy()
+  })
+
+  it('fills the box with the tapped question rather than submitting', async () => {
+    const onPick = vi.fn()
+    render(<AskTopics all={[]} onPick={onPick} onHelp={vi.fn()} />)
+    await userEvent.click(screen.getByRole('button', { name: /how much this month/ }))
+    expect(onPick).toHaveBeenCalledWith('how much this month')
   })
 })

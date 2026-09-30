@@ -4,6 +4,7 @@ import { Chevron } from './Icons'
 import {
   columnsFor,
   dailyAverage,
+  growthPercent,
   peak,
   periodLabel,
   spanOf,
@@ -44,6 +45,9 @@ const SEGMENT: Record<Kind, string> = {
 
 /** The kinds block's order. Money first, as everywhere. */
 const STACK: Kind[] = ['expense', 'time', 'event', 'note']
+
+/** The stacked bar drawn top-down, so money sits on the baseline. */
+const TOPDOWN: Kind[] = [...STACK].reverse()
 
 const KIND_NAME: Record<Kind, string> = {
   expense: 'Expenses',
@@ -227,6 +231,10 @@ export function Stats({ all, now, day }: Props) {
   const live = MEASURES.find((option) => option.value === measure)!
   const average = dailyAverage(totals)
 
+  // Real or absent: the badge compares against the period before and says
+  // nothing when there is nothing to compare against — see `growthPercent`.
+  const growth = useMemo(() => growthPercent(all, scale, anchor), [all, scale, anchor])
+
   return (
     <div>
       {/* The period selector: four equal buttons, not a second full-width
@@ -263,9 +271,26 @@ export function Stats({ all, now, day }: Props) {
           <h3 className="truncate text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
             Spent · {label}
           </h3>
-          <p className="mt-1 font-display text-[2.5rem] leading-none tracking-[-0.01em] text-ink tabular-nums">
-            {rupees(totals.paise)}
-          </p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <p className="font-display text-[2.5rem] leading-none tracking-[-0.01em] text-ink tabular-nums">
+              {rupees(totals.paise)}
+            </p>
+            {/* Computed against the period before, or absent — never a fixed
+                number, and never 0% invented over an empty prior period. More
+                spend takes the expense colour; less stays muted, because a
+                falling figure is a fact and not an achievement. */}
+            {growth !== null && (
+              <span
+                className={`shrink-0 rounded-full bg-sunken px-2 py-0.5 text-xs font-medium tabular-nums ${
+                  growth > 0 ? 'text-expense' : 'text-muted'
+                }`}
+              >
+                <span aria-hidden="true">{growth > 0 ? '↗ ' : '↘ '}</span>
+                {`${growth > 0 ? '+' : ''}${growth}%`}
+                <span className="sr-only"> against the period before</span>
+              </span>
+            )}
+          </div>
           {/* 13px: the average over the days that hold entries, and how many. */}
           {scale !== 'day' && totals.activeDays > 0 && (
             <p className="mt-1.5 text-[0.8125rem] text-muted">
@@ -322,7 +347,25 @@ export function Stats({ all, now, day }: Props) {
           <br />a few more days and this fills in.
         </p>
       ) : (
-        <div className="relative mt-5">
+        <>
+          {/* Only where the bars stack: on one colour per measure the fill is
+              named by the live measure button, and a legend would repeat it. */}
+          {measure === 'entries' && (
+            <div
+              role="group"
+              aria-label="What the colours mean"
+              className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1"
+            >
+              {STACK.map((kind) => (
+                <span key={kind} className="flex items-center gap-1.5 text-[0.6875rem] text-muted">
+                  <span aria-hidden="true" className={`h-2 w-2 rounded-full ${SEGMENT[kind]}`} />
+                  {KIND_NAME[kind]}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="relative mt-5">
           {/* Two dashed guides at the peak and its half, labelled on surface
               chips at the right so a label never sits on a bar. Drawn first:
               the bar row after them is positioned, so it paints on top. */}
@@ -359,21 +402,43 @@ export function Stats({ all, now, day }: Props) {
                       anchored to the baseline. A zero in the past is a stub in
                       `sunken`, never a gap — a gap reads as a day that did not
                       exist. After today, nothing. */}
-                  {!future(column) && (
-                    <span
-                      aria-hidden="true"
-                      className={`w-full rounded-t-[3px] ${
-                        value === 0
-                          ? 'bg-sunken'
-                          : selected
-                            ? 'bg-ink'
-                            : column.isNow
-                              ? 'bg-accent'
-                              : live.fill
-                      }`}
-                      style={{ height: value === 0 ? 3 : height(value, max) }}
-                    />
-                  )}
+                  {!future(column) &&
+                    (measure === 'entries' && value > 0 && !selected ? (
+                      // The stack: one segment per kind, proportional inside
+                      // the bar's own height, in the same colours the legend
+                      // above and the breakdown below carry. Reinstated over
+                      // 016's CVD objection by explicit decision — spec 017.
+                      <span
+                        aria-hidden="true"
+                        className="flex w-full flex-col overflow-hidden rounded-t-[3px]"
+                        style={{ height: height(value, max) }}
+                      >
+                        {TOPDOWN.map(
+                          (kind) =>
+                            column.totals.counts[kind] > 0 && (
+                              <span
+                                key={kind}
+                                className={`w-full ${SEGMENT[kind]}`}
+                                style={{ flexGrow: column.totals.counts[kind] }}
+                              />
+                            ),
+                        )}
+                      </span>
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        className={`w-full rounded-t-[3px] ${
+                          value === 0
+                            ? 'bg-sunken'
+                            : selected
+                              ? 'bg-ink'
+                              : column.isNow
+                                ? 'bg-accent'
+                                : live.fill
+                        }`}
+                        style={{ height: value === 0 ? 3 : height(value, max) }}
+                      />
+                    ))}
                   <span aria-hidden="true" className="mt-px h-px w-full bg-edge" />
                   <span
                     aria-hidden="true"
@@ -437,7 +502,8 @@ export function Stats({ all, now, day }: Props) {
               </span>
             </div>
           )}
-        </div>
+          </div>
+        </>
       )}
 
       {/* The measure row sits below the chart: the picture is read first and
@@ -478,28 +544,45 @@ export function Stats({ all, now, day }: Props) {
       {entries === 0 && <p className="mt-4 text-xs text-faint">Nothing was logged.</p>}
 
       {/* The same two blocks under every scale, so the shape of the answer
-          never changes as you move — only the numbers. First the four kinds:
-          this text block *is* the per-kind breakdown, and it is text rather
-          than a stacked bar because the kind palette fails CVD separation
-          between time and event. */}
+          never changes as you move — only the numbers. First the four kinds,
+          each with a proportional micro-bar in its own colour: the biggest
+          kind fills the track and the rest read relative to it, the same
+          scaling Where-it-went uses. The card treatment and the bars are spec
+          017's breakdown; the figures are the same ones the text rows said. */}
       <p className="mt-[26px] mb-1 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
-        What made it up
+        Category breakdown
       </p>
-      <div>
+      <div className="divide-y divide-line rounded-2xl border border-line bg-raised">
         {STACK.map((kind) => {
           const count = totals.counts[kind]
+          const most = Math.max(1, ...STACK.map((held) => totals.counts[held]))
+          const top = totals.byCategory[0]
           return (
-            <div key={kind} className="flex h-[30px] items-center gap-2.5">
-              <span
-                aria-hidden="true"
-                className={`h-2 w-2 shrink-0 rounded-full ${SEGMENT[kind]}`}
-              />
-              <span className="min-w-0 flex-1 text-sm text-muted">{KIND_NAME[kind]}</span>
-              <span className="shrink-0 text-right text-sm text-muted tabular-nums">
-                {count}
-                {kind === 'expense' && totals.paise !== 0 && ` · ${rupees(totals.paise)}`}
-                {kind === 'time' && totals.minutes > 0 && ` · ${minutes(totals.minutes)}`}
-              </span>
+            <div key={kind} className="px-3.5 py-2.5">
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden="true"
+                  className={`h-2 w-2 shrink-0 rounded-full ${SEGMENT[kind]}`}
+                />
+                <span className="min-w-0 flex-1 text-sm text-ink">{KIND_NAME[kind]}</span>
+                <span className="shrink-0 text-right text-sm text-muted tabular-nums">
+                  {count}
+                  {kind === 'expense' && totals.paise !== 0 && ` · ${rupees(totals.paise)}`}
+                  {kind === 'time' && totals.minutes > 0 && ` · ${minutes(totals.minutes)}`}
+                </span>
+              </div>
+              {/* The period's largest category, under the kind the money is. */}
+              {kind === 'expense' && top !== undefined && top.name !== null && (
+                <p className="mt-0.5 pl-[18px] text-xs text-faint">
+                  Top: {top.name} · <span className="tabular-nums">{rupees(top.paise)}</span>
+                </p>
+              )}
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-sunken">
+                <span
+                  className={`block h-full rounded-full ${SEGMENT[kind]}`}
+                  style={{ width: `${(count / most) * 100}%` }}
+                />
+              </div>
             </div>
           )
         })}

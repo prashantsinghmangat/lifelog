@@ -477,9 +477,13 @@ stats view needs no query — the whole log is already on the device — no new 
 and no settings, and it lives inside the Calendar destination as a Grid | Chart toggle rather
 than as a fifth place to go. All of its arithmetic is in `stats.ts`, pure and tested exactly like
 the parser; the component turns numbers into pixel heights and nothing else. What it is **not
-allowed to grow into**: a second screen, a filter UI, a goal, a budget, a streak, a comparison to
-last month, or an insight. Each of those turns a record into a scoreboard, and any one of them
-must be argued for on its own in ARCHITECTURE.md the way the other exceptions were.
+allowed to grow into**: a second screen, a filter UI, a goal, a budget, a streak, or an insight.
+Each of those turns a record into a scoreboard, and any one of them must be argued for on its
+own in ARCHITECTURE.md the way the other exceptions were. **A comparison to the period before
+was on that list and came off it** in the Stitch revamp (spec 017) — an explicit product
+decision, recorded rather than argued. Its whole licence is the headline's badge: computed in
+`growthPercent` from stored rows or absent, one figure with no target, trend line or streak
+beside it.
 
 **"No bottom nav" was on that list and came off it.** What earned the exception is that three of
 the four destinations already existed and were reachable only by knowing something: the month was

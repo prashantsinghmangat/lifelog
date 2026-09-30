@@ -116,16 +116,7 @@ export function stepAnchor(
   now: Date,
   floor?: string,
 ): string | null {
-  const at = parseISO(anchor)
-  const moved =
-    scale === 'day'
-      ? addDays(at, dir)
-      : scale === 'week'
-        ? addDays(at, dir * 7)
-        : scale === 'month'
-          ? addMonths(at, dir)
-          : addYears(at, dir)
-  const next = dayKey(moved)
+  const next = moveAnchor(scale, anchor, dir)
 
   if (dir === 1 && spanOf(scale, next).from > dayKey(now)) return null
 
@@ -133,6 +124,20 @@ export function stepAnchor(
   if (dir === -1 && spanOf(scale, next).to < first) return null
 
   return next
+}
+
+/** The anchor one period over, unbounded — `stepAnchor` adds the bounds. */
+function moveAnchor(scale: Scale, anchor: string, dir: -1 | 1): string {
+  const at = parseISO(anchor)
+  return dayKey(
+    scale === 'day'
+      ? addDays(at, dir)
+      : scale === 'week'
+        ? addDays(at, dir * 7)
+        : scale === 'month'
+          ? addMonths(at, dir)
+          : addYears(at, dir),
+  )
 }
 
 const NONE: Totals = {
@@ -271,6 +276,32 @@ export function columnsFor(rows: Entry[], scale: Scale, anchor: string, now: Dat
 export function dailyAverage(totals: Totals): number {
   if (totals.activeDays === 0) return 0
   return Math.round(totals.paise / totals.activeDays / 100) * 100
+}
+
+/**
+ * Spend against the period before, as a signed one-decimal percentage — the
+ * headline's badge. Comparison to the prior period came off DESIGN §10's
+ * banned list by explicit decision (spec 017); the number is computed here or
+ * not shown at all. Null with nothing real to compare against: a prior period
+ * holding no entries, or one whose money nets to zero, where any percentage
+ * would be invented.
+ */
+export function growthPercent(rows: Entry[], scale: Scale, anchor: string): number | null {
+  const prior = totalsFor(rows, spanOf(scale, moveAnchor(scale, anchor, -1)))
+  const priorEntries =
+    prior.counts.expense + prior.counts.time + prior.counts.event + prior.counts.note
+  if (priorEntries === 0 || prior.paise === 0) return null
+  const current = totalsFor(rows, spanOf(scale, anchor))
+  return Math.round(((current.paise - prior.paise) / Math.abs(prior.paise)) * 1000) / 10
+}
+
+/**
+ * Spend per category over any set of rows — the answer card's distribution
+ * bar. The same ordering rule a period's own totals follow: size first, the
+ * absence bucket last even when largest.
+ */
+export function categorySpread(rows: Entry[]): Totals['byCategory'] {
+  return aggregate(alive(rows)).byCategory
 }
 
 /** The one number a bar's height comes from. Absolute, because a refund must

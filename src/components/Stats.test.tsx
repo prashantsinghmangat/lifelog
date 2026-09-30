@@ -189,23 +189,47 @@ describe('switching scale', () => {
 })
 
 describe('measures', () => {
-  it('keeps the lead figure while the bars change colour, one per measure', async () => {
+  it('keeps the lead figure while the bars change picture — a stack on How often', async () => {
     open()
     // Spent is the default and the headline is always the period's money.
     expect(lead()).toBe('₹350')
 
     const chart = () => screen.getByRole('group', { name: /Entries by day/ })
     const day14 = () => within(chart()).getByRole('button', { name: /^14 September/ })
-    // One solid bar in the expense colour — never a stack: the kind palette
-    // fails CVD separation between time and event, so the breakdown is text.
+    // Spent: one solid bar in the expense colour — the only kind money is.
     expect(day14().querySelectorAll('.bg-expense').length).toBe(1)
     expect(day14().querySelectorAll('.bg-event').length).toBe(0)
+    // And no legend: the live measure button already names the one colour.
+    expect(screen.queryByRole('group', { name: 'What the colours mean' })).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'How often' }))
     // The measure changes the picture, never the headline.
     expect(lead()).toBe('₹350')
-    expect(day14().querySelectorAll('.bg-ink').length).toBe(1)
-    expect(day14().querySelectorAll('.bg-event').length).toBe(0)
+    // How often stacks the kinds — the 14th holds an expense and an event, so
+    // two segments in their own colours and no ink bar. Stacked bars returned
+    // over 016's removal by explicit decision, spec 017; the legend above the
+    // plot is what names the colours.
+    expect(day14().querySelectorAll('.bg-expense').length).toBe(1)
+    expect(day14().querySelectorAll('.bg-event').length).toBe(1)
+    expect(day14().querySelectorAll('.bg-ink').length).toBe(0)
+    expect(screen.getByRole('group', { name: 'What the colours mean' })).toBeTruthy()
+  })
+
+  it('shows the computed growth against the period before, or nothing', () => {
+    // September's ₹350 against an August given ₹250 of its own: +40%.
+    const rows = [
+      ...ROWS,
+      row({ kind: 'expense', occurred_on: '2026-08-20', amount_paise: 25000 }),
+    ]
+    render(<Stats all={rows} now={NOW} day="2026-09-17" />)
+    expect(screen.getByText('+40%')).toBeTruthy()
+  })
+
+  it('holds the badge back when the prior period has no money to compare', () => {
+    open()
+    // August holds only notes: entries, but ₹0 — a percentage over nothing
+    // would be invented, so the badge is absent rather than NaN or +∞.
+    expect(screen.queryByText(/against the period before/)).toBeNull()
   })
 
   it('draws a stub for a past zero and nothing after today', async () => {

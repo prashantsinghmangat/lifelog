@@ -12,7 +12,7 @@ import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { OnThisDay } from './components/OnThisDay'
 import { PhotoViewer } from './components/PhotoViewer'
-import { AskSuggestions, QuickAdd } from './components/QuickAdd'
+import { AskTopics, QuickAdd } from './components/QuickAdd'
 import { Sheet } from './components/Sheet'
 import { You } from './components/You'
 import { Toast, type ToastState } from './components/Toast'
@@ -1230,14 +1230,30 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
           <div className="mt-4 flex flex-1 flex-col">
             {!askFilled && (
               <>
-                <p className="max-w-[38ch] text-sm leading-relaxed text-muted">
+                {/* A true status, or nothing: the mock this follows (spec 017)
+                    headed the screen "Neural Sync", which names no feature
+                    this app has. What is real is where the answers come from
+                    and how much there is to answer from. */}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+                    <span
+                      aria-hidden="true"
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                    />
+                    On-device answers
+                  </p>
+                  <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-xs text-muted tabular-nums">
+                    {all.length} {all.length === 1 ? 'entry' : 'entries'}
+                  </span>
+                </div>
+                <p className="mt-2 max-w-[38ch] text-sm leading-relaxed text-muted">
                   Your log answers questions about itself — arithmetic over your own rows, and
                   nothing leaves this device.
                 </p>
                 {/* Filled, not submitted: `prefill` lands the text in the box
                     and focuses it, and in Ask the answer computes as you type. */}
-                <AskSuggestions
-                  heading="Try asking"
+                <AskTopics
+                  all={all}
                   onPick={(asked) => setPrefill(asked)}
                   onHelp={() => setHelpOpen(true)}
                 />

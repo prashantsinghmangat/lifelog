@@ -268,11 +268,15 @@ nothing is worse than stopping.
 them.** `occurred_at` is optional, so most rows have no hour to stand in; they are left out of
 the hourly bars and counted out loud rather than silently dropped. The lead figure is always the
 period's money — the measure buttons change the picture, never the headline; the eyebrow simply
-names that measure beside the period. The bars are **one colour per measure** on every measure
-now, not only Spent and Hours: stacking a rupee total by kind was always a lie, and the stacked
-How-often bars went with the S21 audit because the kind palette fails CVD separation between
-time and event — the per-kind breakdown is the text block, where the names carry it. Today's bar
-takes the accent and a selected bar takes ink; a past zero draws a 3px `sunken` stub, never a
+names that measure beside the period, and carries a growth badge against the period before —
+computed in `growthPercent` or absent, never a fixed figure, and the one comparison DESIGN §10
+now licenses. The bars are **one colour on Spent and Hours** — stacking a rupee total by kind
+was always a lie — and **a kind-stacked bar on How often**, where counts share a unit. That
+stack went with the S21 audit because the kind palette fails CVD separation between time and
+event, and came back in the Stitch revamp (spec 017) as an explicit product decision, not a new
+argument: a legend sits over the plot, the breakdown card beneath repeats the same colours with
+the names attached, and the CVD cost is known and accepted. Today's bar takes the accent on the
+one-colour measures and a selected bar takes ink; a past zero draws a 3px `sunken` stub, never a
 gap, and a period after today draws nothing. A refund
 keeps its sign in every figure while bars and tracks use its size, so a negative never draws a
 negative pixel. Browsing is bounded at both ends: nothing may start after today (a walkable empty
@@ -1349,8 +1353,9 @@ at the end of [README.md](README.md).
 - **An answer about something *upcoming* drops the money and the count that came with it.** The
   rule that a date leads is deliberate; the figures being discarded along with it is not, and they
   are simply not built on that branch.
-- **A stacked bar applies its 2px floor per segment**, so a day holding all four kinds draws
-  slightly taller than its true value and, at the peak, a little taller than the box allows.
+- **A stacked How-often segment has no floor of its own** — the bar's height is exact and its
+  segments split it proportionally, so one entry among many in a tall bar can paint under a
+  pixel. The bar's accessible name still counts it.
 - **`AnswerCard` renders every matching row once expanded.** The container caps its height, not
   the row count, so a question matching thousands of rows commits thousands of nodes.
 - **Shipping a release is a manual, local step with no CI.** `npm run android:release` and

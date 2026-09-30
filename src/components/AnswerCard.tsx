@@ -1,9 +1,10 @@
 import { format, parseISO } from 'date-fns'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { KIND_NAME, KindMark } from './KindMark'
 import { behindYou } from '../lib/events'
-import { clock, dayHeading, rowValue } from '../lib/format'
+import { clock, dayHeading, rowValue, rupees } from '../lib/format'
 import { extraText, type Answer } from '../lib/query'
+import { categorySpread } from '../lib/stats'
 import type { Entry } from '../types'
 
 /**
@@ -45,27 +46,106 @@ type Props = {
    * showing Ask, and the entry you actually aimed at never opened.
    */
   onPick: (row: Entry) => void
+  /**
+   * How many entries the answer was counted from. The mock this replaces
+   * (spec 017) stamped answers "Verified", claiming a step that does not
+   * exist — what is true is that the number is arithmetic over this many of
+   * your own rows, so that is what the badge says.
+   */
+  evidence?: number
+  /** A money answer carries its per-category distribution under the figure. */
+  money?: boolean
 }
 
-export function AnswerCard({ answer, now, onPick }: Props) {
+/** The distribution's fills: one hue stepped by opacity, so the bar never
+ *  leans on colour separation the way the kind palette would. Written out —
+ *  Tailwind only compiles what it can see. */
+const RAMP = ['bg-expense', 'bg-expense/70', 'bg-expense/45', 'bg-expense/25'] as const
+
+export function AnswerCard({ answer, now, onPick, evidence, money = false }: Props) {
   const [expanded, setExpanded] = useState(false)
 
   const shown = expanded ? answer.rows : answer.rows.slice(0, SHOWN)
   const rest = answer.rows.length - shown.length
 
+  /**
+   * Where a money answer's total sat, top categories first — drawn only when
+   * there is more than one bucket, because a bar with a single segment says
+   * nothing the lead figure has not. Everything past the top three folds into
+   * one slice so the legend stays a glance.
+   */
+  const slices = useMemo(() => {
+    if (!money) return []
+    const spread = categorySpread(answer.rows)
+    if (spread.length < 2) return []
+    const top = spread.slice(0, 3)
+    const folded = spread.slice(3)
+    return [
+      ...top.map((held, at) => ({
+        name: held.name ?? 'uncategorised',
+        paise: held.paise,
+        fill: RAMP[at]!,
+      })),
+      ...(folded.length > 0
+        ? [
+            {
+              name: folded.length === 1 ? (folded[0]!.name ?? 'uncategorised') : 'other',
+              paise: folded.reduce((sum, held) => sum + held.paise, 0),
+              fill: RAMP[3],
+            },
+          ]
+        : []),
+    ]
+  }, [money, answer.rows])
+
   return (
     <div className="mt-3 border-y border-edge py-4">
       {/* The conclusion, then its working. Caption set as a small uppercase
           eyebrow so it reads as the label on the number rather than as the
-          first line of a paragraph the number then interrupts. */}
-      {answer.caption !== null && (
-        <p className="truncate text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
-          {answer.caption}
-        </p>
+          first line of a paragraph the number then interrupts. The badge
+          beside it says what is actually true of every answer: arithmetic
+          over the log's own rows, this many of them. */}
+      {(answer.caption !== null || (evidence !== undefined && evidence > 0)) && (
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="min-w-0 truncate text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+            {answer.caption}
+          </p>
+          {evidence !== undefined && evidence > 0 && (
+            <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-muted tabular-nums">
+              From your log · {evidence}
+            </span>
+          )}
+        </div>
       )}
       <p className="mt-1.5 font-display text-3xl leading-none font-semibold tracking-tight tabular-nums">
         {answer.lead}
       </p>
+
+      {slices.length > 0 && (
+        <div className="mt-3">
+          <div aria-hidden="true" className="flex h-1.5 overflow-hidden rounded-full bg-sunken">
+            {slices.map(
+              (slice) =>
+                slice.paise !== 0 && (
+                  <span
+                    key={slice.name}
+                    className={`h-full ${slice.fill}`}
+                    style={{ flexGrow: Math.abs(slice.paise) }}
+                  />
+                ),
+            )}
+          </div>
+          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+            {slices.map((slice) => (
+              <span key={slice.name} className="flex items-center gap-1.5">
+                <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${slice.fill}`} />
+                <span className="text-muted">{slice.name}</span>
+                <span className="text-ink tabular-nums">{rupees(slice.paise)}</span>
+              </span>
+            ))}
+          </p>
+        </div>
+      )}
 
       {answer.extras.length > 0 && (
         <p className="mt-2.5 text-xs text-muted">

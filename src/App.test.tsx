@@ -597,6 +597,8 @@ describe('the four destinations', () => {
     await userEvent.click(
       within(main()).getByLabelText(new RegExp(`^${format(wanted, 'EEEE d MMMM yyyy')}`)),
     )
+    // One tap peeks the day in place — spec 017 — and the peek travels.
+    await userEvent.click(within(main()).getByRole('button', { name: 'Open the day' }))
 
     // Back on the day, reading it — the calendar is navigation, never a place
     // to stay.
@@ -652,7 +654,9 @@ describe('the four destinations', () => {
     // What Ask is, then what to try — page content, not an appendix to the
     // capture control. The footnote is the one thing that sits low.
     expect(screen.getByText(/nothing leaves this device/)).toBeTruthy()
-    expect(screen.getByText('Try asking')).toBeTruthy()
+    // The curated questions, grouped by topic — spec 017.
+    expect(screen.getByText('Spending')).toBeTruthy()
+    expect(screen.getByText('Events & memory')).toBeTruthy()
     expect(screen.getByText(/works from Today too/)).toBeTruthy()
     expect(screen.getByText('Answers appear as you type')).toBeTruthy()
   })
@@ -665,7 +669,7 @@ describe('the four destinations', () => {
     const box = screen.getByLabelText('What do you want to know?') as HTMLTextAreaElement
     expect(box.value).toBe('how much this month')
     // The suggestions never sit under a result.
-    await waitFor(() => expect(screen.queryByText('Try asking')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Spending')).toBeNull())
     // And nothing was logged by the tap.
     expect(screen.queryByText(/entries saved/)).toBeNull()
   })

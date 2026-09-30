@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  categorySpread,
   columnsFor,
   dailyAverage,
+  growthPercent,
   peak,
   periodLabel,
   spanOf,
@@ -323,5 +325,47 @@ describe('dailyAverage', () => {
 
   it('keeps a refund-heavy period signed', () => {
     expect(dailyAverage({ ...base, paise: -30000, activeDays: 3 })).toBe(-10000)
+  })
+})
+
+describe('growthPercent', () => {
+  it('compares spend against the period before, to one decimal', () => {
+    const rows = [
+      row({ kind: 'expense', occurred_on: '2026-08-10', amount_paise: 100000 }),
+      row({ kind: 'expense', occurred_on: '2026-09-05', amount_paise: 104200 }),
+    ]
+    expect(growthPercent(rows, 'month', '2026-09-17')).toBe(4.2)
+  })
+
+  it('keeps the sign, so spending less reads below zero', () => {
+    const rows = [
+      row({ kind: 'expense', occurred_on: '2026-08-10', amount_paise: 100000 }),
+      row({ kind: 'expense', occurred_on: '2026-09-05', amount_paise: 75000 }),
+    ]
+    expect(growthPercent(rows, 'month', '2026-09-17')).toBe(-25)
+  })
+
+  it('is null over a prior period with no entries — no badge, never a made-up 0%', () => {
+    // ROWS holds September alone, so August has nothing to compare against.
+    expect(growthPercent(ROWS, 'month', '2026-09-17')).toBeNull()
+  })
+
+  it('is null when the prior period nets to zero, where any percentage is invented', () => {
+    const rows = [
+      row({ kind: 'expense', occurred_on: '2026-08-10', amount_paise: 5000 }),
+      row({ kind: 'expense', occurred_on: '2026-08-11', amount_paise: -5000 }),
+      row({ kind: 'expense', occurred_on: '2026-09-05', amount_paise: 104200 }),
+    ]
+    expect(growthPercent(rows, 'month', '2026-09-17')).toBeNull()
+  })
+})
+
+describe('categorySpread', () => {
+  it('orders by size over bare rows, the absence bucket last even when largest', () => {
+    expect(categorySpread(ROWS).map((category) => category.name)).toEqual([
+      'travel',
+      'food',
+      null,
+    ])
   })
 })

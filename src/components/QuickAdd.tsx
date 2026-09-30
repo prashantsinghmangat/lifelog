@@ -1,6 +1,15 @@
+import { format, parseISO } from 'date-fns'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnswerCard } from './AnswerCard'
-import { ArrowUpIcon, CameraIcon, Chevron, CloseIcon, ImageIcon, MicIcon } from './Icons'
+import {
+  ArrowUpIcon,
+  CalendarIcon,
+  CameraIcon,
+  Chevron,
+  CloseIcon,
+  ImageIcon,
+  MicIcon,
+} from './Icons'
 import { KindMark } from './KindMark'
 import { PhotoViewer } from './PhotoViewer'
 import { useDictation } from '../hooks/useDictation'
@@ -48,6 +57,41 @@ const EXAMPLES: { typed: string; becomes: string; kind: Kind }[] = [
  */
 const QUESTIONS = ['how much this month', 'hours worked this week', 'what happened last week']
 
+/** One curated question: fills the box, which in Ask is asking. Shared by the
+ *  flat list and the topic groups, so the rows can never drift apart. */
+function QuestionRow({
+  asked,
+  first,
+  onPick,
+}: {
+  asked: string
+  first: boolean
+  onPick: (asked: string) => void
+}) {
+  return (
+    // The hairline sits between rows, on the wrapper — a rule on the
+    // inset button would run 8px wider than every other rule on screen.
+    <div className={first ? '' : 'border-t border-line'}>
+      <button
+        type="button"
+        onClick={() => onPick(asked)}
+        className="-mx-2 flex min-h-[52px] w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
+      >
+        <span
+          className="flex w-[22px] shrink-0 justify-center text-[15px] leading-none font-semibold text-accent"
+          aria-hidden="true"
+        >
+          ?
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{asked}</span>
+        {/* Fills the box, it does not submit — but it does lead
+            somewhere, and the chevron says so. */}
+        <Chevron dir="right" size={16} className="shrink-0 text-faint" />
+      </button>
+    </div>
+  )
+}
+
 /**
  * The same three subject-free questions, offered twice for two different
  * reasons: switching to an empty Ask box, and a question that came back with
@@ -72,32 +116,109 @@ export function AskSuggestions({
 
       <div>
         {QUESTIONS.map((asked, at) => (
-          // The hairline sits between rows, on the wrapper — a rule on the
-          // inset button would run 8px wider than every other rule on screen.
-          <div key={asked} className={at > 0 ? 'border-t border-line' : ''}>
-            <button
-              type="button"
-              onClick={() => onPick(asked)}
-              className="-mx-2 flex min-h-[52px] w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
-            >
-              <span
-                className="flex w-[22px] shrink-0 justify-center text-[15px] leading-none font-semibold text-accent"
-                aria-hidden="true"
-              >
-                ?
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{asked}</span>
-              {/* Fills the box, it does not submit — but it does lead
-                  somewhere, and the chevron says so. */}
-              <Chevron dir="right" size={16} className="shrink-0 text-faint" />
-            </button>
-          </div>
+          <QuestionRow key={asked} asked={asked} first={at === 0} onPick={onPick} />
         ))}
       </div>
 
       {/* The manual's Asking section covers the half these three cannot:
           naming a subject, and a single day. A text button on the rows' own
           left axis, not an underlined web link. */}
+      <button
+        type="button"
+        onClick={onHelp}
+        className="flex h-11 items-center text-sm font-medium text-accent"
+      >
+        all examples
+      </button>
+    </div>
+  )
+}
+
+/**
+ * The Ask destination's curated questions, grouped by what they are about —
+ * spec 017's topic pills, as groups rather than a second control style.
+ *
+ * Every question stays deliberately **subject-free** and shaped exactly like
+ * the three in `QUESTIONS`, because those are the shapes the grammar is known
+ * to answer — a topic heading is allowed to organise them, not to promise
+ * subjects the log may never have mentioned. Each group is headed by a true
+ * figure counted from the same rows the answers will read; the mock's "Neural
+ * Sync" badge named a feature that does not exist, and nothing here may.
+ */
+const TOPICS: { name: string; kind: 'expense' | 'time' | 'event'; questions: string[] }[] = [
+  {
+    name: 'Spending',
+    kind: 'expense',
+    questions: ['how much this month', 'how much last week', 'how much this year'],
+  },
+  {
+    name: 'Time & focus',
+    kind: 'time',
+    questions: ['hours worked this week', 'hours worked last month', 'hours worked this year'],
+  },
+  {
+    name: 'Events & memory',
+    kind: 'event',
+    questions: ['what happened yesterday', 'what happened last week', 'what happened last month'],
+  },
+]
+
+export function AskTopics({
+  all,
+  onPick,
+  onHelp,
+}: {
+  /** The whole local log, for the figure beside each topic. */
+  all: Entry[]
+  onPick: (asked: string) => void
+  onHelp: () => void
+}) {
+  // One pass for the three captions. Light derivation, not a figure block —
+  // the exact arithmetic lives in the answers themselves.
+  const held = useMemo(() => {
+    let expenses = 0
+    let logged = 0
+    let events = 0
+    for (const row of all) {
+      if (row.kind === 'expense') expenses += 1
+      if (row.kind === 'time') logged += row.duration_minutes ?? 0
+      if (row.kind === 'event') events += 1
+    }
+    return { expenses, logged, events }
+  }, [all])
+
+  const caption: Record<'expense' | 'time' | 'event', string> = {
+    expense: `${held.expenses} ${held.expenses === 1 ? 'expense' : 'expenses'}`,
+    time: held.logged === 0 ? '0m logged' : `${minutes(held.logged)} logged`,
+    event: `${held.events} ${held.events === 1 ? 'event' : 'events'}`,
+  }
+
+  return (
+    <div>
+      {TOPICS.map((topic) => (
+        <div key={topic.name} className="mt-5 first:mt-[26px]">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[topic.kind]}`}
+              />
+              {topic.name}
+            </p>
+            <span className="shrink-0 text-xs text-faint tabular-nums">
+              {caption[topic.kind]}
+            </span>
+          </div>
+          <div className="mt-0.5">
+            {topic.questions.map((asked, at) => (
+              <QuestionRow key={asked} asked={asked} first={at === 0} onPick={onPick} />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* The manual's Asking section covers the half these cannot: naming a
+          subject, and a single day. */}
       <button
         type="button"
         onClick={onHelp}
@@ -223,6 +344,8 @@ export function QuickAdd({
   const [text, setText] = useState('')
   const dictation = useDictation(setText)
   const box = useRef<HTMLTextAreaElement>(null)
+  /** The Ask date trigger's own input — the OS picker, nothing drawn here. */
+  const dates = useRef<HTMLInputElement>(null)
 
   /**
    * Photos picked before the entry exists.
@@ -789,6 +912,46 @@ export function QuickAdd({
             </>
           )}
 
+          {/* Asking about a date without typing it: the OS date picker, whose
+              pick lands in the box as text — `d MMM` is a shape the question
+              grammar already reads, so an inserted date and a typed one are
+              the same question. On an empty box it asks the proven question
+              shape whole. */}
+          {mode === 'ask' && (
+            <>
+              <input
+                ref={dates}
+                type="date"
+                tabIndex={-1}
+                aria-hidden="true"
+                className="sr-only"
+                onChange={(event) => {
+                  const picked = event.target.value
+                  if (picked === '') return
+                  const said = format(parseISO(picked), 'd MMM')
+                  setText((held) =>
+                    held.trim() === '' ? `what happened ${said}` : `${held.trim()} ${said}`,
+                  )
+                  event.target.value = ''
+                  document.getElementById('quick-add')?.focus()
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const input = dates.current
+                  if (input === null) return
+                  if (typeof input.showPicker === 'function') input.showPicker()
+                  else input.click()
+                }}
+                aria-label="Ask about a date"
+                className="flex h-11 w-9 shrink-0 items-center justify-center text-faint transition-colors hover:text-muted"
+              >
+                <CalendarIcon size={18} />
+              </button>
+            </>
+          )}
+
           {ready ? (
             <button
               type="submit"
@@ -840,6 +1003,8 @@ export function QuickAdd({
           key={text}
           answer={answer}
           now={now}
+          evidence={summary?.entries}
+          money={question?.measure === 'money'}
           onPick={(row) => {
             onOpenEntry(row)
             // The question has been answered and acted on; leaving it in the box

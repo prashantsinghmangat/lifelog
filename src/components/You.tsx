@@ -38,7 +38,7 @@ function Eyebrow({ id, children }: { id?: string; children: ReactNode }) {
  */
 function Group({ children }: { children: ReactNode }) {
   return (
-    <div className="divide-y divide-line overflow-hidden rounded-[14px] border border-line bg-raised">
+    <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
       {children}
     </div>
   )
@@ -258,7 +258,7 @@ export function You({
       )}
 
       <Eyebrow id="appearance">Appearance</Eyebrow>
-      <div className="rounded-[14px] border border-line bg-raised p-3.5">
+      <div className="rounded-2xl border border-line bg-raised p-3.5">
         <Segmented
           label="Appearance"
           value={theme}
@@ -338,15 +338,15 @@ export function You({
                 right={
                   <span
                     aria-hidden="true"
-                    className={`flex h-[25px] w-[42px] items-center rounded-full p-[3px] transition-colors ${
+                    className={`flex h-7 w-12 items-center rounded-full p-0.5 transition-colors ${
                       nudges
                         ? 'bg-accent'
                         : 'bg-sunken shadow-[inset_0_0_0_1px_var(--color-edge)]'
                     }`}
                   >
                     <span
-                      className={`h-[19px] w-[19px] rounded-full bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.25)] transition-transform ${
-                        nudges ? 'translate-x-[17px]' : ''
+                      className={`h-6 w-6 rounded-full bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.25)] transition-transform ${
+                        nudges ? 'translate-x-5' : ''
                       }`}
                     />
                   </span>

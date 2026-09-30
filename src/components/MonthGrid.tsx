@@ -10,7 +10,7 @@ import {
   startOfWeek,
   subMonths,
 } from 'date-fns'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { DayCell, WEEKDAYS } from './DayCell'
 import { Chevron } from './Icons'
 import { useMarkedDays } from '../hooks/useMarkedDays'
@@ -22,14 +22,27 @@ type Props = {
   now: Date
   loadDays: (from: string, to: string) => Promise<string[]>
   onPick: (day: string) => void
+  /**
+   * The month on show, reported whenever browsing or reconciling moves it —
+   * the ribbon above this grid counts that month, and a ribbon counting a
+   * month the grid is not showing would be two disagreeing figure blocks on
+   * one screen.
+   */
+  onMonth?: (month: Date) => void
 }
 
 /**
  * Navigation, not a scheduler. A dot means something happened that day; the
  * only job is getting to that day in one tap.
  */
-export function MonthGrid({ day, now, loadDays, onPick }: Props) {
+export function MonthGrid({ day, now, loadDays, onPick, onMonth }: Props) {
   const [month, setMonth] = useState(() => startOfMonth(parseISO(day)))
+
+  // An effect rather than calls beside each `setMonth`: the reconcile below
+  // runs during render, where notifying a parent is not allowed.
+  useEffect(() => {
+    onMonth?.(month)
+  }, [month, onMonth])
 
   /**
    * Browsing months is this component's own state; the selected day is not.
