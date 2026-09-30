@@ -45,7 +45,10 @@ import { forCalendar, toIcs } from './lib/ics'
 import { isOccurrence, occurrencesOn } from './lib/occurrences'
 import { isNative } from './lib/platform'
 import {
+  alarmIds,
   cancel as cancelReminder,
+  cancelFollowUps,
+  onAction,
   permission as reminderPermission,
   rearm as rearmReminder,
   requestPermission,
@@ -457,6 +460,41 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
       // A prompt that could not be armed is not worth an error on screen.
     })
   }, [nudges])
+
+  /**
+   * A notification's button press, delivered whether or not the app is on
+   * screen — Capacitor wakes it briefly in the background. `done` rides the
+   * exact path the editor's Mark done uses (the write, then the re-arm whose
+   * resulting state cancels every remaining alarm, follow-ups included);
+   * `got_it` is pure alarm cancellation and touches no row state, which is
+   * what keeps a repeat's future occurrences ringing.
+   */
+  function nagAction(action: 'done' | 'got_it', id: number) {
+    const row = all.find((entry) => alarmIds(entry).includes(id))
+    if (row === undefined) return
+    if (action === 'got_it') {
+      void cancelFollowUps(row).catch(() => {
+        // A follow-up that could not be cancelled will still be dismissed by
+        // the next launch's reconciliation.
+      })
+      return
+    }
+    const ticked = { ...row, data: { ...row.data, done: true } }
+    update(row, { data: ticked.data })
+    rearmRow(ticked, new Date())
+  }
+
+  // Registered once; the ref keeps the handler current, or the listener would
+  // close over the log as it stood at launch and mark done against stale rows.
+  const nagRef = useRef(nagAction)
+  useEffect(() => {
+    nagRef.current = nagAction
+  })
+  useEffect(() => {
+    void onAction((action, id) => nagRef.current(action, id)).catch(() => {
+      // No listener means no buttons work, but every reminder still rings.
+    })
+  }, [])
 
   // Re-arms reminders on launch, so an event logged on the web still fires on
   // the phone, and a reinstall does not lose the lot. No-op away from native.

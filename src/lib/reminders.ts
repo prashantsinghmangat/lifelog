@@ -1,4 +1,4 @@
-﻿import { ALL_DAY_HOUR, done, nextOccurrence, weeklyDays, withLead } from './events'
+﻿import { ALL_DAY_HOUR, done, nextOccurrence, recurring, weeklyDays, withLead } from './events'
 import { isNative } from './platform'
 import type { LocalNotificationsPlugin } from '@capacitor/local-notifications'
 import type { Entry } from '../types'
@@ -229,6 +229,50 @@ type Alarm = {
 }
 
 /**
+ * The six follow-up rings a nagged entry owns, ten minutes apart.
+ *
+ * Bounded, because unbounded nagging is how an app gets muted. Opt-in per
+ * event as `data.nag`, off by default — nothing sums it, so no column and no
+ * migration, the same rule `data.done` follows.
+ */
+const NAG_STEPS = [1, 2, 3, 4, 5, 6] as const
+
+function nagged(entry: Entry): boolean {
+  return entry.data.nag === true
+}
+
+function nagId(uuid: string, step: number): number {
+  return notificationId(`${uuid}#nag${step}`)
+}
+
+/**
+ * The follow-ups chase the ring, not the calendar: each sits ten minutes after
+ * the moment the base alarm fires — the lead-shifted one, or the two would
+ * drift apart on any entry reminded early. Past steps are dropped rather than
+ * scheduled behind you, which is what lets a launch mid-run keep the rest of a
+ * one-off's chase alive instead of ringing for minutes already gone.
+ */
+function followUps(entry: Entry, anchor: Date, now: Date): Alarm[] {
+  if (!nagged(entry)) return []
+  return NAG_STEPS.map((step) => ({
+    id: nagId(entry.id, step),
+    at: new Date(anchor.getTime() + step * 10 * 60_000),
+  })).filter((alarm) => alarm.at.getTime() > now.getTime())
+}
+
+/**
+ * Which button a nagged entry's notifications carry, or none when it does not
+ * nag. This is the contract the App handler dispatches on: `done` marks the
+ * row, and a repeat — which deliberately cannot be marked done, since `done`
+ * sits on the row and would silence every future occurrence — gets `got_it`,
+ * which only cancels today's remaining follow-ups.
+ */
+export function actionType(entry: Entry): 'done' | 'got_it' | undefined {
+  if (!nagged(entry)) return undefined
+  return recurring(entry) ? 'got_it' : 'done'
+}
+
+/**
  * Every notification an entry should own, and when each of them fires.
  *
  * A weekly repeat is **one row with several alarms** — five for `weekdays` —
@@ -259,14 +303,23 @@ export function alarms(entry: Entry, now: Date): Alarm[] {
     // that would have stopped repeating after a week.
     const start = localDay(entry.occurred_on)
 
-    return weekly.map((day) => {
+    const planned = weekly.map((day) => {
       const id = notificationId(`${entry.id}#${day}`)
-      const early = start !== null && nextFiring(day, now, hour, minute) < start
+      const soonest = nextFiring(day, now, hour, minute)
+      const early = start !== null && soonest < start
 
       // Capacitor counts Sunday as 1, `Date.getDay()` counts it as 0.
-      if (!early) return { id, on: { weekday: day + 1, hour, minute } }
-      return { id, at: firstFall(day, start, hour, minute) }
+      if (!early) return { alarm: { id, on: { weekday: day + 1, hour, minute } }, soonest }
+      const held = firstFall(day, start, hour, minute)
+      return { alarm: { id, at: held }, soonest: held }
     })
+
+    // The crons stay exactly as they were; a nag layers six one-offs onto the
+    // *next* occurrence only — whichever weekday comes round first — and the
+    // launch re-arm converges on the one after, the yearly shape. The repeat
+    // itself is never expanded into one-offs.
+    const next = planned.reduce((a, b) => (a.soonest <= b.soonest ? a : b)).soonest
+    return [...planned.map((p) => p.alarm), ...followUps(entry, next, now)]
   }
 
   /**
@@ -299,12 +352,16 @@ export function alarms(entry: Entry, now: Date): Alarm[] {
     const shifted = withLead(entry, when)
     if (shifted.getTime() <= now.getTime()) return []
 
-    return [{ id: notificationId(entry.id), at: shifted }]
+    return [{ id: notificationId(entry.id), at: shifted }, ...followUps(entry, shifted, now)]
   }
 
   const at = fireAt(entry)
-  if (at === null || at.getTime() <= now.getTime()) return []
-  return [{ id: notificationId(entry.id), at }]
+  if (at === null) return []
+  // The base alarm goes only while its moment is ahead; a nag's still-future
+  // follow-ups survive it passing, so opening the app mid-run does not silence
+  // the chase the run exists for.
+  const base = at.getTime() > now.getTime() ? [{ id: notificationId(entry.id), at }] : []
+  return [...base, ...followUps(entry, at, now)]
 }
 
 /**
@@ -318,15 +375,42 @@ export function alarmIds(entry: Entry): number[] {
   return [
     notificationId(entry.id),
     ...[0, 1, 2, 3, 4, 5, 6].map((day) => notificationId(`${entry.id}#${day}`)),
+    ...NAG_STEPS.map((step) => nagId(entry.id, step)),
   ]
 }
 
+/**
+ * The two buttons a nagged notification can carry, registered once. Latched
+ * like `channels`, and for the same reason: elsewhere every attempt throws
+ * identically for ever, and a notification without its button still rings.
+ */
+let actioned = false
+
+async function actionTypes(api: LocalNotificationsPlugin): Promise<void> {
+  if (actioned) return
+  try {
+    await api.registerActionTypes({
+      types: [
+        { id: 'done', actions: [{ id: 'done', title: 'Done' }] },
+        { id: 'got_it', actions: [{ id: 'got_it', title: 'Got it' }] },
+      ],
+    })
+  } catch {
+    // Not a platform with action buttons. The reminder itself still fires.
+  }
+  actioned = true
+}
+
 function notification(entry: Entry, alarm: Alarm) {
+  const action = actionType(entry)
   return {
     id: alarm.id,
     title: entry.title,
     body: 'lifelog reminder',
     channelId: REMINDERS,
+    // Every notification of a nagged entry carries the button, the base ring
+    // included — ending the run from the first ring is the point of it.
+    ...(action === undefined ? {} : { actionTypeId: action }),
     // allowWhileIdle so Doze does not sit on it until the phone is woken.
     schedule:
       alarm.at !== undefined
@@ -348,6 +432,7 @@ export async function schedule(entry: Entry, now: Date): Promise<ScheduleResult>
   if (state !== 'granted' && !(await requestPermission())) return 'blocked'
 
   await channels(found.api)
+  await actionTypes(found.api)
   await found.api.schedule({
     notifications: due.map((alarm) => notification(entry, alarm)),
   })
@@ -389,6 +474,36 @@ export async function cancel(entry: Entry): Promise<void> {
   const found = await plugin()
   if (!found) return
   await found.api.cancel({ notifications: alarmIds(entry).map((id) => ({ id })) })
+}
+
+/**
+ * "Got it": today's remaining follow-ups, and nothing else.
+ *
+ * Pure alarm cancellation — no row state, so a repeat's future occurrences
+ * are untouched, and its standing crons are not in this list to begin with.
+ */
+export async function cancelFollowUps(entry: Entry): Promise<void> {
+  const found = await plugin()
+  if (!found) return
+  await found.api.cancel({
+    notifications: NAG_STEPS.map((step) => ({ id: nagId(entry.id, step) })),
+  })
+}
+
+/**
+ * Delivers a notification's button press to the app. Capacitor wakes the app
+ * briefly in the background to run this — that is how the event reaches JS —
+ * so the handler must not assume anything is on screen.
+ */
+export async function onAction(
+  handle: (action: 'done' | 'got_it', id: number) => void,
+): Promise<void> {
+  const found = await plugin()
+  if (!found) return
+  await found.api.addListener('localNotificationActionPerformed', (fired) => {
+    const action = fired.actionId
+    if (action === 'done' || action === 'got_it') handle(action, fired.notification.id)
+  })
 }
 
 /**
@@ -476,6 +591,7 @@ export async function sync(entries: Entry[], now: Date): Promise<void> {
   if (due.length === 0) return
 
   await channels(found.api)
+  await actionTypes(found.api)
   await found.api.schedule({
     notifications: due.flatMap((planned) =>
       planned.alarms.map((alarm) => notification(planned.entry, alarm)),

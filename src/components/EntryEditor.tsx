@@ -27,6 +27,7 @@ import {
   timeValue,
 } from '../lib/format'
 import { recurringTitle } from '../lib/parser'
+import { fireAt } from '../lib/reminders'
 import type { Patch, Row } from '../hooks/useEntries'
 import type { Kind } from '../types'
 
@@ -91,6 +92,8 @@ export function EntryEditor({
     row.duration_minutes === null ? '' : String(row.duration_minutes),
   )
   const [finished, setFinished] = useState(isDone(row))
+  /** Whether this entry keeps ringing until acted on — `data.nag`, opt-in. */
+  const [nagging, setNagging] = useState(row.data.nag === true)
   /**
    * The repeat the user has chosen in this sheet, or null while they have not
    * touched it. A wrapper rather than a bare `string | undefined`, because
@@ -220,6 +223,10 @@ export function EntryEditor({
     typeof row.data.lead === 'number' && row.data.lead > 0 ? row.data.lead : undefined
   const lead = kind !== 'event' ? undefined : (leadChoice === null ? storedLead : leadChoice.minutes)
 
+  // Dropped on demotion the way the rule and the lead are: a note has nothing
+  // to keep ringing about.
+  const nag = kind === 'event' && nagging
+
   const nextData = { ...row.data }
   if (rule === undefined) delete nextData.rrule
   else nextData.rrule = rule
@@ -227,6 +234,8 @@ export function EntryEditor({
   else delete nextData.done
   if (lead === undefined) delete nextData.lead
   else nextData.lead = lead
+  if (nag) nextData.nag = true
+  else delete nextData.nag
 
   /** The entry as this form would save it, which is what the next line describes. */
   const pending: Row = {
@@ -253,7 +262,12 @@ export function EntryEditor({
       occurred_at: pending.occurred_at,
     }
 
-    if (rule !== row.data.rrule || finished !== isDone(row) || lead !== storedLead)
+    if (
+      rule !== row.data.rrule ||
+      finished !== isDone(row) ||
+      lead !== storedLead ||
+      nag !== (row.data.nag === true)
+    )
       patch.data = nextData
     // Refused here rather than saved and owed for ever: these two columns are
     // Postgres `integer`, so a bigger number reaches the server once, is
@@ -570,6 +584,23 @@ export function EntryEditor({
                 </>
               )}
             </p>
+
+            {/* Opt-in per event, off by default — a phone that rings seven
+                times over an hour is the feature, and nobody wants it on
+                everything. Read off `pending`, so ticking the entry done or
+                demoting it hides this with the reminder it chases. */}
+            {fireAt(pending) !== null && (
+              <button
+                type="button"
+                aria-pressed={nag}
+                onClick={() => setNagging(!nagging)}
+                className={`mt-3 flex h-11 w-full items-center justify-center rounded-lg border text-sm font-medium ${
+                  nag ? 'border-ink bg-sunken text-ink' : 'border-edge text-muted'
+                }`}
+              >
+                {nag ? 'Rings every 10 minutes until acted on' : 'Keep ringing until acted on'}
+              </button>
+            )}
           </fieldset>
         )}
 

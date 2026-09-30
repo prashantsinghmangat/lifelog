@@ -328,6 +328,35 @@ describe('ticking an entry off', () => {
   })
 })
 
+describe('the nag, which keeps ringing until acted on', () => {
+  it('is only offered where something will actually ring', () => {
+    // An expense has no reminder to chase.
+    setup()
+    expect(screen.queryByRole('button', { name: /Keep ringing/ })).toBeNull()
+  })
+
+  it('is hidden once the entry is ticked off, with the reminder it chases', () => {
+    setup({ kind: 'event', title: 'dentist', data: { done: true, nag: true } })
+    expect(screen.queryByRole('button', { name: /ringing|Rings/ })).toBeNull()
+  })
+
+  it('opts the entry in as data.nag, off by default', async () => {
+    const { onSave, save } = setup({ kind: 'event', title: 'dentist' })
+    await userEvent.click(screen.getByRole('button', { name: 'Keep ringing until acted on' }))
+    await save()
+    expect(onSave.mock.calls[0]?.[0]?.data).toMatchObject({ nag: true })
+  })
+
+  it('takes the opt-in off again', async () => {
+    const { onSave, save } = setup({ kind: 'event', title: 'dentist', data: { nag: true } })
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Rings every 10 minutes until acted on' }),
+    )
+    await save()
+    expect(onSave.mock.calls[0]?.[0]?.data).not.toHaveProperty('nag')
+  })
+})
+
 describe('editing an entry', () => {
   it('opens with the stored values, already editable', () => {
     setup()

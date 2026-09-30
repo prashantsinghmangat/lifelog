@@ -16,7 +16,7 @@ import App from './App'
 import { back } from './lib/back'
 import { dayKey } from './lib/format'
 import { load } from './lib/store'
-import { rearm, type RearmResult, type ScheduleResult } from './lib/reminders'
+import { cancelFollowUps, rearm, type RearmResult, type ScheduleResult } from './lib/reminders'
 
 /**
  * The journeys that only exist once everything is wired together: whether a
@@ -37,6 +37,8 @@ let rearmResult: RearmResult | 'throw' = 'scheduled'
 let cancelThrows = false
 /** Every request rejects, which is what no network actually looks like. */
 let unreachable = false
+/** What `onAction` registered, so a test can press a notification's button. */
+let nagHandler: ((action: 'done' | 'got_it', id: number) => void) | null = null
 
 function builder() {
   let writing = false
@@ -130,6 +132,26 @@ vi.mock('./lib/reminders', () => ({
   scheduleNudges: vi.fn(async () => 'scheduled'),
   permission: vi.fn(async () => 'granted'),
   requestPermission: vi.fn(async () => true),
+  // The digits of the row id, so a test can press a button by number without
+  // reproducing the real hashing.
+  alarmIds: vi.fn((entry: { id: string }) => [Number(entry.id.replace(/\D/g, '')) || 0]),
+  // Faithful to the real one where the editor leans on it: an unfinished event
+  // has a moment, everything else has none.
+  fireAt: vi.fn(
+    (entry: {
+      kind: string
+      occurred_on: string
+      occurred_at: string | null
+      data: Record<string, unknown>
+    }) =>
+      entry.kind === 'event' && entry.data['done'] !== true
+        ? new Date(entry.occurred_at ?? `${entry.occurred_on}T09:00:00`)
+        : null,
+  ),
+  cancelFollowUps: vi.fn(async () => undefined),
+  onAction: vi.fn(async (handle: (action: 'done' | 'got_it', id: number) => void) => {
+    nagHandler = handle
+  }),
 }))
 
 afterEach(cleanup)
@@ -142,6 +164,7 @@ beforeEach(() => {
   rearmResult = 'scheduled'
   cancelThrows = false
   unreachable = false
+  nagHandler = null
   ids = 0
   // The log persists between mounts now, so without this each test inherits the
   // previous one's entries.
@@ -1306,5 +1329,65 @@ describe('the way in for somebody with no account', () => {
     // The password box has nothing left to ask for, so it goes.
     await waitFor(() => expect(screen.queryByLabelText(/password/i)).toBeNull())
     expect(screen.getByLabelText('What happened?')).toBeTruthy()
+  })
+})
+
+describe('a notification button, pressed', () => {
+  /** An event opted into the nag, on today so the timeline holds it. */
+  function chase(data: Record<string, unknown>) {
+    return {
+      id: 'nag-7',
+      kind: 'event',
+      occurred_on: dayKey(new Date()),
+      occurred_at: null,
+      title: 'punch out',
+      note: null,
+      amount_paise: null,
+      duration_minutes: null,
+      category: null,
+      data,
+      created_at: new Date().toISOString(),
+    }
+  }
+
+  it('Done marks the entry, and the re-arm it rides silences the rest', async () => {
+    rowsOnServer = [chase({ nag: true })]
+    await open()
+    await screen.findByText('punch out')
+
+    const before = vi.mocked(rearm).mock.calls.length
+    act(() => nagHandler?.('done', 7))
+
+    // The same path as the editor's Mark done: the write, then a re-arm whose
+    // done state schedules nothing and cancels everything still armed.
+    await waitFor(() => expect(vi.mocked(rearm).mock.calls.length).toBe(before + 1))
+    expect(vi.mocked(rearm).mock.calls.at(-1)?.[0]).toMatchObject({
+      id: 'nag-7',
+      data: { nag: true, done: true },
+    })
+  })
+
+  it('Got it cancels the follow-ups and touches no row state', async () => {
+    rowsOnServer = [chase({ rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', nag: true })]
+    await open()
+    await screen.findByText('punch out')
+
+    const before = vi.mocked(rearm).mock.calls.length
+    act(() => nagHandler?.('got_it', 7))
+
+    await waitFor(() => expect(vi.mocked(cancelFollowUps)).toHaveBeenCalled())
+    expect(vi.mocked(cancelFollowUps).mock.calls.at(-1)?.[0]).toMatchObject({ id: 'nag-7' })
+    // No write and no re-arm: the repeat's future occurrences keep ringing.
+    expect(vi.mocked(rearm).mock.calls.length).toBe(before)
+  })
+
+  it('a button for a row this device does not hold does nothing', async () => {
+    rowsOnServer = []
+    await open()
+    const rearms = vi.mocked(rearm).mock.calls.length
+    const calms = vi.mocked(cancelFollowUps).mock.calls.length
+    act(() => nagHandler?.('done', 7))
+    expect(vi.mocked(rearm).mock.calls.length).toBe(rearms)
+    expect(vi.mocked(cancelFollowUps).mock.calls.length).toBe(calms)
   })
 })

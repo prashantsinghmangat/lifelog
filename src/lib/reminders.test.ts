@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alarms, fireAt, notificationId } from './reminders'
+import { actionType, alarmIds, alarms, fireAt, notificationId } from './reminders'
 import type { Entry } from '../types'
 
 function entry(over: Partial<Entry> & { id: string }): Entry {
@@ -299,5 +299,107 @@ describe('when a weekly repeat has not begun yet', () => {
     const armed = alarms(row, NOW)
     expect(crons(armed)).toEqual([])
     expect(oneOffs(armed)).toHaveLength(5)
+  })
+})
+
+describe('a nag that rings until acted on', () => {
+  // Thursday 10 September 2026, nine in the morning.
+  const NOW = new Date(2026, 8, 10, 9, 0, 0)
+  const at = (day: string, clock: string) => `${day}T${clock}:00+05:30`
+
+  it('arms the reminder plus six follow-ups, ten minutes apart', () => {
+    const row = entry({
+      id: 'n1',
+      occurred_on: '2026-09-10',
+      occurred_at: at('2026-09-10', '17:00'),
+      data: { nag: true },
+    })
+    const armed = alarms(row, NOW)
+
+    expect(armed).toHaveLength(7)
+    const times = armed.map((alarm) => alarm.at?.getTime() ?? 0)
+    for (let step = 1; step <= 6; step += 1) {
+      expect(times[step]! - times[0]!).toBe(step * 10 * 60_000)
+    }
+  })
+
+  it('changes nothing without the opt-in', () => {
+    const row = entry({
+      id: 'n1',
+      occurred_on: '2026-09-10',
+      occurred_at: at('2026-09-10', '17:00'),
+    })
+    expect(alarms(row, NOW)).toHaveLength(1)
+  })
+
+  it('stays silent once ticked off — the same choke point every alarm obeys', () => {
+    const row = entry({
+      id: 'n1',
+      occurred_on: '2026-09-10',
+      occurred_at: at('2026-09-10', '17:00'),
+      data: { nag: true, done: true },
+    })
+    expect(alarms(row, NOW)).toEqual([])
+  })
+
+  it('keeps the still-future follow-ups once the moment itself has passed', () => {
+    // 8:35 against a 9:00 clock: the base ring and two follow-ups are gone,
+    // the four still ahead survive a mid-run launch.
+    const row = entry({
+      id: 'n1',
+      occurred_on: '2026-09-10',
+      occurred_at: at('2026-09-10', '08:35'),
+      data: { nag: true },
+    })
+    const armed = alarms(row, NOW)
+    expect(armed).toHaveLength(4)
+    expect(armed.every((alarm) => alarm.at !== undefined && alarm.at > NOW)).toBe(true)
+  })
+
+  it('sweeps with the entry: every follow-up id is one alarmIds already covers', () => {
+    const nagged = entry({
+      id: 'n1',
+      occurred_on: '2026-09-10',
+      occurred_at: at('2026-09-10', '17:00'),
+      data: { nag: true },
+    })
+    const covered = new Set(alarmIds(nagged))
+    for (const alarm of alarms(nagged, NOW)) expect(covered.has(alarm.id)).toBe(true)
+
+    // Toggled off, a reschedule arms none of them — the cancel side of the
+    // rearm swept the six ids above, and nothing here puts them back.
+    const calmed = entry({ ...nagged, data: {} })
+    const nagIds = alarms(nagged, NOW)
+      .slice(1)
+      .map((alarm) => alarm.id)
+    for (const alarm of alarms(calmed, NOW)) expect(nagIds.includes(alarm.id)).toBe(false)
+  })
+
+  it("layers the chase onto a repeat's next occurrence and leaves the crons standing", () => {
+    const row = entry({
+      id: 'n2',
+      occurred_on: '2026-09-01',
+      occurred_at: at('2026-09-01', '10:00'),
+      data: { rrule: 'FREQ=WEEKLY;BYDAY=TU,TH', nag: true },
+    })
+    const armed = alarms(row, NOW)
+
+    const crons = armed.filter((alarm) => alarm.on !== undefined)
+    const oneOffs = armed.filter((alarm) => alarm.at !== undefined)
+    expect(crons).toHaveLength(2)
+    expect(oneOffs).toHaveLength(6)
+    // Anchored on the soonest firing — this Thursday at ten — not next week's.
+    expect(oneOffs[0]?.at?.getDate()).toBe(10)
+    expect(oneOffs[0]?.at?.getHours()).toBe(10)
+    expect(oneOffs[0]?.at?.getMinutes()).toBe(10)
+  })
+
+  it('carries done on a one-off and got_it on a repeat, and nothing otherwise', () => {
+    const oneOff = entry({ id: 'n1', data: { nag: true } })
+    const repeat = entry({ id: 'n2', data: { rrule: 'FREQ=YEARLY', nag: true } })
+    const plain = entry({ id: 'n3' })
+    expect(actionType(oneOff)).toBe('done')
+    expect(actionType(repeat)).toBe('got_it')
+    expect(actionType(plain)).toBeUndefined()
   })
 })
