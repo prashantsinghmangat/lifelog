@@ -628,17 +628,22 @@ native resource resolved before any JS runs — so it stays on Amber's surface, 
 palette that appears not to reach the splash is this, not a bug. The launcher icon does not
 follow it either, deliberately: its colours are frozen with the mark's geometry above.
 
-**Both palettes are warm, and neither is the other inverted.** Light is off-white paper with a
-near-black warm ink; dark is warm charcoal with a warm off-white. This is not decoration: an app
-whose entire content is a person's own record of their week reads as a form to fill in on pure
-white with blue-grey text, and as something worth keeping on paper. The dark palette is built from
-the dark end rather than by flipping the light one, which is how a dark theme ends up looking like
-a lit screen instead of a dim room.
+**The warm-paper argument belongs to Paper, where it was made.** Paper's light is off-white
+paper with a near-black warm ink, its dark a warm charcoal — neither the other inverted — and
+the reasoning stands: a person's own record reads as a form to fill in on pure white with
+blue-grey text, and as something worth keeping on paper. **Amber is the default** because its
+light mode keeps that paper character nearly unchanged while giving the interface a true accent
+hue — the thing Paper deliberately does without — and its dark goes deeper than charcoal, near
+black, for the phone screens the app actually lives on. Every palette's dark block is still
+built from the dark end rather than by flipping its light one, which is how a dark theme ends up
+looking like a lit screen instead of a dim room.
 
-Every *text* token clears 4.5:1 on the surface it is used over. `faint` did not — it sat at 2.9:1,
-which is what "tertiary" had quietly come to mean on a screen where most of the type is 12px.
-`line` and `edge` stay below that deliberately: they separate, they do not inform, and nothing
-here is legible only because of a border. The `theme-color` meta, the manifest and `useTheme` all
+Every *text* token clears 4.5:1 on **every surface it can sit on** — surface, raised and sunken.
+`faint` failed this twice: at 2.9:1 outright, which is what "tertiary" had quietly come to mean
+on a screen where most of the type is 12px, and later at 4.4:1 on `sunken` after being verified
+against `surface` alone. Since spec 015 `edge` clears 3:1 on all three grounds — an input
+boundary has to be findable — and `line` alone stays below: it separates, it does not inform.
+`contrast.test.ts` computes all of it; none of it is eyeballed. The `theme-color` meta, the manifest and `useTheme` all
 carry the *surface*, not the ink — drawn edge-to-edge the browser chrome is a continuation of the
 page, and a dark bar over a paper-coloured page reads as a header the app does not have.
 

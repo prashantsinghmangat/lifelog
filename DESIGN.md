@@ -48,10 +48,12 @@ light mode and is unreadable in dark — it is a bug, not a shortcut.
 | `focus` | the global focus ring |
 | `expense` `time` `event` `note` | the four kinds, and nothing else |
 
-**The palette is warm in both themes, and that is the decision the rest hangs off.** Light mode
-is off-white paper with a near-black warm ink; dark mode is warm charcoal with a warm off-white —
-not the light palette inverted. A pure-white page with blue-grey text reads as a form to fill in;
-the same layout on paper reads as something to keep, which is what a personal record should be.
+**Warm paper is Paper's argument, and Amber keeps its light half.** Paper is off-white paper
+with a near-black warm ink in light and warm charcoal in dark — not the light palette inverted.
+A pure-white page with blue-grey text reads as a form to fill in; the same layout on paper reads
+as something to keep, which is what a personal record should be. Amber, the default, holds onto
+that in light mode and trades the charcoal for near-black in dark, paying for the true accent
+hue Paper deliberately does without.
 
 **Every text token clears 4.5:1 on every surface it can be placed on — surface, raised and
 sunken.** `faint` used to be 2.9:1, which is what "tertiary" had quietly come to mean — and later
