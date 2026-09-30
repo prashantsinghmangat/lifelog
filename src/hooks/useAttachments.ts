@@ -13,6 +13,28 @@ function revoke(photos: Photo[]): void {
   for (const photo of photos) URL.revokeObjectURL(photo.url)
 }
 
+/**
+ * The URLs for a set of stored photos, reusing every one already held.
+ *
+ * **A photo that has not changed must keep the same URL.** Rebuilding the lot
+ * on every write gave every `<img>` on screen a new `src` at once, so adding
+ * one photo blanked and repainted all of them — the flicker. Only genuinely
+ * new ids are minted, and only genuinely gone ids are revoked.
+ */
+function reconcileUrls(
+  held: Photo[],
+  stored: attachments.Attachment[],
+): { next: Photo[]; gone: Photo[] } {
+  const byId = new Map(held.map((photo) => [photo.id, photo]))
+  const next = stored.map((a) => {
+    const already = byId.get(a.id)
+    if (already !== undefined) return already
+    return { id: a.id, url: URL.createObjectURL(a.blob), createdAt: a.createdAt }
+  })
+  const keeping = new Set(next.map((photo) => photo.id))
+  return { next, gone: held.filter((photo) => !keeping.has(photo.id)) }
+}
+
 /** One entry's local photos: list, add (from a picked file), remove. */
 export function useAttachments(entryId: string) {
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -26,12 +48,8 @@ export function useAttachments(entryId: string) {
     // degrades to "no photos shown" rather than an unhandled rejection — this
     // is passive display, not a save the user is waiting on.
     const stored = await attachments.list(entryId).catch(() => [])
-    revoke(shown.current)
-    const next = stored.map((a) => ({
-      id: a.id,
-      url: URL.createObjectURL(a.blob),
-      createdAt: a.createdAt,
-    }))
+    const { next, gone } = reconcileUrls(shown.current, stored)
+    revoke(gone)
     shown.current = next
     setPhotos(next)
   }, [entryId])
@@ -64,15 +82,41 @@ export function useAttachments(entryId: string) {
     [entryId, refresh],
   )
 
+  /** Hands back what it removed, so the caller can offer Undo over the real bytes. */
   const remove = useCallback(
     async (id: string) => {
-      await attachments.remove(id)
+      const taken = await attachments.remove(id)
+      await refresh()
+      return taken
+    },
+    [refresh],
+  )
+
+  const restore = useCallback(
+    async (photo: attachments.Attachment) => {
+      await attachments.restore(photo)
       await refresh()
     },
     [refresh],
   )
 
-  return { photos, addState, add, remove }
+  return { photos, addState, add, remove, restore }
+}
+
+/**
+ * Every photo on one entry, loaded on demand with its own URLs.
+ *
+ * For opening the viewer from a timeline row, where the row holds only the one
+ * representative thumbnail and the rest have never been read. The caller owns
+ * what comes back and must revoke it — `App` does, when the viewer closes.
+ */
+export async function photosOf(entryId: string): Promise<Photo[]> {
+  const stored = await attachments.list(entryId).catch(() => [])
+  return stored.map((a) => ({
+    id: a.id,
+    url: URL.createObjectURL(a.blob),
+    createdAt: a.createdAt,
+  }))
 }
 
 /**
@@ -98,16 +142,30 @@ export function usePhotoThumbnails(entryIds: string[]): Record<string, Thumbnail
       void attachments
         .firstPhotoBlobs(entryIds)
         .then((found) => {
+          // Same rule as `reconcileUrls` above: a row whose photo has not
+          // changed keeps its URL, or every thumbnail on the day blinks each
+          // time any one of them is written. Only the count may differ, and
+          // changing a number repaints nothing.
+          const minted: string[] = []
           const next: Record<string, Thumbnail> = {}
           for (const [id, { blob, count }] of Object.entries(found)) {
-            next[id] = { url: URL.createObjectURL(blob), count }
+            const already = shown.current[id]
+            if (already !== undefined) {
+              next[id] = already.count === count ? already : { url: already.url, count }
+            } else {
+              const url = URL.createObjectURL(blob)
+              minted.push(url)
+              next[id] = { url, count }
+            }
           }
           if (!live) {
             // Nothing will ever render these, so they leak unless dropped here.
-            for (const shot of Object.values(next)) URL.revokeObjectURL(shot.url)
+            for (const url of minted) URL.revokeObjectURL(url)
             return
           }
-          for (const shot of Object.values(shown.current)) URL.revokeObjectURL(shot.url)
+          for (const [id, shot] of Object.entries(shown.current)) {
+            if (next[id]?.url !== shot.url) URL.revokeObjectURL(shot.url)
+          }
           shown.current = next
           setUrls(next)
         })

@@ -225,7 +225,7 @@ export function QuickAdd({
   /** A photo that could not be filed, said separately from the entry's own outcome. */
   const [photoProblem, setPhotoProblem] = useState<string | null>(null)
   /** The staged photo being looked at full-size, if any. */
-  const [viewing, setViewing] = useState<string | null>(null)
+  const [viewing, setViewing] = useState<number | null>(null)
 
   /**
    * Unmount only. Every other exit already revokes what it drops — `unstage`
@@ -560,15 +560,17 @@ export function QuickAdd({
             the control keeps its usual height on every other keystroke. */}
         {staged.length > 0 && (
           <div className="flex flex-wrap gap-2 px-3 pb-2">
-            {staged.map((photo) => (
+            {staged.map((photo, position) => (
               <div key={photo.id} className="relative h-14 w-14">
                 {/* The thumbnail is the way in to the photo, not decoration
                     beside a remove button — a bill attached and never
-                    viewable again is the whole reason this is here. */}
+                    viewable again is the whole reason this is here. Opens the
+                    staged set at this one, so several can be checked over
+                    before any of them is saved. */}
                 <button
                   type="button"
-                  onClick={() => setViewing(photo.url)}
-                  aria-label="View photo"
+                  onClick={() => setViewing(position)}
+                  aria-label={`View photo ${position + 1}`}
                   className="h-full w-full overflow-hidden rounded-lg border border-edge"
                 >
                   <img src={photo.url} alt="" className="h-full w-full object-cover" />
@@ -784,7 +786,9 @@ export function QuickAdd({
         </div>
       </div>
 
-      {viewing !== null && <PhotoViewer url={viewing} onClose={() => setViewing(null)} />}
+      {viewing !== null && (
+        <PhotoViewer photos={staged} index={viewing} onClose={() => setViewing(null)} />
+      )}
 
       {/* The entry itself is saved and on the timeline — this says only that
           its photo is not, which is the one thing the toast must not be made

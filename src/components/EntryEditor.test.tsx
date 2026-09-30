@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EntryEditor } from './EntryEditor'
 import type { Patch, Row } from '../hooks/useEntries'
 import type { AddState, Photo } from '../hooks/useAttachments'
+import type { ToastState } from './Toast'
 
 /** Edit → save, the journey where a wrong parse gets corrected. */
 
@@ -17,7 +18,8 @@ vi.mock('../hooks/useAttachments', () => ({
     photos: [] as Photo[],
     addState: 'idle' as AddState,
     add: vi.fn(async () => {}),
-    remove: vi.fn(async () => {}),
+    remove: vi.fn(async () => undefined),
+    restore: vi.fn(async () => {}),
   })),
 }))
 
@@ -59,6 +61,7 @@ function row(over: Partial<Row> = {}): Row {
 
 function setup(over: Partial<Row> = {}) {
   const onSave = vi.fn<(patch: Patch) => void>()
+  const onToast = vi.fn<(state: ToastState) => void>()
   const onDelete = vi.fn()
   const onAddToCalendar = vi.fn()
   const onClose = vi.fn()
@@ -75,7 +78,7 @@ function setup(over: Partial<Row> = {}) {
   )
 
   const save = () => userEvent.click(screen.getByRole('button', { name: 'Save' }))
-  return { onSave, onDelete, onAddToCalendar, onClose, save }
+  return { onSave, onToast, onDelete, onAddToCalendar, onClose, save }
 }
 
 describe('when the entry next happens', () => {
@@ -571,7 +574,7 @@ describe('local photos', () => {
 
   it('hands a photographed blob to the attachment hook', async () => {
     const add = vi.fn(async () => {})
-    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn() })
+    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn(), restore: vi.fn() })
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: 'Camera' }))
@@ -600,10 +603,11 @@ describe('local photos', () => {
       addState: 'idle',
       add: vi.fn(),
       remove: vi.fn(),
+      restore: vi.fn(),
     })
     setup()
 
-    await userEvent.click(screen.getByRole('button', { name: 'View photo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'View photo 1' }))
 
     const dialogs = screen.getAllByRole('dialog')
     expect(dialogs).toHaveLength(2)
@@ -613,7 +617,7 @@ describe('local photos', () => {
 
   it('hands a picked file to the attachment hook', async () => {
     const add = vi.fn(async () => {})
-    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn() })
+    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn(), restore: vi.fn() })
     setup()
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -629,6 +633,7 @@ describe('local photos', () => {
       addState: 'failed',
       add: vi.fn(),
       remove: vi.fn(),
+      restore: vi.fn(),
     })
     const { onSave } = setup()
 
@@ -637,16 +642,82 @@ describe('local photos', () => {
   })
 
   it('removing a thumbnail calls the attachment hook with that photo\'s id', async () => {
-    const remove = vi.fn(async () => {})
+    const remove = vi.fn(async () => undefined)
     vi.mocked(useAttachments).mockReturnValue({
       photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: '2026-09-05T10:00:00+05:30' }],
       addState: 'idle',
       add: vi.fn(),
       remove,
+      restore: vi.fn(),
     })
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove photo' }))
     expect(remove).toHaveBeenCalledWith('photo-1')
+  })
+
+  /**
+   * The app's rule is undo, never "are you sure?" — and a photo is the one
+   * thing in this sheet that cannot be retyped if it goes by mistake.
+   *
+   * **In the strip, not in a toast.** The toast was the first attempt and it
+   * could never be seen: `Toast` renders in flow beneath `Sheet`'s `z-40`,
+   * deliberately, because a toast over a sheet's Save/Cancel/Delete meant a tap
+   * aimed at Save landed on Undo. Found on a device, where the photo went and
+   * nothing at all appeared.
+   */
+  it('offers Undo where the photo was, and restores the same bytes', async () => {
+    const taken = {
+      id: 'photo-1',
+      entryId: 'row-1',
+      blob: new Blob(['x'], { type: 'image/jpeg' }),
+      createdAt: '2026-09-05T10:00:00+05:30',
+    }
+    const restore = vi.fn(async () => {})
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: taken.createdAt }],
+      addState: 'idle',
+      add: vi.fn(),
+      remove: vi.fn(async () => taken),
+      restore,
+    })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove photo' }))
+    const undo = await screen.findByRole('button', { name: 'Undo' })
+
+    await userEvent.click(undo)
+    // The record itself, not a re-encode of it.
+    expect(restore).toHaveBeenCalledWith(taken)
+  })
+
+  it('offers nothing to undo before anything has been removed', () => {
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: '2026-09-05T10:00:00+05:30' }],
+      addState: 'idle',
+      add: vi.fn(),
+      remove: vi.fn(async () => undefined),
+      restore: vi.fn(),
+    })
+    setup()
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+
+  it('opens the set at the thumbnail that was tapped, not always the first', async () => {
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [
+        { id: 'p1', url: 'blob:one', createdAt: '2026-09-05T10:00:00+05:30' },
+        { id: 'p2', url: 'blob:two', createdAt: '2026-09-05T10:01:00+05:30' },
+        { id: 'p3', url: 'blob:three', createdAt: '2026-09-05T10:02:00+05:30' },
+      ],
+      addState: 'idle',
+      add: vi.fn(),
+      remove: vi.fn(async () => undefined),
+      restore: vi.fn(),
+    })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: 'View photo 2' }))
+    expect(screen.getByText('2 / 3')).toBeTruthy()
   })
 })

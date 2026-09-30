@@ -1,8 +1,9 @@
-import { useRef, useState, type FormEvent } from 'react'
-import { CameraIcon, CheckIcon, CloseIcon, ImageIcon } from './Icons'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { ArrowUpIcon, CameraIcon, CheckIcon, CloseIcon, ImageIcon } from './Icons'
 import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
 import { useAttachments } from '../hooks/useAttachments'
+import type { Attachment } from '../lib/attachments'
 import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import {
   done as isDone,
@@ -47,6 +48,9 @@ const FIELD =
 // corrected. The height is set rather than the padding, because the same base is
 // also the title's textarea, which is sized by its rows.
 const INPUT = `${FIELD} h-11`
+
+/** As long as the toast gives an action, rather than a second timing to keep in step. */
+const UNDO_WINDOW = 6000
 const AREA = `${FIELD} min-h-20 resize-y py-2.5 leading-relaxed`
 
 // Short, because four of these share a row on a 375px screen.
@@ -70,7 +74,14 @@ function rupeeText(paise: number | null): string {
  * an Edit button — opening the entry is already the tap that says "I want to
  * change this", so a second one earns nothing.
  */
-export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClose }: Props) {
+export function EntryEditor({
+  row,
+  now,
+  onSave,
+  onDelete,
+  onAddToCalendar,
+  onClose,
+}: Props) {
   const [kind, setKind] = useState<Kind>(row.kind)
   const [title, setTitle] = useState(row.title)
   const [day, setDay] = useState(row.occurred_on)
@@ -100,10 +111,44 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
    */
   const [problem, setProblem] = useState<string | null>(null)
 
-  const { photos, addState, add, remove: removePhoto } = useAttachments(row.id)
+  const { photos, addState, add, remove: removePhoto, restore: restorePhoto } = useAttachments(row.id)
   const galleryInput = useRef<HTMLInputElement>(null)
-  /** The photo being looked at full-size, stacked over this sheet. */
-  const [viewing, setViewing] = useState<string | null>(null)
+  /** Which photo the viewer is open on, stacked over this sheet. */
+  const [viewing, setViewing] = useState<number | null>(null)
+  /** The photo just removed, while taking it back is still on offer. */
+  const [undoable, setUndoable] = useState<Attachment | null>(null)
+  const undoTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(undoTimer.current), [])
+
+  /**
+   * A removed photo is gone at once and takeable back, the same bargain a
+   * deleted entry makes — the app's rule is undo, never "are you sure?". The
+   * bytes come back from `remove` itself, so this restores the photo rather
+   * than a re-encode of it.
+   *
+   * **Offered in the strip rather than in a toast**, which is where the first
+   * attempt put it and where it could never be seen: `Toast` renders in flow
+   * beneath `Sheet`'s `z-40`, and deliberately — a toast over a sheet's
+   * Save/Cancel/Delete meant a tap aimed at Save landed on Undo and restored
+   * the row just deleted. The slot the photo occupied is the honest place for
+   * it anyway: it says what was removed as well as that something was.
+   */
+  async function dropPhoto(id: string) {
+    const taken = await removePhoto(id)
+    if (taken === undefined) return
+    setUndoable(taken)
+    // Long enough to notice and decide, matching the toast's own window for an
+    // action rather than inventing a second timing.
+    if (undoTimer.current !== undefined) window.clearTimeout(undoTimer.current)
+    undoTimer.current = window.setTimeout(() => setUndoable(null), UNDO_WINDOW)
+  }
+
+  function undoRemove() {
+    if (undoable === null) return
+    if (undoTimer.current !== undefined) window.clearTimeout(undoTimer.current)
+    void restorePhoto(undoable)
+    setUndoable(null)
+  }
   /** A camera that would not open, said where a failed photo save is already said. */
   const [cameraProblem, setCameraProblem] = useState<string | null>(null)
 
@@ -608,21 +653,35 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
               {cameraProblem}
             </p>
           )}
-          {photos.length > 0 && (
+          {(photos.length > 0 || undoable !== null) && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {photos.map((photo) => (
+              {/* Where the photo was, for as long as it can be had back. A
+                  toast cannot be seen from inside a sheet — see `dropPhoto`. */}
+              {undoable !== null && (
+                <button
+                  type="button"
+                  onClick={undoRemove}
+                  className="flex h-16 w-16 flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-edge text-[0.625rem] font-medium text-muted transition-colors hover:bg-sunken"
+                >
+                  <ArrowUpIcon size={14} className="rotate-[-90deg]" />
+                  Undo
+                </button>
+              )}
+              {photos.map((photo, position) => (
                 <div key={photo.id} className="relative h-16 w-16">
+                  {/* Opens the whole set *at this one*, so the strip is a way
+                      into the photos rather than a row of separate buttons. */}
                   <button
                     type="button"
-                    onClick={() => setViewing(photo.url)}
-                    aria-label="View photo"
+                    onClick={() => setViewing(position)}
+                    aria-label={`View photo ${position + 1}`}
                     className="h-full w-full overflow-hidden rounded-lg border border-edge"
                   >
                     <img src={photo.url} alt="" className="h-full w-full object-cover" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => void removePhoto(photo.id)}
+                    onClick={() => void dropPhoto(photo.id)}
                     aria-label="Remove photo"
                     className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-surface"
                   >
@@ -685,7 +744,9 @@ export function EntryEditor({ row, now, onSave, onDelete, onAddToCalendar, onClo
         registration stack, and the viewer mounts while the editor is already
         open, so it registers last and is on top whichever order these appear
         in. Moving it does not disturb that. */}
-    {viewing !== null && <PhotoViewer url={viewing} onClose={() => setViewing(null)} />}
+    {viewing !== null && (
+      <PhotoViewer photos={photos} index={viewing} onClose={() => setViewing(null)} />
+    )}
     </>
   )
 }

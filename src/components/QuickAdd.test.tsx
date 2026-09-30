@@ -666,9 +666,9 @@ describe('attaching a photo while composing', () => {
   it('opens a staged photo full-size when its thumbnail is tapped', async () => {
     setup()
     await userEvent.upload(picker(), jpeg())
-    await waitFor(() => expect(screen.getByLabelText('View photo')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('View photo 1')).toBeTruthy())
 
-    await userEvent.click(screen.getByLabelText('View photo'))
+    await userEvent.click(screen.getByLabelText('View photo 1'))
     expect(screen.getByRole('dialog', { name: 'Photo' })).toBeTruthy()
   })
 

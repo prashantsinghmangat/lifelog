@@ -17,7 +17,7 @@ import { Sheet } from './components/Sheet'
 import { You } from './components/You'
 import { Toast, type ToastState } from './components/Toast'
 import { WeekStrip } from './components/WeekStrip'
-import { usePhotoThumbnails } from './hooks/useAttachments'
+import { photosOf, usePhotoThumbnails, type Photo } from './hooks/useAttachments'
 import { useEntries, type Row } from './hooks/useEntries'
 import { useNudges } from './hooks/useNudges'
 import { useSession } from './hooks/useSession'
@@ -369,8 +369,27 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
     [shownEntries, failedElsewhere],
   )
   const photoThumbnails = usePhotoThumbnails(visiblePhotoIds)
-  /** A row's photo opened full-size, which is a different act from opening the row. */
-  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null)
+  /**
+   * A row's photos opened full-size, which is a different act from opening the
+   * row. The whole set, not the one thumbnail the row drew: `+2` says there are
+   * others and they have to be reachable.
+   *
+   * These URLs are minted by `photosOf` for this viewer alone, so closing it
+   * revokes them — the row's own thumbnail URL belongs to `usePhotoThumbnails`
+   * and is not among them.
+   */
+  const [viewingPhotos, setViewingPhotos] = useState<Photo[] | null>(null)
+
+  function closePhotos() {
+    for (const photo of viewingPhotos ?? []) URL.revokeObjectURL(photo.url)
+    setViewingPhotos(null)
+  }
+
+  function openPhotos(entryId: string) {
+    void photosOf(entryId).then((found) => {
+      if (found.length > 0) setViewingPhotos(found)
+    })
+  }
 
   /** Hands the entry to the OS calendar, which is what actually raises the alarm. */
   async function addToCalendar(rows: Row[], name: string) {
@@ -998,7 +1017,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                   now={now}
                   photoUrl={photoThumbnails[row.id]?.url}
                   photoCount={photoThumbnails[row.id]?.count}
-                  onOpenPhoto={() => setViewingPhoto(photoThumbnails[row.id]?.url ?? null)}
+                  onOpenPhoto={() => openPhotos(row.id)}
                   onOpen={() => setEditing(asStored(row))}
                   onRetry={retry}
                 />
@@ -1053,7 +1072,7 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
                       offDay
                       photoUrl={photoThumbnails[row.id]?.url}
                       photoCount={photoThumbnails[row.id]?.count}
-                      onOpenPhoto={() => setViewingPhoto(photoThumbnails[row.id]?.url ?? null)}
+                      onOpenPhoto={() => openPhotos(row.id)}
                       onOpen={() => setDay(row.occurred_on)}
                       onRetry={retry}
                     />
@@ -1094,8 +1113,8 @@ function Day({ email, userId, local, theme, onTheme, onSignIn }: DayProps) {
         </Sheet>
       )}
 
-      {viewingPhoto !== null && (
-        <PhotoViewer url={viewingPhoto} onClose={() => setViewingPhoto(null)} />
+      {viewingPhotos !== null && (
+        <PhotoViewer photos={viewingPhotos} index={0} onClose={closePhotos} />
       )}
 
       {editing !== null && (

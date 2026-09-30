@@ -173,9 +173,39 @@ export function list(entryId: string): Promise<Attachment[]> {
   )
 }
 
-/** Deletes one photo. */
-export function remove(id: string): Promise<void> {
-  return run('readwrite', (store) => store.delete(id))
+/**
+ * Deletes one photo and hands back what it deleted, so Undo can put the exact
+ * bytes back rather than a re-encode of them.
+ *
+ * Read and delete in one transaction: split across two, a second remove of the
+ * same id between them would return a record that no longer exists, and Undo
+ * would resurrect a photo the user removed twice.
+ */
+export function remove(id: string): Promise<Attachment | undefined> {
+  return openDb().then(
+    (db) =>
+      new Promise<Attachment | undefined>((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite')
+        const store = tx.objectStore(STORE)
+        const read = store.get(id)
+        let taken: Attachment | undefined
+        read.onsuccess = () => {
+          taken = read.result as Attachment | undefined
+          if (taken !== undefined) store.delete(id)
+        }
+        read.onerror = () => reject(read.error ?? new Error('Failed to read the attachment'))
+        tx.onerror = () => reject(tx.error ?? new Error('Failed to remove the attachment'))
+        tx.oncomplete = () => {
+          notifyChanged()
+          resolve(taken)
+        }
+      }),
+  )
+}
+
+/** Puts a removed photo back exactly as it was, for Undo. */
+export async function restore(photo: Attachment): Promise<void> {
+  await run('readwrite', (store) => store.put(photo))
 }
 
 /** Deletes every photo belonging to one entry. */
