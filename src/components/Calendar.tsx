@@ -4,7 +4,8 @@ import { KindMark } from './KindMark'
 import { MonthGrid } from './MonthGrid'
 import { Segmented } from './Segmented'
 import { Stats } from './Stats'
-import { behindYou } from '../lib/events'
+import { ChartIcon, GridIcon } from './Icons'
+import { behindYou, reminderAt } from '../lib/events'
 import { byClock } from '../lib/history'
 import { clock, dayKey, minutes, rowValue, rupees } from '../lib/format'
 import { spanOf, totalsFor } from '../lib/stats'
@@ -84,8 +85,8 @@ export function Calendar({ day, now, all, loadDays, onPick }: Props) {
           label="Calendar view"
           value={look}
           options={[
-            { value: 'grid', label: 'Grid' },
-            { value: 'chart', label: 'Chart' },
+            { value: 'grid', label: 'Grid', icon: <GridIcon size={16} /> },
+            { value: 'chart', label: 'Chart', icon: <ChartIcon size={16} /> },
           ]}
           onChange={setLook}
         />
@@ -172,10 +173,11 @@ export function Calendar({ day, now, all, loadDays, onPick }: Props) {
           {peek !== null && (
             <section aria-label={`${format(parseISO(peek), 'EEEE d MMMM')}, peek`} className="mt-4">
               <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold text-ink">
+                <h3 className="flex items-baseline gap-2 text-[15px] font-semibold text-ink">
+                  <span aria-hidden="true" className="h-2 w-2 shrink-0 self-center rounded-full bg-accent" />
                   {format(parseISO(peek), 'EEEE, d MMM')}
                 </h3>
-                <span className="shrink-0 text-xs text-muted tabular-nums">
+                <span className="shrink-0 rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted tabular-nums">
                   {peeked.length} {peeked.length === 1 ? 'entry' : 'entries'}
                 </span>
               </div>
@@ -209,13 +211,21 @@ export function Calendar({ day, now, all, loadDays, onPick }: Props) {
                         <span className="shrink-0 text-sm text-muted tabular-nums">{right}</span>
                       )}
                       {/* Said quietly, the way the strikethrough says it
-                          elsewhere — a fact about the event, not a status
-                          system. */}
+                          elsewhere — facts about the event, not a status
+                          system: behind you is Done, a reminder still to
+                          fire is Alert. */}
                       {row.kind === 'event' && behindYou(row, now) && (
                         <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-muted">
                           Done
                         </span>
                       )}
+                      {row.kind === 'event' &&
+                        !behindYou(row, now) &&
+                        reminderAt(row, now) !== null && (
+                          <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-muted">
+                            Alert
+                          </span>
+                        )}
                     </button>
                   )
                 })}

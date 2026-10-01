@@ -1,32 +1,52 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CheckIcon } from './Icons'
+import {
+  AutoIcon,
+  BellIcon,
+  BookIcon,
+  CalendarIcon,
+  CheckIcon,
+  ClockIcon,
+  DownloadIcon,
+  MoonIcon,
+  MusicIcon,
+  SunIcon,
+} from './Icons'
 import { Segmented } from './Segmented'
 import { openReminderChannelSettings } from '../lib/openSettings'
-import { PALETTES, type PaletteName, type TokenBlock } from '../lib/palettes'
+import { PALETTES, type PaletteName } from '../lib/palettes'
 import { isNative } from '../lib/platform'
 import { permission, requestPermission } from '../lib/reminders'
 import { supabase } from '../lib/supabase'
 import type { Theme } from '../hooks/useTheme'
 
-const THEMES: { value: Theme; label: string }[] = [
-  { value: 'system', label: 'System' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
+const THEMES: { value: Theme; label: string; icon?: ReactNode }[] = [
+  { value: 'system', label: 'System', icon: <AutoIcon size={15} /> },
+  { value: 'light', label: 'Light', icon: <SunIcon size={15} /> },
+  { value: 'dark', label: 'Dark', icon: <MoonIcon size={15} /> },
 ]
 
 /**
- * A section eyebrow with the grouping space built in: the gap above a section
+ * A section heading with the grouping space built in: the gap above a section
  * must be visibly larger than the gaps inside it, which is what makes the
- * groups read as groups.
+ * groups read as groups. Bold sentence case since the mock clone (020).
  */
 function Eyebrow({ id, children }: { id?: string; children: ReactNode }) {
   return (
-    <p
-      id={id}
-      className="mt-[26px] mb-2.5 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase"
-    >
+    <p id={id} className="mt-[26px] mb-2.5 text-[15px] font-semibold text-ink">
       {children}
     </p>
+  )
+}
+
+/** The settings rows' leading mark: a sunken tile with an accent glyph. */
+function Tile({ children }: { children: ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sunken text-accent"
+    >
+      {children}
+    </span>
   )
 }
 
@@ -48,12 +68,14 @@ function Group({ children }: { children: ReactNode }) {
 function Row({
   title,
   detail,
+  icon,
   right,
   onClick,
   ...aria
 }: {
   title: string
   detail?: string
+  icon?: ReactNode
   right?: ReactNode
   onClick: () => void
   role?: string
@@ -69,51 +91,20 @@ function Row({
         detail === undefined ? 'min-h-[52px]' : 'min-h-14'
       }`}
     >
-      <span className="min-w-0">
-        <span className="block text-sm text-ink">{title}</span>
-        {detail !== undefined && (
-          <span className="mt-0.5 block truncate text-xs text-faint">{detail}</span>
-        )}
+      <span className="flex min-w-0 items-center gap-3">
+        {icon !== undefined && <Tile>{icon}</Tile>}
+        <span className="min-w-0">
+          <span className="block text-sm text-ink">{title}</span>
+          {detail !== undefined && (
+            <span className="mt-0.5 block truncate text-xs text-faint">{detail}</span>
+          )}
+        </span>
       </span>
       {right !== undefined && <span className="flex shrink-0 items-center">{right}</span>}
     </button>
   )
 }
 
-/**
- * A palette's swatch is a miniature of the screen, not three colour bands: the
- * palette's own surface, an accent dot, two rules of ink standing in for rows,
- * and a raised bar pinned along the bottom the way the capture control is. It
- * reads as "this is what that theme looks like". Inline styles because these
- * are another palette's tokens, not the live one's — the same table the CSS
- * blocks are tested against, so the swatch cannot lie about its product.
- */
-function Swatch({ tokens }: { tokens: TokenBlock }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="relative block h-7 w-[38px] shrink-0 overflow-hidden rounded-[5px] border border-line"
-      style={{ backgroundColor: tokens.surface }}
-    >
-      <span
-        className="absolute top-1 left-1 h-1 w-1 rounded-full"
-        style={{ backgroundColor: tokens.accent }}
-      />
-      <span
-        className="absolute top-[11px] left-1 h-[2px] w-[18px] rounded-full opacity-30"
-        style={{ backgroundColor: tokens.ink }}
-      />
-      <span
-        className="absolute top-[15px] left-1 h-[2px] w-[13px] rounded-full opacity-30"
-        style={{ backgroundColor: tokens.ink }}
-      />
-      <span
-        className="absolute inset-x-[3px] bottom-[3px] h-[7px] rounded-[3px]"
-        style={{ backgroundColor: tokens.raised, boxShadow: `inset 0 0 0 1px ${tokens.line}` }}
-      />
-    </span>
-  )
-}
 
 type Props = {
   email: string
@@ -220,6 +211,14 @@ export function You({
   // guest is called what the sidebar already calls them. No status badge —
   // there is no tier to display, and "signed in" is one word on the meta line.
   const name = local ? 'Guest' : (email.split('@')[0] ?? email)
+  const initials =
+    name
+      .split(/[\s._-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0] ?? '')
+      .join('')
+      .toUpperCase() || '?'
 
   return (
     <>
@@ -229,12 +228,12 @@ export function You({
         <div className="flex items-center gap-3">
           <span
             aria-hidden="true"
-            className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-accent text-[15px] font-semibold text-surface"
+            className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent text-lg font-semibold text-surface"
           >
-            {(name[0] ?? '?').toUpperCase()}
+            {initials}
           </span>
           <span className="min-w-0">
-            <span className="block truncate text-[15px] leading-snug font-medium text-ink">
+            <span className="block truncate text-[17px] leading-snug font-semibold text-ink">
               {name}
             </span>
             <span className="block truncate text-xs text-muted">
@@ -265,8 +264,9 @@ export function You({
         <button
           type="button"
           onClick={onHelp}
-          className="mt-3.5 flex h-11 w-full items-center justify-center rounded-lg border border-line text-sm font-medium text-ink transition-colors hover:bg-sunken"
+          className="mt-3.5 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-sunken text-sm font-medium text-accent transition-opacity hover:opacity-80"
         >
+          <BookIcon size={18} />
           How to use lifelog
         </button>
       </div>
@@ -284,7 +284,10 @@ export function You({
             light and a dark block, so System keeps resolving whichever is
             picked. Swatches render from the same constant the CSS blocks are
             tested against. */}
-        <div role="radiogroup" aria-label="Palette" className="mt-3 grid grid-cols-2 gap-2">
+        {/* The mock's 3-wide dot grid (020). The dot is that palette's own
+            accent in the resolved mode, straight from the table the CSS
+            blocks are tested against — so the swatch cannot lie. */}
+        <div role="radiogroup" aria-label="Palette" className="mt-3 grid grid-cols-3 gap-2">
           {PALETTES.map((option) => {
             const tokens = resolved === 'dark' ? option.dark : option.light
             const selected = palette === option.name
@@ -295,13 +298,24 @@ export function You({
                 role="radio"
                 aria-checked={selected}
                 onClick={() => onPalette(option.name)}
-                className={`flex h-14 items-center gap-2.5 rounded-[10px] border-[1.5px] px-3 text-left transition-colors ${
-                  selected ? 'border-accent' : 'border-line hover:border-edge'
+                className={`flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-xl border px-2 py-2.5 transition-colors ${
+                  selected ? 'border-accent bg-sunken' : 'border-line hover:border-edge'
                 }`}
               >
-                <Swatch tokens={tokens} />
-                <span className="min-w-0 flex-1 truncate text-sm text-ink">{option.label}</span>
-                {selected && <CheckIcon size={14} className="shrink-0 text-accent" />}
+                <span
+                  aria-hidden="true"
+                  className="flex h-5 w-5 items-center justify-center rounded-full"
+                  style={{ backgroundColor: tokens.accent }}
+                >
+                  {selected && (
+                    <span className="flex" style={{ color: tokens.surface }}>
+                      <CheckIcon size={12} />
+                    </span>
+                  )}
+                </span>
+                <span className={`truncate text-xs text-ink ${selected ? 'font-semibold' : ''}`}>
+                  {option.label}
+                </span>
               </button>
             )
           })}
@@ -319,8 +333,13 @@ export function You({
             {/* Permission is passive status, so it reads as a row rather than
                 as the loudest element in its section. */}
             {reminders === 'granted' && (
-              <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5">
-                <span className="text-sm text-ink">Notifications</span>
+              <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5 py-2">
+                <span className="flex min-w-0 items-center gap-3">
+                  <Tile>
+                    <BellIcon size={18} />
+                  </Tile>
+                  <span className="text-sm text-ink">Notifications</span>
+                </span>
                 <span className="text-sm text-muted">Allowed</span>
               </div>
             )}
@@ -328,13 +347,19 @@ export function You({
               <Row
                 title="Notifications"
                 detail="If tapping does nothing, Android has stopped asking — its own settings has the switch"
+                icon={<BellIcon size={18} />}
                 right={<span className="text-sm font-medium text-accent">Allow</span>}
                 onClick={() => void allowReminders()}
               />
             )}
             {reminders === 'unavailable' && (
-              <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5">
-                <span className="text-sm text-ink">Notifications</span>
+              <div className="flex min-h-[52px] items-center justify-between gap-3 px-3.5 py-2">
+                <span className="flex min-w-0 items-center gap-3">
+                  <Tile>
+                    <BellIcon size={18} />
+                  </Tile>
+                  <span className="text-sm text-ink">Notifications</span>
+                </span>
                 <span className="text-sm text-muted">Not available here</span>
               </div>
             )}
@@ -349,6 +374,7 @@ export function You({
                 aria-label="Daily prompts"
                 title="Daily prompts"
                 detail="9am and 9pm"
+                icon={<ClockIcon size={18} />}
                 right={
                   <span
                     aria-hidden="true"
@@ -376,6 +402,7 @@ export function You({
             <Row
               title="Reminder sound"
               detail="Opens Android's settings for this channel"
+              icon={<MusicIcon size={18} />}
               onClick={() => void openReminderChannelSettings()}
             />
           </Group>
@@ -384,7 +411,12 @@ export function You({
 
       <Eyebrow id="your-log">Your log</Eyebrow>
       <Group>
-        <Row title="Export a copy" detail="JSON" onClick={onExport} />
+        <Row
+          title="Export a copy"
+          detail="JSON"
+          icon={<DownloadIcon size={18} />}
+          onClick={onExport}
+        />
 
         {/* The web's answer only: on the web no API can raise an alarm with
             the app closed, so the OS calendar has to; natively the reminder is
@@ -394,6 +426,7 @@ export function You({
           <Row
             title="Send events to calendar"
             detail="Upcoming events and birthdays, each with its own reminder"
+            icon={<CalendarIcon size={18} />}
             onClick={onExportCalendar}
           />
         )}
@@ -436,15 +469,18 @@ export function You({
 
       {/* Nothing to sign out of as a guest, and the button would read as
           "delete my log" — the one thing it must not do to the only copy. */}
-      {!local && (
-        <button
-          type="button"
-          onClick={onSignOut}
-          className="-ml-2 mt-[26px] h-11 rounded-lg px-2 text-sm text-expense transition-colors hover:bg-sunken"
-        >
-          Sign out
-        </button>
-      )}
+      <div className="mt-[26px] flex flex-col items-center gap-0.5 pb-2 text-center">
+        {!local && (
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="h-11 rounded-lg px-4 text-sm font-medium text-expense transition-colors hover:bg-sunken"
+          >
+            Sign out
+          </button>
+        )}
+        <p className="text-xs text-faint">Designed with clarity and restraint.</p>
+      </div>
     </>
   )
 }

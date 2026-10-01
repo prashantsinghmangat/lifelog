@@ -7,7 +7,7 @@ import { AheadSheet } from './components/AheadSheet'
 import { BottomNav, type View } from './components/BottomNav'
 import { Calendar } from './components/Calendar'
 import { HelpSheet } from './components/HelpSheet'
-import { BellIcon, Chevron, InfoIcon, PersonIcon } from './components/Icons'
+import { BellIcon, Chevron, InfoIcon, NoteIcon, PersonIcon, SearchIcon } from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { OnThisDay } from './components/OnThisDay'
@@ -896,17 +896,49 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
       {/* Capped: across 900px the eye cannot connect a title on the left to its
           amount on the right. A reading measure, not the whole column. */}
       <main {...(view === 'today' ? swipe : {})} className="swipe-area mx-auto flex w-full min-w-0 max-w-2xl flex-col">
+        {/* The mock's top chrome (020), compact only — `lg` keeps the
+            sidebar. Both controls are wired: search opens Ask, the one place
+            the log answers from; the avatar opens You. `order-first` keeps it
+            above the box when Ask dissolves the bottom block. */}
+        <div className="order-first flex h-12 items-center justify-between lg:hidden">
+          <div className="flex min-w-0 items-center gap-2">
+            <NoteIcon size={20} className="shrink-0 text-accent" />
+            <span className="truncate text-[17px] font-semibold tracking-tight text-ink">
+              {TITLES[view]}
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              aria-label="Search your log in Ask"
+              onClick={() => setView('ask')}
+              className="flex h-11 w-11 items-center justify-center rounded-full text-muted transition-colors hover:text-ink"
+            >
+              <SearchIcon size={20} />
+            </button>
+            <button
+              type="button"
+              aria-label="Account and settings"
+              onClick={() => setView('you')}
+              className="-mr-1.5 flex h-11 w-11 items-center justify-center"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-surface">
+                <PersonIcon size={16} />
+              </span>
+            </button>
+          </div>
+        </div>
+
         {/* The day's own header belongs to the day. The other three name
             themselves at the same size, because whatever the screen is about is
             the one thing on it allowed to be big. */}
         {view === 'today' ? (
           <>
-            {/* The quiet row that used to sit here — the wordmark and a 20px
-                account glyph — is what paid for the bar along the bottom. It
-                named the app on a screen nobody reaches without opening the app,
-                and it hid the account in the least looked-at corner there is.
-                Both of those are the nav's now, and the day header is the first
-                thing on the screen. */}
+            {/* The quiet row the nav once retired came back as the chrome
+                above (020) — but wired this time: search and the avatar are
+                second routes to Ask and You, not a wordmark hiding the
+                account. The day header is still the first thing that is
+                *about* the day. */}
             <DayHeader
               day={day}
               now={now}

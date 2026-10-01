@@ -88,10 +88,18 @@ const CAPTION: Record<Kind, [string, string]> = {
  * screen — a count, told in ink.
  */
 const MEASURES: { value: Measure; label: string; fill: string }[] = [
+  { value: 'entries', label: 'All entries', fill: 'bg-ink' },
   { value: 'spent', label: 'Spent', fill: 'bg-expense' },
   { value: 'hours', label: 'Hours', fill: 'bg-time' },
-  { value: 'entries', label: 'How often', fill: 'bg-ink' },
 ]
+
+/** The legend's short words — the mock's. The breakdown keeps the full names. */
+const LEGEND: Record<Kind, string> = {
+  expense: 'Spent',
+  time: 'Focus',
+  event: 'Events',
+  note: 'Notes',
+}
 
 const SCALES: { value: Scale; label: string }[] = [
   { value: 'day', label: 'Day' },
@@ -158,7 +166,8 @@ export function Stats({ all, now, day }: Props) {
    */
   const [scale, setScale] = useState<Scale>('month')
   const [anchor, setAnchor] = useState(() => (day < today ? day : today))
-  const [measure, setMeasure] = useState<Measure>('spent')
+  // All entries first — the stacked picture is the mock's hero (020).
+  const [measure, setMeasure] = useState<Measure>('entries')
 
   /**
    * The hour picked out of the day view — the one bar tap that goes nowhere,
@@ -287,19 +296,19 @@ export function Stats({ all, now, day }: Props) {
       {/* The period selector: four equal buttons, not a second full-width
           segmented control stacked under Grid | Chart. The live one is a
           filled `sunken` pill at 600; the pill is 40px inside a 44px target. */}
-      <div role="group" aria-label="Scale" className="flex gap-2">
+      <div role="group" aria-label="Scale" className="flex rounded-[11px] bg-sunken p-[3px]">
         {SCALES.map((option) => (
           <button
             key={option.value}
             type="button"
             aria-pressed={scale === option.value}
             onClick={() => setScale(option.value)}
-            className="flex h-11 min-w-0 flex-1 items-center justify-center"
+            className="-my-[5px] flex h-11 min-w-0 flex-1 items-center justify-center"
           >
             <span
-              className={`flex h-10 w-full items-center justify-center rounded-[10px] text-sm transition-colors ${
+              className={`flex h-[34px] w-full items-center justify-center rounded-lg text-sm transition-colors ${
                 scale === option.value
-                  ? 'bg-sunken font-semibold text-ink'
+                  ? 'bg-accent font-semibold text-surface shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
                   : 'text-muted hover:text-ink'
               }`}
             >
@@ -324,13 +333,13 @@ export function Stats({ all, now, day }: Props) {
         {/* Paired right, like the day header's own: one place to aim. Disabled
             at the bounds rather than scrolling into empty months a reader
             would take for data loss. */}
-        <div className="flex shrink-0 items-center">
+        <div className="flex shrink-0 items-center rounded-full bg-sunken px-0.5">
           <button
             type="button"
             aria-label="Previous period"
             disabled={back === null}
             onClick={() => back !== null && setAnchor(back)}
-            className={`flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors ${
+            className={`-my-1 flex h-11 w-10 items-center justify-center rounded-full text-muted transition-colors ${
               back === null ? 'opacity-25' : 'hover:text-ink active:text-ink'
             }`}
           >
@@ -341,7 +350,7 @@ export function Stats({ all, now, day }: Props) {
             aria-label="Next period"
             disabled={ahead === null}
             onClick={() => ahead !== null && setAnchor(ahead)}
-            className={`-mr-2 flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors ${
+            className={`-my-1 flex h-11 w-10 items-center justify-center rounded-full text-muted transition-colors ${
               ahead === null ? 'opacity-25' : 'hover:text-ink active:text-ink'
             }`}
           >
@@ -355,8 +364,9 @@ export function Stats({ all, now, day }: Props) {
           what the period held on a sunken strip, and the measure pills right
           under the telemetry they change (019). */}
       <div className="mt-2 rounded-2xl border border-line bg-raised px-3.5 py-3">
+        <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+          <p className="truncate text-[0.6875rem] font-semibold tracking-[0.1em] text-expense uppercase">
             {scale === 'day' ? 'Spent' : `Spent this ${scale}`}
           </p>
           <div className="mt-1 flex items-baseline gap-2">
@@ -387,6 +397,15 @@ export function Stats({ all, now, day }: Props) {
               {totals.activeDays === 1 ? 'day' : 'days'} with entries
             </p>
           )}
+        </div>
+
+        {/* The wallet tile, the card's own mark. */}
+        <span
+          aria-hidden="true"
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${TILE.expense}`}
+        >
+          <WalletIcon size={20} />
+        </span>
         </div>
 
         {/* What the period held, one string on a sunken band so it reads —
@@ -465,7 +484,7 @@ export function Stats({ all, now, day }: Props) {
               {STACK.map((kind) => (
                 <span key={kind} className="flex items-center gap-1.5 text-[0.6875rem] text-muted">
                   <span aria-hidden="true" className={`h-2 w-2 rounded-full ${SEGMENT[kind]}`} />
-                  {KIND_NAME[kind]}
+                  {LEGEND[kind]}
                 </span>
               ))}
               </div>
@@ -476,20 +495,14 @@ export function Stats({ all, now, day }: Props) {
             {scale === 'day' ? 'Tap an hour to inspect it' : 'Tap a bar to go further in'}
           </p>
 
-          <div className="relative mt-5">
-          {/* Two dashed guides at the peak and its half, labelled on surface
-              chips at the right so a label never sits on a bar. Drawn first:
-              the bar row after them is positioned, so it paints on top. */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-line"
-          />
-          {max > 1 && (
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-line"
-            />
-          )}
+          <div className="relative mt-4">
+          {/* One guide row at the peak — the mock's: a word, a dashed rule,
+              the value it stands for. */}
+          <div aria-hidden="true" className="flex items-center gap-2 pb-1.5 text-faint">
+            <span className="text-[10px] font-medium">High</span>
+            <span className="min-w-0 flex-1 border-t border-dashed border-line" />
+            <span className="text-[10px] tabular-nums">{said(measure, max)}</span>
+          </div>
 
           <div
             role="group"
@@ -506,7 +519,7 @@ export function Stats({ all, now, day }: Props) {
                   aria-label={barName(column)}
                   aria-pressed={scale === 'day' ? column.key === hour : undefined}
                   onClick={() => tap(column)}
-                  className="flex h-full min-w-0 flex-1 flex-col justify-end"
+                  className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
                 >
                   {/* One colour per measure; today takes the accent and the
                       selected bar takes ink. Radius on the data end only,
@@ -521,7 +534,7 @@ export function Stats({ all, now, day }: Props) {
                       // 016's CVD objection by explicit decision — spec 017.
                       <span
                         aria-hidden="true"
-                        className="flex w-full flex-col overflow-hidden rounded-t-[3px]"
+                        className="flex w-full max-w-[8px] flex-col overflow-hidden rounded-full"
                         style={{ height: height(value, max) }}
                       >
                         {TOPDOWN.map(
@@ -538,7 +551,7 @@ export function Stats({ all, now, day }: Props) {
                     ) : (
                       <span
                         aria-hidden="true"
-                        className={`w-full rounded-t-[3px] ${
+                        className={`w-full max-w-[8px] rounded-full ${
                           value === 0
                             ? 'bg-sunken'
                             : selected
@@ -550,10 +563,9 @@ export function Stats({ all, now, day }: Props) {
                         style={{ height: value === 0 ? 3 : height(value, max) }}
                       />
                     ))}
-                  <span aria-hidden="true" className="mt-px h-px w-full bg-edge" />
                   <span
                     aria-hidden="true"
-                    className={`h-[8px] w-full overflow-visible text-center text-[10px] leading-none tabular-nums ${
+                    className={`mt-1.5 h-[8px] w-full overflow-visible text-center text-[10px] leading-none tabular-nums ${
                       column.isNow ? 'font-medium text-ink' : 'text-faint'
                     }`}
                   >
@@ -570,22 +582,6 @@ export function Stats({ all, now, day }: Props) {
               )
             })}
           </div>
-
-          {/* The axis chips, after the bars so a label never sits under one. */}
-          <span
-            aria-hidden="true"
-            className="absolute top-0 right-0 -translate-y-1/2 rounded bg-surface px-1 text-[10px] text-faint tabular-nums"
-          >
-            {said(measure, max)}
-          </span>
-          {max > 1 && (
-            <span
-              aria-hidden="true"
-              className="absolute top-1/2 right-0 -translate-y-1/2 rounded bg-surface px-1 text-[10px] text-faint tabular-nums"
-            >
-              {said(measure, Math.round(max / 2))}
-            </span>
-          )}
 
           {/* The callout on the selected bar: the value, then the hour and its
               count — in place of printing a number on every bar. Clamped so
@@ -638,9 +634,7 @@ export function Stats({ all, now, day }: Props) {
           kind fills the track and the rest read relative to it, the same
           scaling Where-it-went uses. The card treatment and the bars are spec
           017's breakdown; the figures are the same ones the text rows said. */}
-      <p className="mt-[26px] mb-1 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
-        Category breakdown
-      </p>
+      <p className="mt-[26px] mb-2 text-[15px] font-semibold text-ink">Category breakdown</p>
       {/* One card per kind — the mock's grammar (019): a tinted glyph tile,
           what the count is a count of, the kind's own headline figure with an
           honest sub-caption, and the proportional track. Every figure is the
@@ -703,7 +697,7 @@ export function Stats({ all, now, day }: Props) {
               {/* h-1.5 like the grid ribbon's track, not the page-surface
                   h-1: inside a raised card a 4px sunken track all but
                   disappears on a phone screen. */}
-              <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-sunken">
+              <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-sunken">
                 <span
                   className={`block h-full rounded-full ${SEGMENT[kind]}`}
                   style={{ width: `${(count / most) * 100}%` }}
@@ -721,9 +715,7 @@ export function Stats({ all, now, day }: Props) {
           is an absence, not a category. */}
       {totals.byCategory.length > 0 && (
         <>
-          <p className="mt-[26px] mb-1 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
-            Where it went
-          </p>
+          <p className="mt-[26px] mb-2 text-[15px] font-semibold text-ink">Where it went</p>
           {/* The breakdown card's exact treatment, so the two blocks match. */}
           <div className="divide-y divide-line rounded-2xl border border-line bg-raised">
             {totals.byCategory.slice(0, 4).map((category) => {

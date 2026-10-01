@@ -1,5 +1,6 @@
 import {
   addMonths,
+  differenceInCalendarDays,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -80,28 +81,39 @@ export function MonthGrid({ day, now, loadDays, onPick, onMonth }: Props) {
 
   return (
     <div>
-      <div className="mb-1 flex items-center justify-between">
-        <button
-          type="button"
-          aria-label="Previous month"
-          onClick={() => setMonth(subMonths(month, 1))}
-          className="-ml-2.5 flex h-11 w-11 items-center justify-center rounded-lg text-faint transition-colors hover:text-ink active:text-ink"
-        >
-          <Chevron dir="left" size={18} />
-        </button>
-        <span className="text-[0.8125rem] font-semibold tracking-tight">
-          {format(month, 'MMMM yyyy')}
-        </span>
-        <button
-          type="button"
-          aria-label="Next month"
-          onClick={() => setMonth(addMonths(month, 1))}
-          className="-mr-2.5 flex h-11 w-11 items-center justify-center rounded-lg text-faint transition-colors hover:text-ink active:text-ink"
-        >
-          <Chevron dir="right" size={18} />
-        </button>
+      {/* The mock's month header (020): the name leading, how many days that
+          is, the arrows paired in their own pill. */}
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="truncate text-[17px] font-semibold tracking-tight text-ink">
+            {format(month, 'MMMM yyyy')}
+          </span>
+          <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[0.6875rem] font-medium text-muted tabular-nums">
+            {differenceInCalendarDays(endOfMonth(month), month) + 1} days
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center rounded-full bg-sunken px-0.5">
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => setMonth(subMonths(month, 1))}
+            className="-my-1 flex h-11 w-10 items-center justify-center rounded-full text-muted transition-colors hover:text-ink active:text-ink"
+          >
+            <Chevron dir="left" size={18} />
+          </button>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => setMonth(addMonths(month, 1))}
+            className="-my-1 flex h-11 w-10 items-center justify-center rounded-full text-muted transition-colors hover:text-ink active:text-ink"
+          >
+            <Chevron dir="right" size={18} />
+          </button>
+        </div>
       </div>
 
+      {/* The matrix in its own raised card, as the mock draws it. */}
+      <div className="rounded-2xl border border-line bg-raised px-2.5 pt-3 pb-1">
       <div
         className="grid grid-cols-7 text-center text-[0.625rem] font-medium tracking-[0.08em] text-faint uppercase"
         aria-hidden="true"
@@ -140,6 +152,7 @@ export function MonthGrid({ day, now, loadDays, onPick, onMonth }: Props) {
       >
         Today
       </button>
+      </div>
     </div>
   )
 }

@@ -117,13 +117,38 @@ export function AnswerCard({ answer, now, onPick, evidence, money = false }: Pro
           )}
         </div>
       )}
-      <p className="mt-1.5 font-display text-3xl leading-none font-semibold tracking-tight tabular-nums">
-        {answer.lead}
-      </p>
+      {/* The lead and its context on a tinted inner panel — the mock's
+          synthesis block (020), holding exactly what the figures always
+          said. */}
+      <div className="mt-2 rounded-xl bg-sunken px-3 py-2.5">
+        <p className="font-display text-3xl leading-none font-semibold tracking-tight tabular-nums">
+          {answer.lead}
+        </p>
+
+        {answer.extras.length > 0 && (
+          <p className="mt-2 text-xs text-muted">
+            {answer.extras.map((extra, index) => (
+              <span key={extraText(extra)}>
+                {index > 0 && <span className="text-faint"> · </span>}
+                {/* The label sits back, so the line reads as values with their
+                    names attached rather than as a sentence. */}
+                {extra.label !== null && <span className="text-faint">{extra.label} </span>}
+                <span className="tabular-nums">{extra.value}</span>
+              </span>
+            ))}
+          </p>
+        )}
+      </div>
 
       {slices.length > 0 && (
         <div className="mt-3">
-          <div aria-hidden="true" className="flex h-1.5 overflow-hidden rounded-full bg-sunken">
+          <div className="flex items-baseline justify-between text-[0.6875rem] font-medium text-muted">
+            <span>Category distribution</span>
+            <span className="tabular-nums">
+              {rupees(slices.reduce((sum, slice) => sum + slice.paise, 0))} total
+            </span>
+          </div>
+          <div aria-hidden="true" className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-sunken">
             {slices.map(
               (slice) =>
                 slice.paise !== 0 && (
@@ -135,30 +160,26 @@ export function AnswerCard({ answer, now, onPick, evidence, money = false }: Pro
                 ),
             )}
           </div>
-          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
             {slices.map((slice) => (
-              <span key={slice.name} className="flex items-center gap-1.5">
-                <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${slice.fill}`} />
-                <span className="text-muted">{slice.name}</span>
-                <span className="text-ink tabular-nums">{rupees(slice.paise)}</span>
+              <span
+                key={slice.name}
+                className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-sunken px-2.5 py-1.5"
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    aria-hidden="true"
+                    className={`h-2 w-2 shrink-0 rounded-full ${slice.fill}`}
+                  />
+                  <span className="truncate text-xs text-muted">{slice.name}</span>
+                </span>
+                <span className="shrink-0 text-xs font-medium text-ink tabular-nums">
+                  {rupees(slice.paise)}
+                </span>
               </span>
             ))}
-          </p>
+          </div>
         </div>
-      )}
-
-      {answer.extras.length > 0 && (
-        <p className="mt-2.5 text-xs text-muted">
-          {answer.extras.map((extra, index) => (
-            <span key={extraText(extra)}>
-              {index > 0 && <span className="text-faint"> · </span>}
-              {/* The label sits back, so the line reads as values with their
-                  names attached rather than as a sentence. */}
-              {extra.label !== null && <span className="text-faint">{extra.label} </span>}
-              <span className="tabular-nums">{extra.value}</span>
-            </span>
-          ))}
-        </p>
       )}
 
       {/* Capped rather than unbounded: the box above stays put while you scroll,

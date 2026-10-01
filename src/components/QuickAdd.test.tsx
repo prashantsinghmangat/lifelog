@@ -780,11 +780,11 @@ describe('the second row while asking', () => {
   it('carries a status line instead of sitting empty', async () => {
     const { box } = setup()
     await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
-    expect(screen.getByText('Answers appear as you type')).toBeTruthy()
+    expect(screen.getByText(/answers appear as you type/)).toBeTruthy()
 
     // Gone once there is a question — the live preview owns the row then.
     await userEvent.type(box, '? how much')
-    expect(screen.queryByText('Answers appear as you type')).toBeNull()
+    expect(screen.queryByText(/answers appear as you type/)).toBeNull()
   })
 })
 

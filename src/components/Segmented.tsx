@@ -3,11 +3,14 @@
 // against 52px list rows, and each drew the shape its own way — which is the
 // whole reason controls looked inconsistent between screens.
 
+import type { ReactNode } from 'react'
+
 type Props<T extends string> = {
   /** The group's accessible name — the control never draws a visible label. */
   label: string
   value: T
-  options: { value: T; label: string }[]
+  /** `icon` sits before the word, the mock's segment shape — optional. */
+  options: { value: T; label: string; icon?: ReactNode }[]
   onChange: (value: T) => void
 }
 
@@ -29,12 +32,20 @@ export function Segmented<T extends string>({ label, value, options, onChange }:
           className="-my-[5px] flex h-11 min-w-0 flex-1 items-center justify-center"
         >
           <span
-            className={`flex h-[34px] w-full items-center justify-center rounded-lg px-2 text-sm transition-colors ${
+            className={`flex h-[34px] w-full items-center justify-center gap-1.5 rounded-lg px-2 text-sm transition-colors ${
               value === option.value
                 ? 'bg-raised font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
                 : 'text-muted hover:text-ink'
             }`}
           >
+            {option.icon !== undefined && (
+              <span
+                aria-hidden="true"
+                className={`shrink-0 ${value === option.value ? 'text-accent' : ''}`}
+              >
+                {option.icon}
+              </span>
+            )}
             {option.label}
           </span>
         </button>

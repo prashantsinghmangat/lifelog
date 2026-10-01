@@ -658,7 +658,7 @@ describe('the four destinations', () => {
     expect(screen.getByText('Spending')).toBeTruthy()
     expect(screen.getByText('Events & memory')).toBeTruthy()
     expect(screen.getByText(/works from Today too/)).toBeTruthy()
-    expect(screen.getByText('Answers appear as you type')).toBeTruthy()
+    expect(screen.getByText(/answers appear as you type/)).toBeTruthy()
   })
 
   it('a suggestion fills the box and stands the list down, without submitting', async () => {
@@ -1087,7 +1087,9 @@ describe('the sidebar calendar, which stays mounted all day', () => {
 
     // Browsing is the grid's own state: picking a day inside the month on show
     // must not snap it forward again.
-    const grid = screen.getByText(label(previous)).closest('div')?.parentElement as HTMLElement
+    // Two hops: the label sits beside its days chip inside the header row now.
+    const grid = screen.getByText(label(previous)).closest('div')?.parentElement
+      ?.parentElement as HTMLElement
     const fifteenth = new Date(previous.getFullYear(), previous.getMonth(), 15)
     await userEvent.click(within(grid).getByLabelText(format(fifteenth, 'EEEE d MMMM yyyy')))
     expect(screen.getByText(label(previous))).toBeTruthy()
@@ -1471,17 +1473,14 @@ describe('the palette', () => {
     for (const palette of PALETTES) {
       const swatch = within(picker).getByRole('radio', { name: palette.label })
       const layers = Array.from(swatch.querySelectorAll('span[style]')) as HTMLElement[]
-      const painted = layers.map((layer) => layer.style.backgroundColor)
-      // matchMedia is stubbed light in these tests, so the light variant shows.
-      // The miniature of the screen: its ground, the accent dot, two ink
-      // rules standing in for rows, and the raised capture bar at the foot.
-      expect(painted, palette.name).toEqual([
-        rgb(palette.light.surface),
-        rgb(palette.light.accent),
-        rgb(palette.light.ink),
-        rgb(palette.light.ink),
-        rgb(palette.light.raised),
-      ])
+      // matchMedia is stubbed light in these tests, so the light variant
+      // shows. The dot is the palette's own accent — the check's colour
+      // wrapper carries no background, so filtering to painted layers leaves
+      // exactly the dot.
+      const painted = layers
+        .map((layer) => layer.style.backgroundColor)
+        .filter((colour) => colour !== '')
+      expect(painted, palette.name).toEqual([rgb(palette.light.accent)])
     }
   })
 })
@@ -1499,5 +1498,16 @@ describe('the now marker', () => {
     await log(box, '100 chai')
     await waitFor(() => expect(screen.getByText('chai')).toBeTruthy())
     expect(screen.queryByText(/^Now · /)).toBeNull()
+  })
+})
+
+describe('the top chrome', () => {
+  it('wires search to Ask and the avatar to You — nothing on it is dead', async () => {
+    await open()
+    await userEvent.click(screen.getByRole('button', { name: 'Search your log in Ask' }))
+    expect(screen.getByText(/nothing leaves this device/)).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Account and settings' }))
+    expect(screen.getByText('you@example.com · signed in')).toBeTruthy()
   })
 })

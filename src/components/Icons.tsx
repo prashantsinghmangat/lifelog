@@ -75,6 +75,91 @@ export function ClockIcon(props: Props) {
   )
 }
 
+export function SearchIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-4-4" />
+    </Svg>
+  )
+}
+
+export function GridIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </Svg>
+  )
+}
+
+export function ChartIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M5 20V12" />
+      <path d="M12 20V5" />
+      <path d="M19 20v-5" />
+    </Svg>
+  )
+}
+
+export function MusicIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M9 18V6l10-2v12" />
+      <circle cx="6.5" cy="18" r="2.5" />
+      <circle cx="16.5" cy="16" r="2.5" />
+    </Svg>
+  )
+}
+
+export function DownloadIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M12 4v10m0 0 4-4m-4 4-4-4" />
+      <path d="M5 19h14" />
+    </Svg>
+  )
+}
+
+export function BookIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z" />
+      <path d="M20 18v3H6.5a2.5 2.5 0 0 1 0-5" />
+    </Svg>
+  )
+}
+
+export function SunIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.5 1.5m9.8 9.8 1.5 1.5m0-12.8-1.5 1.5M7.1 16.9l-1.5 1.5" />
+    </Svg>
+  )
+}
+
+export function MoonIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <path d="M20 13.5A7.5 7.5 0 1 1 10.5 4 6 6 0 0 0 20 13.5Z" />
+    </Svg>
+  )
+}
+
+export function AutoIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 3.5v17" />
+      <path d="M12 7a5 5 0 0 1 0 10" />
+    </Svg>
+  )
+}
+
 export function WalletIcon(props: Props) {
   return (
     <Svg {...props}>

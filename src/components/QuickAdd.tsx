@@ -63,42 +63,11 @@ function QuestionRow({
   asked,
   first,
   onPick,
-  boxed = false,
 }: {
   asked: string
   first: boolean
   onPick: (asked: string) => void
-  /** Inside a raised card the card draws the hairlines and holds the inset;
-   *  bare on the page the row bleeds past the gutter as every list row does. */
-  boxed?: boolean
 }) {
-  const inner = (
-    <>
-      <span
-        className="flex w-[22px] shrink-0 justify-center text-[15px] leading-none font-semibold text-accent"
-        aria-hidden="true"
-      >
-        ?
-      </span>
-      <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{asked}</span>
-      {/* Fills the box, it does not submit — but it does lead
-          somewhere, and the chevron says so. */}
-      <Chevron dir="right" size={16} className="shrink-0 text-faint" />
-    </>
-  )
-
-  if (boxed) {
-    return (
-      <button
-        type="button"
-        onClick={() => onPick(asked)}
-        className="flex min-h-[52px] w-full items-center gap-3 px-3.5 text-left transition-colors hover:bg-sunken active:bg-sunken"
-      >
-        {inner}
-      </button>
-    )
-  }
-
   return (
     // The hairline sits between rows, on the wrapper — a rule on the
     // inset button would run 8px wider than every other rule on screen.
@@ -108,7 +77,16 @@ function QuestionRow({
         onClick={() => onPick(asked)}
         className="-mx-2 flex min-h-[52px] w-[calc(100%+1rem)] items-center gap-3 rounded-lg px-2 text-left transition-colors hover:bg-sunken active:bg-sunken"
       >
-        {inner}
+        <span
+          className="flex w-[22px] shrink-0 justify-center text-[15px] leading-none font-semibold text-accent"
+          aria-hidden="true"
+        >
+          ?
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[15px] text-ink">{asked}</span>
+        {/* Fills the box, it does not submit — but it does lead
+            somewhere, and the chevron says so. */}
+        <Chevron dir="right" size={16} className="shrink-0 text-faint" />
       </button>
     </div>
   )
@@ -167,6 +145,13 @@ export function AskSuggestions({
  * figure counted from the same rows the answers will read; the mock's "Neural
  * Sync" badge named a feature that does not exist, and nothing here may.
  */
+/** Written out, never interpolated: Tailwind only compiles what it can see. */
+const TOPIC_TEXT: Record<'expense' | 'time' | 'event', string> = {
+  expense: 'text-expense',
+  time: 'text-time',
+  event: 'text-event',
+}
+
 const TOPICS: { name: string; kind: 'expense' | 'time' | 'event'; questions: string[] }[] = [
   {
     name: 'Spending',
@@ -217,13 +202,17 @@ export function AskTopics({
 
   return (
     <div>
+      {/* The mock's grouping (020): a tinted group card, the topic's name in
+          its own kind colour, and the questions as white wrap-chips inside. */}
       {TOPICS.map((topic) => (
-        <div key={topic.name} className="mt-5 first:mt-[26px]">
+        <div key={topic.name} className="mt-3 first:mt-[26px] rounded-2xl bg-sunken p-3.5">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+            <p
+              className={`flex items-center gap-1.5 text-xs font-semibold ${TOPIC_TEXT[topic.kind]}`}
+            >
               <span
                 aria-hidden="true"
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[topic.kind]}`}
+                className={`h-2 w-2 shrink-0 self-center rounded-full ${DOT[topic.kind]}`}
               />
               {topic.name}
             </p>
@@ -231,11 +220,20 @@ export function AskTopics({
               {caption[topic.kind]}
             </span>
           </div>
-          {/* The group's rows in a raised card — hairline and tone, no
-              shadow, the fidelity pass's one enclosure recipe (018). */}
-          <div className="mt-1.5 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
-            {topic.questions.map((asked, at) => (
-              <QuestionRow key={asked} asked={asked} first={at === 0} onPick={onPick} boxed />
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {topic.questions.map((asked) => (
+              <button
+                key={asked}
+                type="button"
+                onClick={() => onPick(asked)}
+                className="flex min-h-11 items-center gap-1.5 rounded-lg bg-raised px-3 text-left text-sm text-ink transition-opacity hover:opacity-80 active:opacity-80"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT[topic.kind]}`}
+                />
+                {asked}
+              </button>
             ))}
           </div>
         </div>
@@ -739,7 +737,10 @@ export function QuickAdd({
           // Grows via the effect above; `max-h-40` is where it stops and
           // starts scrolling internally instead, and `resize-none` keeps
           // that the only way its height ever changes.
-          className="max-h-40 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3 pb-2 text-base text-ink outline-none placeholder:text-faint"
+          // Asking takes the mock capsule's larger voice; logging keeps 16px.
+          className={`max-h-40 w-full resize-none overflow-y-auto bg-transparent px-4 pt-3 pb-2 text-ink outline-none placeholder:text-faint ${
+            mode === 'ask' ? 'text-lg' : 'text-base'
+          }`}
         />
 
         {/* Between the text and the controls, because that is where what you
@@ -842,9 +843,11 @@ export function QuickAdd({
                 what the control does rather than sitting visibly empty. Plain
                 text outside the live region, exactly like the hint above. */}
             {mode === 'ask' && trimmed === '' && (
-              <span className="flex items-center gap-1.5 text-faint">
+              <span className="flex min-w-0 items-center gap-1.5 text-faint">
                 <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-                Answers appear as you type
+                {/* Example shapes the grammar certainly answers — never a
+                    subject the log may not hold. */}
+                <span className="truncate">e.g. “hours worked this week” — answers appear as you type</span>
               </span>
             )}
             {/* Announced politely: the parse changes as you type, and a screen
@@ -1060,22 +1063,27 @@ export function QuickAdd({
       {/* Under the answer, not inside it: the card is the answer and this is
           the next question. Fills the box the way every suggestion does. */}
       {answer !== null && answer.lead !== 'nothing found' && followUp !== null && (
-        <div className="mt-2 flex">
-          <button
-            type="button"
-            onClick={() => {
-              setText(followUp)
-              document.getElementById('quick-add')?.focus()
-            }}
-            className="flex h-11 items-center"
-          >
-            <span className="flex min-h-7 items-center gap-1.5 rounded-full border border-line px-3 text-xs text-muted transition-colors hover:bg-sunken">
-              <span aria-hidden="true" className="font-semibold text-accent">
-                ?
+        <div className="mt-2.5">
+          <p className="text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
+            Follow-ups
+          </p>
+          <div className="mt-0.5 flex flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                setText(followUp)
+                document.getElementById('quick-add')?.focus()
+              }}
+              className="flex h-11 items-center"
+            >
+              <span className="flex min-h-8 items-center gap-1.5 rounded-full bg-sunken px-3 text-xs font-medium text-ink transition-opacity hover:opacity-80">
+                <span aria-hidden="true" className="font-semibold text-accent">
+                  ?
+                </span>
+                {followUp.replace(/^\?\s*/, '')}
               </span>
-              {followUp.replace(/^\?\s*/, '')}
-            </span>
-          </button>
+            </button>
+          </div>
         </div>
       )}
 

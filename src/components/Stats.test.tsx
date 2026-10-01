@@ -189,30 +189,28 @@ describe('switching scale', () => {
 })
 
 describe('measures', () => {
-  it('keeps the lead figure while the bars change picture — a stack on How often', async () => {
+  it('opens on the stacked All-entries picture and keeps the lead on Spent', async () => {
     open()
-    // Spent is the default and the headline is always the period's money.
+    // All entries is the default (020) and the headline is always money.
     expect(lead()).toBe('₹350')
 
     const chart = () => screen.getByRole('group', { name: /Entries by day/ })
     const day14 = () => within(chart()).getByRole('button', { name: /^14 September/ })
-    // Spent: one solid bar in the expense colour — the only kind money is.
-    expect(day14().querySelectorAll('.bg-expense').length).toBe(1)
-    expect(day14().querySelectorAll('.bg-event').length).toBe(0)
-    // And no legend: the live measure button already names the one colour.
-    expect(screen.queryByRole('group', { name: 'What the colours mean' })).toBeNull()
-
-    await userEvent.click(screen.getByRole('button', { name: 'How often' }))
-    // The measure changes the picture, never the headline.
-    expect(lead()).toBe('₹350')
-    // How often stacks the kinds — the 14th holds an expense and an event, so
-    // two segments in their own colours and no ink bar. Stacked bars returned
-    // over 016's removal by explicit decision, spec 017; the legend above the
-    // plot is what names the colours.
+    // The default stacks the kinds — the 14th holds an expense and an event,
+    // two segments in their own colours and no ink bar — with the legend
+    // naming the colours.
     expect(day14().querySelectorAll('.bg-expense').length).toBe(1)
     expect(day14().querySelectorAll('.bg-event').length).toBe(1)
     expect(day14().querySelectorAll('.bg-ink').length).toBe(0)
     expect(screen.getByRole('group', { name: 'What the colours mean' })).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Spent' }))
+    // The measure changes the picture, never the headline — and Spent is one
+    // solid bar in the expense colour, the only kind money is, no legend.
+    expect(lead()).toBe('₹350')
+    expect(day14().querySelectorAll('.bg-expense').length).toBe(1)
+    expect(day14().querySelectorAll('.bg-event').length).toBe(0)
+    expect(screen.queryByRole('group', { name: 'What the colours mean' })).toBeNull()
   })
 
   it('shows the computed growth against the period before, or nothing', () => {

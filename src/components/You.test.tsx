@@ -50,29 +50,25 @@ function rgb(hex: string): string {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-describe('the palette swatch is that palette, not a generic one', () => {
-  it('paints every tile from the palette table, in the resolved mode', () => {
+describe('the palette dot is that palette, not a generic one', () => {
+  it('paints every dot from the palette table, in the resolved mode', () => {
     setup({ resolved: 'light' })
     for (const palette of PALETTES) {
       const tile = screen.getByRole('radio', { name: palette.label })
-      const swatch = tile.querySelector('span[aria-hidden]') as HTMLElement
-      expect(swatch, `${palette.name} swatch`).toBeTruthy()
-      expect(swatch.style.backgroundColor).toBe(rgb(palette.light.surface))
-      // The miniature's parts: accent dot, two ink rules, the raised capture bar.
-      const parts = [...swatch.children] as HTMLElement[]
-      expect(parts[0]?.style.backgroundColor).toBe(rgb(palette.light.accent))
-      expect(parts[1]?.style.backgroundColor).toBe(rgb(palette.light.ink))
-      expect(parts[2]?.style.backgroundColor).toBe(rgb(palette.light.ink))
-      expect(parts[3]?.style.backgroundColor).toBe(rgb(palette.light.raised))
+      const dot = tile.querySelector('span[aria-hidden]') as HTMLElement
+      expect(dot, `${palette.name} dot`).toBeTruthy()
+      // The dot is the palette's own accent, straight from the table the CSS
+      // blocks are tested against — so the swatch cannot lie.
+      expect(dot.style.backgroundColor).toBe(rgb(palette.light.accent))
     }
   })
 
   it('follows the mode on screen, so a dark screen previews dark blocks', () => {
     setup({ resolved: 'dark' })
     const tile = screen.getByRole('radio', { name: 'Sea' })
-    const swatch = tile.querySelector('span[aria-hidden]') as HTMLElement
+    const dot = tile.querySelector('span[aria-hidden]') as HTMLElement
     const sea = PALETTES.find((palette) => palette.name === 'sea')!
-    expect(swatch.style.backgroundColor).toBe(rgb(sea.dark.surface))
+    expect(dot.style.backgroundColor).toBe(rgb(sea.dark.accent))
   })
 })
 
