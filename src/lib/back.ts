@@ -35,6 +35,19 @@ import { isNative } from './platform'
 const open: (() => void)[] = []
 
 /**
+ * While the lock overlay is up, back may only minimise. Unwinding the stack
+ * would close sheets — or, via the home slot, change `view` — *behind* the
+ * overlay: invisible until unlock, and then you are somewhere else. The app
+ * keeps this in sync with the overlay; it short-circuits `back()` ahead of
+ * everything.
+ */
+let locked = false
+
+export function setLocked(value: boolean): void {
+  locked = value
+}
+
+/**
  * The way back to Today, registered only while somewhere else.
  *
  * One slot rather than a stack: there is exactly one home and the destinations
@@ -100,6 +113,8 @@ export function onHome(go: () => void): () => void {
  * the calendar, not onto Today with the editor still up.
  */
 export function back(): 'closed' | 'home' | 'root' {
+  if (locked) return 'root'
+
   const top = open[open.length - 1]
   if (top !== undefined) {
     top()

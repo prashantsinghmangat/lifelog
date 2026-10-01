@@ -7,11 +7,13 @@ import {
   CheckIcon,
   ClockIcon,
   DownloadIcon,
+  LockIcon,
   MoonIcon,
   MusicIcon,
   SunIcon,
 } from './Icons'
 import { Segmented } from './Segmented'
+import { LOCK_AFTER } from '../lib/applock'
 import { openReminderChannelSettings } from '../lib/openSettings'
 import { PALETTES, type PaletteName } from '../lib/palettes'
 import { isNative } from '../lib/platform'
@@ -118,6 +120,13 @@ type Props = {
   resolved: 'light' | 'dark'
   nudges: boolean
   onNudges: (on: boolean) => void
+  /**
+   * App Lock, native only. `usable` is whether the OS has anything to verify
+   * with — biometrics or a screen lock; null while the app is still asking.
+   */
+  lock: { on: boolean; after: number; usable: boolean | null }
+  onLockToggle: () => void
+  onLockAfter: () => void
   onHelp: () => void
   onExport: () => void
   onExportCalendar: () => void
@@ -149,6 +158,9 @@ export function You({
   resolved,
   nudges,
   onNudges,
+  lock,
+  onLockToggle,
+  onLockAfter,
   onHelp,
   onExport,
   onExportCalendar,
@@ -405,6 +417,60 @@ export function You({
               icon={<MusicIcon size={18} />}
               onClick={() => void openReminderChannelSettings()}
             />
+          </Group>
+
+          <Eyebrow id="privacy">Privacy &amp; Security</Eyebrow>
+          <Group>
+            {/* One OS verification arms it; after that the OS dialog owns both
+                fingerprint and the device PIN/pattern fallback, so there is no
+                app passcode to manage. A device with no screen lock has nothing
+                to verify with — the row says so and goes inert rather than
+                offering a lock that cannot hold. */}
+            <Row
+              role="switch"
+              aria-checked={lock.on}
+              aria-disabled={lock.usable === false}
+              aria-label="App Lock"
+              title="App Lock"
+              detail={
+                lock.usable === false
+                  ? 'Set a screen lock first'
+                  : lock.on
+                    ? 'Fingerprint or screen lock · screenshots off while on'
+                    : 'Fingerprint or screen lock'
+              }
+              icon={<LockIcon size={18} />}
+              right={
+                <span
+                  aria-hidden="true"
+                  className={`flex h-7 w-12 items-center rounded-full p-0.5 transition-colors ${
+                    lock.on
+                      ? 'bg-accent'
+                      : 'bg-sunken shadow-[inset_0_0_0_1px_var(--color-edge)]'
+                  }`}
+                >
+                  <span
+                    className={`h-6 w-6 rounded-full bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.25)] transition-transform ${
+                      lock.on ? 'translate-x-5' : ''
+                    }`}
+                  />
+                </span>
+              }
+              onClick={() => {
+                if (lock.usable !== false) onLockToggle()
+              }}
+            />
+            {/* Cycles rather than opening a sheet: three values, one tap each. */}
+            {lock.on && (
+              <Row
+                title="Lock after"
+                detail={
+                  LOCK_AFTER.find((option) => option.ms === lock.after)?.label ?? '1 minute'
+                }
+                icon={<ClockIcon size={18} />}
+                onClick={onLockAfter}
+              />
+            )}
           </Group>
         </>
       )}

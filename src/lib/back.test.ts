@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { back, onBack, onHome } from './back'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { back, onBack, onHome, setLocked } from './back'
 
 /**
  * The Android back button, which was dismissing the whole app while a sheet sat
@@ -144,6 +144,44 @@ describe('what back does', () => {
     expect(back()).toBe('closed')
     expect(back()).toBe('closed')
     expect(close).toHaveBeenCalledTimes(2)
+
+    off()
+  })
+})
+
+describe('while the lock overlay is up', () => {
+  afterEach(() => setLocked(false))
+
+  it('answers root with a sheet open, and the sheet stays put', () => {
+    const close = vi.fn()
+    const off = onBack(close)
+    setLocked(true)
+
+    expect(back()).toBe('root')
+    expect(close).not.toHaveBeenCalled()
+
+    off()
+  })
+
+  it('ignores the way home, so view cannot change behind the overlay', () => {
+    const go = vi.fn()
+    const off = onHome(go)
+    setLocked(true)
+
+    expect(back()).toBe('root')
+    expect(go).not.toHaveBeenCalled()
+
+    off()
+  })
+
+  it('hands everything back once unlocked', () => {
+    const close = vi.fn()
+    const off = onBack(close)
+    setLocked(true)
+    setLocked(false)
+
+    expect(back()).toBe('closed')
+    expect(close).toHaveBeenCalledTimes(1)
 
     off()
   })

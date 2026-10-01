@@ -52,8 +52,15 @@ const NUDGES = [
  *
  * Two of them, so muting the 9am prompt in Android's settings does not also
  * mute a reminder you actually asked for.
+ *
+ * Reminders are on `-v2` because `-v1` was created with `visibility: 1`
+ * (PUBLIC) — an explicit opt-out of Android's own lock-screen content hiding,
+ * so entry titles printed on a locked phone. The same immutability rule above
+ * applies: the fix is the next id, never a change to the old one. The prompts
+ * channel stays on `-v1` — its two titles are fixed generic strings with
+ * nothing to hide.
  */
-const REMINDERS = 'lifelog-reminders-v1'
+const REMINDERS = 'lifelog-reminders-v2'
 const PROMPTS = 'lifelog-prompts-v1'
 
 let channelled = false
@@ -67,6 +74,17 @@ async function channels(api: LocalNotificationsPlugin): Promise<void> {
   // fine and a prompts channel that never existed is a plausible half-state,
   // and the prompts would then have gone out on Capacitor's `default` channel:
   // importance 3, no sound, which is the exact bug this pair exists to fix.
+  // The old public-visibility channel goes first: deleted, it stops appearing
+  // in Android's settings, and a notification scheduled onto a deleted channel
+  // is silently dropped — which is fine, because the launch `sync` re-schedules
+  // every wanted alarm onto the new channel anyway. That re-arm is the whole
+  // migration.
+  try {
+    await api.deleteChannel({ id: 'lifelog-reminders-v1' })
+  } catch {
+    // Never existed here, or not Android.
+  }
+
   await one(api, {
     id: REMINDERS,
     name: 'Reminders',
@@ -74,7 +92,10 @@ async function channels(api: LocalNotificationsPlugin): Promise<void> {
     // importance 5 is IMPORTANCE_HIGH: sound, vibration, and a heads-up banner.
     importance: 5,
     vibration: true,
-    visibility: 1,
+    // 0 is VISIBILITY_PRIVATE — Android's own default, restored: a secured
+    // lock screen shows "content hidden" instead of the entry title, and the
+    // full notification appears once the phone is unlocked.
+    visibility: 0,
   })
   await one(api, {
     id: PROMPTS,

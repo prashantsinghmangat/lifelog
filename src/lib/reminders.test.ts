@@ -1,16 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { actionType, alarmIds, alarms, cancelAll, fireAt, notificationId } from './reminders'
+import { actionType, alarmIds, alarms, cancelAll, fireAt, notificationId, schedule } from './reminders'
 import { isNative } from './platform'
 import type { Entry } from '../types'
 
 const getPending = vi.fn()
 const cancelled = vi.fn()
+const checkPermissions = vi.fn()
+const createChannel = vi.fn()
+const deleteChannel = vi.fn()
+const scheduled = vi.fn()
+const registerActionTypes = vi.fn()
 
 vi.mock('./platform', () => ({ isNative: vi.fn(() => false) }))
 vi.mock('@capacitor/local-notifications', () => ({
   LocalNotifications: {
     getPending: (...args: unknown[]) => getPending(...args),
     cancel: (...args: unknown[]) => cancelled(...args),
+    checkPermissions: (...args: unknown[]) => checkPermissions(...args),
+    createChannel: (...args: unknown[]) => createChannel(...args),
+    deleteChannel: (...args: unknown[]) => deleteChannel(...args),
+    schedule: (...args: unknown[]) => scheduled(...args),
+    registerActionTypes: (...args: unknown[]) => registerActionTypes(...args),
   },
 }))
 
@@ -413,6 +423,38 @@ describe('a nag that rings until acted on', () => {
     expect(actionType(oneOff)).toBe('done')
     expect(actionType(repeat)).toBe('got_it')
     expect(actionType(plain)).toBeUndefined()
+  })
+})
+
+describe('the notification channels', () => {
+  afterEach(() => {
+    vi.mocked(isNative).mockReturnValue(false)
+  })
+
+  it('creates reminders as -v2 lock-screen private, deletes -v1, and leaves the prompts channel alone', async () => {
+    vi.mocked(isNative).mockReturnValue(true)
+    checkPermissions.mockResolvedValue({ display: 'granted' })
+    scheduled.mockResolvedValue(undefined)
+
+    const now = new Date('2026-09-01T10:00:00+05:30')
+    const result = await schedule(
+      entry({ id: 'chan-1', occurred_at: '2026-09-02T17:00:00+05:30' }),
+      now,
+    )
+
+    expect(result).toBe('scheduled')
+    expect(deleteChannel).toHaveBeenCalledWith({ id: 'lifelog-reminders-v1' })
+
+    const created = createChannel.mock.calls.map(
+      (call) => call[0] as { id: string; visibility: number },
+    )
+    expect(created.find((channel) => channel.id === 'lifelog-reminders-v2')?.visibility).toBe(0)
+    expect(created.find((channel) => channel.id === 'lifelog-prompts-v1')?.visibility).toBe(1)
+
+    const sent = (scheduled.mock.calls[0]?.[0] as { notifications: { channelId: string }[] })
+      .notifications
+    expect(sent.length).toBeGreaterThan(0)
+    expect(sent.every((alarm) => alarm.channelId === 'lifelog-reminders-v2')).toBe(true)
   })
 })
 

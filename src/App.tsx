@@ -21,6 +21,7 @@ import { MonthGrid } from './components/MonthGrid'
 import { OnThisDay } from './components/OnThisDay'
 import { PhotoViewer } from './components/PhotoViewer'
 import { AskTopics, QuickAdd } from './components/QuickAdd'
+import { LockScreen } from './components/LockScreen'
 import { Sheet } from './components/Sheet'
 import { You } from './components/You'
 import { Toast, type ToastState } from './components/Toast'
@@ -32,8 +33,9 @@ import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { ahead } from './lib/ahead'
+import { LOCK_AFTER, loadLock, saveLock, shouldLock, stamp, type LockState } from './lib/applock'
 import { sweepOrphans } from './lib/attachments'
-import { arm as armBack, onHome } from './lib/back'
+import { arm as armBack, onHome, setLocked as setBackLocked } from './lib/back'
 import { save, shareOrDownload } from './lib/deliver'
 import { nextFireAt, passed, stillAhead } from './lib/events'
 import {
@@ -141,6 +143,135 @@ export default function App() {
   /** A guest who has *asked* to sign in. The log is still there behind this. */
   const [asked, setAsked] = useState(false)
 
+  /**
+   * The app lock, held here — above the identity gate — so the overlay covers
+   * `Login` (which shows the remembered email) and guest mode alike. The OS
+   * does the verifying; Supabase is never part of unlocking. A cold launch
+   * starts locked whenever the persisted state cannot prove the app was only
+   * briefly away — which covers process death while backgrounded.
+   */
+  const [lock, setLock] = useState<LockState>(() => loadLock(localStorage))
+  const [locked, setLockedHere] = useState<boolean>(
+    () => isNative() && shouldLock(loadLock(localStorage), Date.now()),
+  )
+  /** Whether the OS has anything to verify with; null while still asking. */
+  const [lockUsable, setLockUsable] = useState<boolean | null>(null)
+  const lockRef = useRef(lock)
+  useEffect(() => {
+    lockRef.current = lock
+  }, [lock])
+
+  // back() must refuse to unwind sheets or change view behind the overlay.
+  useEffect(() => {
+    setBackLocked(locked)
+  }, [locked])
+
+  // Pause stamps, resume judges — a persisted timestamp, never a running
+  // timer: the WebView's clocks freeze in the background and the process can
+  // die there, and the next cold launch still has to know how long the app
+  // was away.
+  useEffect(() => {
+    if (!isNative()) return
+    let live = true
+    const offs: (() => void)[] = []
+    void import('@capacitor/app').then(({ App: Native }) => {
+      if (!live) return
+      void Native.addListener('pause', () => {
+        const next = stamp(lockRef.current, Date.now())
+        saveLock(localStorage, next)
+        setLock(next)
+      }).then((handle) => {
+        if (live) offs.push(() => void handle.remove())
+        else void handle.remove()
+      })
+      void Native.addListener('resume', () => {
+        if (shouldLock(lockRef.current, Date.now())) setLockedHere(true)
+      }).then((handle) => {
+        if (live) offs.push(() => void handle.remove())
+        else void handle.remove()
+      })
+    })
+    return () => {
+      live = false
+      for (const off of offs) off()
+    }
+  }, [])
+
+  // Whether a lock could hold at all. Drives the switch, nothing else.
+  useEffect(() => {
+    if (!isNative()) return
+    let live = true
+    void import('@aparajita/capacitor-biometric-auth')
+      .then(({ BiometricAuth }) => BiometricAuth.checkBiometry())
+      .then((info) => {
+        if (live) setLockUsable(info.isAvailable || info.deviceIsSecure)
+      })
+      .catch(() => {
+        if (live) setLockUsable(false)
+      })
+    return () => {
+      live = false
+    }
+  }, [])
+
+  // The privacy screen rides the switch: with the lock on, recents shows no
+  // content — and screenshots are blocked, which the setting's caption admits.
+  useEffect(() => {
+    if (!isNative()) return
+    void import('@capacitor/privacy-screen')
+      .then(({ PrivacyScreen }) =>
+        lock.on
+          ? PrivacyScreen.enable({ android: { privacyModeOnActivityHidden: 'splash' } })
+          : PrivacyScreen.disable(),
+      )
+      .catch(() => {
+        // The lock itself still stands; only the thumbnail protection failed.
+      })
+  }, [lock.on])
+
+  const toggleLock = useCallback(() => {
+    if (lockRef.current.on) {
+      // The app is unlocked to be here at all, so switching off asks nothing.
+      const next = { ...lockRef.current, on: false, pausedAt: null }
+      saveLock(localStorage, next)
+      setLock(next)
+      setLockedHere(false)
+      return
+    }
+    // One OS verification before the switch moves — proof the person turning
+    // it on can also open it.
+    void (async () => {
+      try {
+        const { BiometricAuth, AndroidBiometryStrength } = await import(
+          '@aparajita/capacitor-biometric-auth'
+        )
+        await BiometricAuth.authenticate({
+          reason: 'Turn on App Lock',
+          allowDeviceCredential: true,
+          androidBiometryStrength: AndroidBiometryStrength.weak,
+          androidTitle: 'Turn on App Lock',
+        })
+        const next = stamp({ ...lockRef.current, on: true }, Date.now())
+        saveLock(localStorage, next)
+        setLock(next)
+      } catch {
+        // Refused or cancelled: the switch stays off.
+      }
+    })()
+  }, [])
+
+  const cycleLockAfter = useCallback(() => {
+    const at = LOCK_AFTER.findIndex((option) => option.ms === lockRef.current.after)
+    const next = {
+      ...lockRef.current,
+      after: LOCK_AFTER[(at + 1) % LOCK_AFTER.length]?.ms ?? 60_000,
+    }
+    saveLock(localStorage, next)
+    setLock(next)
+  }, [])
+
+  const overlay = locked ? <LockScreen onUnlock={() => setLockedHere(false)} /> : null
+
   // Armed here rather than inside `Day`, so it covers the sign-in screen too
   // and survives a guest signing in — which unmounts and remounts `Day`.
   // Nothing happens away from native.
@@ -159,8 +290,20 @@ export default function App() {
     }
   }, [])
 
-  if (loading) return <div className="p-4 text-sm text-faint">…</div>
-  if (identity === null) return <Login onGuest={startGuest} />
+  if (loading)
+    return (
+      <>
+        {overlay}
+        <div className="p-4 text-sm text-faint">…</div>
+      </>
+    )
+  if (identity === null)
+    return (
+      <>
+        {overlay}
+        <Login onGuest={startGuest} />
+      </>
+    )
 
   /**
    * Still a guest, and still asking. **Both**, because the second half was
@@ -180,20 +323,32 @@ export default function App() {
    */
   // No `onGuest`: this reader already has a log, and starting a second empty one
   // is not an offer, it is a way to lose the first.
-  if (asked && identity.local === true) return <Login onCancel={() => setAsked(false)} />
+  if (asked && identity.local === true)
+    return (
+      <>
+        {overlay}
+        <Login onCancel={() => setAsked(false)} />
+      </>
+    )
 
   return (
-    <Day
-      email={identity.email}
-      userId={identity.id}
-      local={identity.local === true}
-      theme={theme}
-      onTheme={choose}
-      palette={palette}
-      onPalette={choosePalette}
-      resolved={resolved}
-      onSignIn={() => setAsked(true)}
-    />
+    <>
+      {overlay}
+      <Day
+        email={identity.email}
+        userId={identity.id}
+        local={identity.local === true}
+        theme={theme}
+        onTheme={choose}
+        palette={palette}
+        onPalette={choosePalette}
+        resolved={resolved}
+        onSignIn={() => setAsked(true)}
+        lock={{ on: lock.on, after: lock.after, usable: lockUsable }}
+        onLockToggle={toggleLock}
+        onLockAfter={cycleLockAfter}
+      />
+    </>
   )
 }
 
@@ -209,9 +364,26 @@ type DayProps = {
   onPalette: ReturnType<typeof useTheme>['choosePalette']
   resolved: ReturnType<typeof useTheme>['resolved']
   onSignIn: () => void
+  /** The app lock, owned by App so the overlay can cover the identity gate. */
+  lock: { on: boolean; after: number; usable: boolean | null }
+  onLockToggle: () => void
+  onLockAfter: () => void
 }
 
-function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolved, onSignIn }: DayProps) {
+function Day({
+  email,
+  userId,
+  local,
+  theme,
+  onTheme,
+  palette,
+  onPalette,
+  resolved,
+  onSignIn,
+  lock,
+  onLockToggle,
+  onLockAfter,
+}: DayProps) {
   const { nudges, choose: chooseNudges } = useNudges()
   const [now, setNow] = useState(() => new Date())
   const [day, setDay] = useState(() => dayKey(new Date()))
@@ -856,6 +1028,9 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
     onExport: () => void exportJson(),
     nudges,
     onNudges: chooseNudges,
+    lock,
+    onLockToggle,
+    onLockAfter,
     onExportCalendar: () => void exportCalendar(),
     // Forgotten here as well as on the event, because signing out with no
     // network never reaches Supabase — and an offline sign-out that does not
@@ -1475,8 +1650,8 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
                   </span>
                 </div>
                 <p className="mt-2 max-w-[38ch] text-sm leading-relaxed text-muted">
-                  Your log answers questions about itself — arithmetic over your own rows, and
-                  nothing leaves this device.
+                  Your log answers questions about itself — arithmetic over your own rows. The
+                  question and the answer never leave this device.
                 </p>
                 {/* Filled, not submitted: `prefill` lands the text in the box
                     and focuses it, and in Ask the answer computes as you type. */}

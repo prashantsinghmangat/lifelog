@@ -653,7 +653,7 @@ describe('the four destinations', () => {
 
     // What Ask is, then what to try — page content, not an appendix to the
     // capture control. The footnote is the one thing that sits low.
-    expect(screen.getByText(/nothing leaves this device/)).toBeTruthy()
+    expect(screen.getByText(/never leave this device/)).toBeTruthy()
     // The curated questions, grouped by topic — spec 017.
     expect(screen.getByText('Spending')).toBeTruthy()
     expect(screen.getByText('Events & memory')).toBeTruthy()
@@ -1506,7 +1506,7 @@ describe('the top chrome', () => {
   it('wires search to Ask and the avatar to You — nothing on it is dead', async () => {
     await open()
     await userEvent.click(screen.getByRole('button', { name: 'Search your log in Ask' }))
-    expect(screen.getByText(/nothing leaves this device/)).toBeTruthy()
+    expect(screen.getByText(/never leave this device/)).toBeTruthy()
 
     await userEvent.click(screen.getByRole('button', { name: 'Account and settings' }))
     expect(screen.getByText('you@example.com · signed in')).toBeTruthy()

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { You } from './You'
 import { PALETTES } from '../lib/palettes'
+import { isNative } from '../lib/platform'
 
 // The account service is Login/App business; nothing here should reach it.
 vi.mock('../lib/supabase', () => ({
@@ -11,7 +12,7 @@ vi.mock('../lib/supabase', () => ({
 }))
 
 // Native, so the Reminders group renders and the switch can be exercised.
-vi.mock('../lib/platform', () => ({ isNative: () => true }))
+vi.mock('../lib/platform', () => ({ isNative: vi.fn(() => true) }))
 vi.mock('../lib/openSettings', () => ({ openReminderChannelSettings: vi.fn(async () => {}) }))
 vi.mock('../lib/reminders', () => ({
   permission: vi.fn(async () => 'granted'),
@@ -33,6 +34,9 @@ function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
       resolved="light"
       nudges={true}
       onNudges={onNudges}
+      lock={{ on: false, after: 60_000, usable: true }}
+      onLockToggle={vi.fn()}
+      onLockAfter={vi.fn()}
       onHelp={vi.fn()}
       onExport={vi.fn()}
       onExportCalendar={vi.fn()}
@@ -110,5 +114,53 @@ describe('the manual lives on the account card', () => {
     setup({ onHelp })
     await userEvent.click(screen.getByRole('button', { name: 'How to use lifelog' }))
     expect(onHelp).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('Privacy & Security', () => {
+  afterEach(() => {
+    vi.mocked(isNative).mockReturnValue(true)
+  })
+
+  it('renders only in the native shell — the web has no lock to offer', () => {
+    setup()
+    expect(screen.getByText('Privacy & Security')).toBeTruthy()
+
+    cleanup()
+    vi.mocked(isNative).mockReturnValue(false)
+    setup()
+    expect(screen.queryByText('Privacy & Security')).toBeNull()
+  })
+
+  it('keeps Lock after out of sight until the lock is on', () => {
+    setup()
+    expect(screen.queryByText('Lock after')).toBeNull()
+
+    cleanup()
+    setup({ lock: { on: true, after: 60_000, usable: true } })
+    expect(screen.getByText('Lock after')).toBeTruthy()
+    expect(screen.getByText('1 minute')).toBeTruthy()
+  })
+
+  it('cycles the timeout from the row itself', async () => {
+    const onLockAfter = vi.fn()
+    setup({ lock: { on: true, after: 60_000, usable: true }, onLockAfter })
+    await userEvent.click(screen.getByRole('button', { name: /Lock after/ }))
+    expect(onLockAfter).toHaveBeenCalledTimes(1)
+  })
+
+  it('explains and goes inert on a device with no screen lock', async () => {
+    const onLockToggle = vi.fn()
+    setup({ lock: { on: false, after: 60_000, usable: false }, onLockToggle })
+    expect(screen.getByText('Set a screen lock first')).toBeTruthy()
+    await userEvent.click(screen.getByRole('switch', { name: 'App Lock' }))
+    expect(onLockToggle).not.toHaveBeenCalled()
+  })
+
+  it('arms through the toggle when the device can verify', async () => {
+    const onLockToggle = vi.fn()
+    setup({ onLockToggle })
+    await userEvent.click(screen.getByRole('switch', { name: 'App Lock' }))
+    expect(onLockToggle).toHaveBeenCalledTimes(1)
   })
 })
