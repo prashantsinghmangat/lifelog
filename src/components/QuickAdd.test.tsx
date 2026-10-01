@@ -539,6 +539,43 @@ describe('asking a question', () => {
     await userEvent.type(box, '? gym')
     expect(screen.getByText('…')).toBeTruthy()
   })
+
+  /**
+   * `onFilled` drives `App`'s `askFilled`, which collapses the whole
+   * `AskTopics` block in Ask mode. That collapse landing in the same cycle
+   * as the keystroke which caused it is how the first character typed in Ask
+   * stopped sticking — a reflow sharing a tick with the soft keyboard's own
+   * commit is a known way for an Android WebView to lose it. One deferred
+   * frame is the fix; this proves the deferral, not the device behaviour —
+   * see spec 030's Verify for the on-device retest that actually confirms it.
+   */
+  describe('notifying the parent that the box filled', () => {
+    let frames: FrameRequestCallback[] = []
+
+    beforeEach(() => {
+      frames = []
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+        frames.push(cb)
+        return frames.length
+      })
+      vi.stubGlobal('cancelAnimationFrame', () => {})
+    })
+
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('waits a frame rather than calling inline with the keystroke that filled it', async () => {
+      const onFilled = vi.fn()
+      const { box } = setup({ onFilled })
+      await userEvent.type(box, 'h')
+
+      expect(onFilled).not.toHaveBeenCalledWith(true)
+
+      const queued = frames
+      frames = []
+      queued.forEach((cb) => cb(0))
+      expect(onFilled).toHaveBeenCalledWith(true)
+    })
+  })
 })
 
 describe('prefill from the manual', () => {
@@ -649,6 +686,42 @@ describe('attaching a photo while composing', () => {
 
     await userEvent.click(screen.getByLabelText('Remove photo'))
     expect(document.querySelectorAll('img')).toHaveLength(0)
+  })
+
+  /**
+   * A camera-resolution original can take long enough to decode that an
+   * empty strip reads as "did this even work?" — found live, picking several
+   * photos in a row.
+   */
+  it('shows something the instant a photo is picked, before it has decoded', async () => {
+    let settle: ((blob: Blob) => void) | undefined
+    vi.mocked(fromFile).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve
+        }),
+    )
+    setup()
+    await userEvent.upload(picker(), jpeg())
+
+    // `role="status"` doesn't derive a name from its own content by ARIA's
+    // naming rules — the way `button`/`link` do — so this is matched by text,
+    // not by name. The role is for a real screen reader; this is for the test.
+    await waitFor(() => expect(screen.getByText('Adding 1 photo')).toBeTruthy())
+    expect(document.querySelectorAll('img')).toHaveLength(0)
+
+    settle?.(new Blob(['x'], { type: 'image/jpeg' }))
+    await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(1))
+    expect(screen.queryByText(/Adding/)).toBeNull()
+  })
+
+  it('clears the pending status for a photo that failed to decode, rather than leaving it stuck', async () => {
+    vi.mocked(fromFile).mockRejectedValueOnce(new Error('too large'))
+    setup()
+    await userEvent.upload(picker(), jpeg())
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/too large/))
+    expect(screen.queryByText(/Adding/)).toBeNull()
   })
 
   /**

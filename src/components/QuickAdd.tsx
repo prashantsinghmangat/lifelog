@@ -382,6 +382,14 @@ export function QuickAdd({
    * composition that is abandoned. Nothing is written, so nothing is orphaned.
    */
   const [staged, setStaged] = useState<{ id: string; blob: Blob; url: string }[]>([])
+  /**
+   * Photos picked but not yet decoded — a count, not identities, because
+   * nothing distinguishes one pending file from another until it resolves
+   * into a real thumbnail. Lets the strip show *something* the instant files
+   * are picked instead of staying empty through the whole decode, which on a
+   * camera-resolution original reads as "did this even work?"
+   */
+  const [pending, setPending] = useState(0)
   const gallery = useRef<HTMLInputElement>(null)
   /** A photo that could not be filed, said separately from the entry's own outcome. */
   const [photoProblem, setPhotoProblem] = useState<string | null>(null)
@@ -409,7 +417,9 @@ export function QuickAdd({
    */
   async function stage(files: FileList) {
     setPhotoProblem(null)
-    for (const file of [...files]) {
+    const picked = [...files]
+    setPending((n) => n + picked.length)
+    for (const file of picked) {
       try {
         const blob = await fromFile(file)
         setStaged((held) => [
@@ -418,6 +428,8 @@ export function QuickAdd({
         ])
       } catch (failure) {
         setPhotoProblem(`Couldn't add that photo: ${message(failure)}`)
+      } finally {
+        setPending((n) => n - 1)
       }
     }
   }
@@ -542,8 +554,20 @@ export function QuickAdd({
   // One boolean, so the effect fires on the empty/filled edge and not on
   // every keystroke's re-render.
   const filled = trimmed !== ''
+  /**
+   * Deferred a frame, never called inline.
+   *
+   * `onFilled` drives `askFilled` in `App`, which collapses the whole
+   * `AskTopics` block the instant Ask's box goes from empty to filled. That
+   * collapse landing in the same render cycle as the keystroke which caused
+   * it is how the first character typed in Ask stopped sticking — a layout
+   * reflow sharing a tick with the soft keyboard's own commit is a known way
+   * for an Android WebView to lose the composition in flight. Waiting one
+   * frame lets the keystroke's own commit settle first.
+   */
   useEffect(() => {
-    onFilled?.(filled)
+    const id = requestAnimationFrame(() => onFilled?.(filled))
+    return () => cancelAnimationFrame(id)
   }, [filled, onFilled])
 
   /**
@@ -747,9 +771,10 @@ export function QuickAdd({
 
         {/* Between the text and the controls, because that is where what you
             have attached belongs: part of what you are composing, above the
-            row that sends it. Only ever present while something is staged, so
-            the control keeps its usual height on every other keystroke. */}
-        {staged.length > 0 && (
+            row that sends it. Only ever present while something is staged or
+            still decoding, so the control keeps its usual height on every
+            other keystroke. */}
+        {(staged.length > 0 || pending > 0) && (
           <div className="flex flex-wrap gap-2 px-3 pb-2">
             {staged.map((photo, position) => (
               <div key={photo.id} className="relative h-14 w-14">
@@ -774,6 +799,26 @@ export function QuickAdd({
                 >
                   <CloseIcon size={12} />
                 </button>
+              </div>
+            ))}
+            {/* One tile per file still decoding — static, no animation, so
+                there's nothing to reconcile against reduced-motion. Its job
+                is only to prove the pick was received before the real
+                thumbnail exists to prove it instead. Decorative: the one
+                status line below says the same thing once for a screen
+                reader, rather than each tile announcing itself. */}
+            {pending > 0 && (
+              <p role="status" className="sr-only">
+                Adding {pending} {pending === 1 ? 'photo' : 'photos'}
+              </p>
+            )}
+            {Array.from({ length: pending }).map((_, index) => (
+              <div
+                key={`pending-${index}`}
+                aria-hidden="true"
+                className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-edge bg-sunken text-faint"
+              >
+                <ImageIcon size={18} />
               </div>
             ))}
           </div>
