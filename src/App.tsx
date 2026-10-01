@@ -1,4 +1,4 @@
-import { addDays, parseISO, subDays } from 'date-fns'
+import { addDays, getHours, parseISO, subDays } from 'date-fns'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
@@ -7,7 +7,15 @@ import { AheadSheet } from './components/AheadSheet'
 import { BottomNav, type View } from './components/BottomNav'
 import { Calendar } from './components/Calendar'
 import { HelpSheet } from './components/HelpSheet'
-import { BellIcon, Chevron, InfoIcon, NoteIcon, PersonIcon, SearchIcon } from './components/Icons'
+import {
+  BellIcon,
+  Chevron,
+  InfoIcon,
+  MoonIcon,
+  PersonIcon,
+  SearchIcon,
+  SunIcon,
+} from './components/Icons'
 import { Login } from './components/Login'
 import { MonthGrid } from './components/MonthGrid'
 import { OnThisDay } from './components/OnThisDay'
@@ -86,27 +94,41 @@ function message(failure: unknown): string {
 }
 
 /**
- * The cut in Today's spine at the current time: a 9px accent dot in a 4px
- * accent glow on the line, a rule fading to the right, and the moment as an
- * accent eyebrow. Entries above it have happened; entries below are coming.
- * It renders from the same `now` the 30-second tick refreshes — placing it is
- * `Day`'s job (see `markerAt`), and it holds no state and no timer of its own.
+ * The current moment, as Variant E's pill (021): an accent dot and the time
+ * on a sunken chip, a rule running out behind it. Entries above it have
+ * happened; entries below are coming. In its `horizon` dress it stands
+ * between the two epoch cards — the boundary itself — with the night's own
+ * label at the far end. It renders from the same `now` the 30-second tick
+ * refreshes — placing it is `Day`'s job (see `markerAt`), and it holds no
+ * state and no timer of its own.
  */
-function NowMarker({ now }: { now: Date }) {
-  return (
-    <div className="flex h-9 items-center gap-3">
-      <span aria-hidden="true" className="relative flex w-7 shrink-0 justify-center">
-        <span className="flex h-[17px] w-[17px] items-center justify-center rounded-full bg-accent/25">
-          <span className="h-[9px] w-[9px] rounded-full bg-accent" />
+function NowMarker({ now, horizon = false }: { now: Date; horizon?: boolean }) {
+  const pill = (
+    <span className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-sunken px-2.5 py-1 text-[0.6875rem] font-semibold text-ink tabular-nums">
+      <span aria-hidden="true" className="h-2 w-2 rounded-full bg-accent" />
+      Now · {clockAt(now)}
+    </span>
+  )
+
+  if (horizon) {
+    return (
+      <div className="flex items-center gap-2.5 py-1">
+        {pill}
+        <span aria-hidden="true" className="h-px min-w-0 flex-1 bg-line" />
+        <span className="shrink-0 text-[0.625rem] font-semibold tracking-[0.1em] text-faint uppercase">
+          Night horizon
         </span>
-      </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-10 items-center gap-2.5 px-3.5">
+      {pill}
       <span
         aria-hidden="true"
         className="h-px min-w-0 flex-1 bg-linear-to-r from-accent/40 to-transparent"
       />
-      <span className="shrink-0 text-[0.6875rem] font-semibold tracking-[0.1em] text-accent uppercase tabular-nums">
-        Now · {clockAt(now)}
-      </span>
     </div>
   )
 }
@@ -422,6 +444,35 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
       : null
   // The fold holds only passed reminders, so the cut is never inside it.
   const markerAt = cut === null ? null : Math.max(0, cut - folded)
+
+  /**
+   * Where the evening begins: the first row at or after 6pm — Variant E's
+   * horizon (021). Timed rows sort ascending and untimed sort after them, so
+   * the split is a prefix and concatenating the two cards never reorders the
+   * day; untimed rows ride the evening card for the same reason.
+   */
+  const horizonAt = useMemo(() => {
+    let at = 0
+    for (const row of shownEntries) {
+      if (row.occurred_at === null || getHours(parseISO(row.occurred_at)) >= 18) break
+      at += 1
+    }
+    return at
+  }, [shownEntries])
+  const daylight = shownEntries.slice(0, horizonAt)
+  const evening = shownEntries.slice(horizonAt)
+
+  /**
+   * The balance card's counts, from what the day shows — a repeat happening
+   * today counts as a thing happening today. The money and minutes beside
+   * them stay summed from stored rows alone, the agreed rule: counting a
+   * drawing is honest, summing one five times is not.
+   */
+  const dayCounts = useMemo(() => {
+    const held = { expense: 0, time: 0, event: 0, note: 0 }
+    for (const row of shown) held[row.kind] += 1
+    return held
+  }, [shown])
 
   // One batched attachment lookup for every row on screen, never one
   // IndexedDB read per `EntryRow`.
@@ -901,29 +952,37 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
             the log answers from; the avatar opens You. `order-first` keeps it
             above the box when Ask dissolves the bottom block. */}
         <div className="order-first flex h-12 items-center justify-between lg:hidden">
-          <div className="flex min-w-0 items-center gap-2">
-            <NoteIcon size={20} className="shrink-0 text-accent" />
+          <div className="flex min-w-0 items-center gap-2.5">
+            {/* The serif-L tile — Variant E's wordmark (021). */}
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent font-display text-lg font-bold text-surface"
+            >
+              L
+            </span>
             <span className="truncate text-[17px] font-semibold tracking-tight text-ink">
               {TITLES[view]}
             </span>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
               aria-label="Search your log in Ask"
               onClick={() => setView('ask')}
-              className="flex h-11 w-11 items-center justify-center rounded-full text-muted transition-colors hover:text-ink"
+              className="flex h-11 w-11 items-center justify-center"
             >
-              <SearchIcon size={20} />
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-raised text-muted transition-colors hover:text-ink">
+                <SearchIcon size={17} />
+              </span>
             </button>
             <button
               type="button"
               aria-label="Account and settings"
               onClick={() => setView('you')}
-              className="-mr-1.5 flex h-11 w-11 items-center justify-center"
+              className="-mr-1 flex h-11 w-11 items-center justify-center"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-surface">
-                <PersonIcon size={16} />
+              <span className="flex h-9 w-9 items-center justify-center rounded-full border border-line bg-sunken text-xs font-semibold text-ink">
+                {(local ? 'G' : (email[0] ?? '?')).toUpperCase()}
               </span>
             </button>
           </div>
@@ -942,7 +1001,6 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
             <DayHeader
               day={day}
               now={now}
-              onChange={setDay}
               onOpenCalendar={() => setView('calendar')}
               actions={
                 // Only when there is something to show: a bell that is always
@@ -968,6 +1026,66 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
             <div className="mt-3">
               <WeekStrip day={day} now={now} loadDays={fetchDays} onPick={setDay} />
             </div>
+
+            {/* The balance card (021): what the day holds, before the day
+                itself. The track splits by entry counts — the one unit the
+                three kinds share — and the figures are the same stored-row
+                sums the old totals line carried; this card is that line now. */}
+            {shown.length > 0 && (
+              <div className="mt-3 rounded-2xl border border-line bg-raised p-3.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[0.6875rem] font-semibold tracking-[0.1em] text-ink uppercase">
+                    Horizon balance
+                  </span>
+                  <span className="shrink-0 text-xs text-faint tabular-nums">
+                    {shown.length} total {shown.length === 1 ? 'log' : 'logs'}
+                  </span>
+                </div>
+                <div
+                  aria-hidden="true"
+                  className="mt-2.5 flex h-2 overflow-hidden rounded-full bg-sunken"
+                >
+                  {dayCounts.expense > 0 && (
+                    <span className="h-full bg-expense" style={{ flexGrow: dayCounts.expense }} />
+                  )}
+                  {dayCounts.time > 0 && (
+                    <span className="h-full bg-time" style={{ flexGrow: dayCounts.time }} />
+                  )}
+                  {dayCounts.event > 0 && (
+                    <span className="h-full bg-event" style={{ flexGrow: dayCounts.event }} />
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-3 divide-x divide-line">
+                  <div className="min-w-0 pr-2">
+                    <span className="flex items-center gap-1.5 text-[0.625rem] font-semibold tracking-wider text-faint uppercase">
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-expense" />
+                      Spent
+                    </span>
+                    <p className="mt-0.5 truncate font-display text-lg leading-tight font-bold text-ink tabular-nums">
+                      {rupees(spent)}
+                    </p>
+                  </div>
+                  <div className="min-w-0 px-2.5">
+                    <span className="flex items-center gap-1.5 text-[0.625rem] font-semibold tracking-wider text-faint uppercase">
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-time" />
+                      Focus
+                    </span>
+                    <p className="mt-0.5 truncate font-display text-lg leading-tight font-bold text-ink tabular-nums">
+                      {logged === 0 ? '0m' : minutes(logged)}
+                    </p>
+                  </div>
+                  <div className="min-w-0 pl-2.5">
+                    <span className="flex items-center gap-1.5 text-[0.625rem] font-semibold tracking-wider text-faint uppercase">
+                      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-event" />
+                      Schedule
+                    </span>
+                    <p className="mt-0.5 truncate font-display text-lg leading-tight font-bold text-ink tabular-nums">
+                      {dayCounts.event} {dayCounts.event === 1 ? 'event' : 'events'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           // An eyebrow, not a headline: the nav already says which destination
@@ -1142,72 +1260,131 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
                 </div>
               )}
 
-              {/* The day opened on what was already over: struck-through reminders
-                  keep full size and position, so the loudest thing at the top was
-                  frequently the part that no longer matters. Folded into one line,
-                  the day opens on what is still live.
+              {/* The day as two epoch cards — Variant E (021): daylight, the
+                  horizon, evening. The spine retired with the ledger rows.
+                  The now pill renders inside whichever card holds the moment,
+                  or as the horizon banner when it falls exactly on the 6pm
+                  boundary between two non-empty cards.
 
-                  Only a *leading run* of them, so nothing is reordered — a passed
-                  reminder later in the day stays where it happened. And only from
-                  two upwards: hiding a single row behind a tap costs a row and
-                  saves none. `passed` is true of events alone, so nothing carrying
-                  money or time is ever inside the fold. */}
-              {/* The spine: the day as one line, in order — the documented
-                  exception in DESIGN §5. It spans the fold and the rows (the
-                  fold is part of the day, so the line runs through it) and
-                  fades over its last 18% so it never collides with the totals
-                  below. Positioned first in the wrapper, so the rows' own
-                  positioned nodes paint over it. */}
-              <div className="relative">
-                {shown.length > 0 && (
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-y-0 left-[14px] w-px bg-linear-to-b from-line via-line via-[82%] to-transparent"
-                  />
-                )}
-
-                {/* The day opened on what was already over: struck-through
-                    reminders keep full size and position, so the loudest thing
-                    at the top was frequently the part that no longer matters.
-                    Folded into one line, the day opens on what is still live.
-
-                    Only a *leading run* of them, so nothing is reordered — a
-                    passed reminder later in the day stays where it happened.
-                    And only from two upwards: hiding a single row behind a tap
-                    costs a row and saves none. `passed` is true of events
-                    alone, so nothing carrying money or time is ever inside
-                    the fold. */}
-                {folded > 0 && (
+                  The fold keeps its old rules — a leading run of passed
+                  reminders, two or more, nothing reordered — and sits at the
+                  top of the first card the day has. */}
+              {/* Every row of the day inside the fold: the cards have nothing
+                  to hold, but the fold itself is the day's one line and must
+                  still show — with the now pill under it, since everything
+                  above has passed. */}
+              {daylight.length === 0 && evening.length === 0 && folded > 0 && (
+                <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
                   <button
                     type="button"
                     aria-expanded={showEarlier}
                     onClick={() => setShowEarlier(true)}
-                    className="-mx-2 flex h-11 w-[calc(100%+1rem)] items-center gap-3 rounded-lg border-b border-line px-2 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
+                    className="flex h-11 w-full items-center gap-3 px-3.5 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
                   >
-                    <span aria-hidden="true" className="relative flex w-7 shrink-0 justify-center text-faint">
-                      <Chevron dir="down" size={16} />
-                    </span>
+                    <Chevron dir="down" size={16} className="shrink-0 text-faint" />
                     {folded} already passed
                   </button>
-                )}
+                  {markerAt === 0 && <NowMarker now={now} />}
+                </div>
+              )}
 
-                {shownEntries.map((row, at) => (
-                  <Fragment key={row.id}>
-                    {markerAt === at && <NowMarker now={now} />}
-                    <EntryRow
-                      row={row}
-                      now={now}
-                      spine
-                      photoUrl={photoThumbnails[row.id]?.url}
-                      photoCount={photoThumbnails[row.id]?.count}
-                      onOpenPhoto={() => openPhotos(row.id)}
-                      onOpen={() => setEditing(asStored(row))}
-                      onRetry={retry}
-                    />
-                  </Fragment>
-                ))}
-                {markerAt === shownEntries.length && <NowMarker now={now} />}
-              </div>
+              {daylight.length > 0 && (
+                <section className="mb-3">
+                  <div className="mb-1.5 flex items-center justify-between px-1">
+                    <span className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.1em] text-muted uppercase">
+                      <SunIcon size={14} />
+                      Daylight
+                    </span>
+                    <span className="text-[0.625rem] text-faint uppercase tabular-nums">
+                      {daylight.length} {daylight.length === 1 ? 'log' : 'logs'}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
+                    {folded > 0 && (
+                      <button
+                        type="button"
+                        aria-expanded={showEarlier}
+                        onClick={() => setShowEarlier(true)}
+                        className="flex h-11 w-full items-center gap-3 px-3.5 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
+                      >
+                        <Chevron dir="down" size={16} className="shrink-0 text-faint" />
+                        {folded} already passed
+                      </button>
+                    )}
+                    {daylight.map((row, at) => (
+                      <Fragment key={row.id}>
+                        {markerAt === at && <NowMarker now={now} />}
+                        <EntryRow
+                          row={row}
+                          now={now}
+                          boxed
+                          photoUrl={photoThumbnails[row.id]?.url}
+                          photoCount={photoThumbnails[row.id]?.count}
+                          onOpenPhoto={() => openPhotos(row.id)}
+                          onOpen={() => setEditing(asStored(row))}
+                          onRetry={retry}
+                        />
+                      </Fragment>
+                    ))}
+                    {markerAt === daylight.length && evening.length === 0 && (
+                      <NowMarker now={now} />
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {markerAt !== null &&
+                markerAt === horizonAt &&
+                daylight.length > 0 &&
+                evening.length > 0 && <NowMarker now={now} horizon />}
+
+              {evening.length > 0 && (
+                <section>
+                  <div className="mb-1.5 flex items-center justify-between px-1">
+                    <span className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-[0.1em] text-muted uppercase">
+                      <MoonIcon size={14} />
+                      Evening
+                    </span>
+                    <span className="text-[0.625rem] text-faint uppercase tabular-nums">
+                      {evening.length} {evening.length === 1 ? 'log' : 'logs'}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-raised">
+                    {daylight.length === 0 && folded > 0 && (
+                      <button
+                        type="button"
+                        aria-expanded={showEarlier}
+                        onClick={() => setShowEarlier(true)}
+                        className="flex h-11 w-full items-center gap-3 px-3.5 text-left text-xs text-muted transition-colors hover:bg-sunken active:bg-sunken"
+                      >
+                        <Chevron dir="down" size={16} className="shrink-0 text-faint" />
+                        {folded} already passed
+                      </button>
+                    )}
+                    {evening.map((row, at) => (
+                      <Fragment key={row.id}>
+                        {markerAt === horizonAt + at &&
+                          !(markerAt === horizonAt && daylight.length > 0) && (
+                            <NowMarker now={now} />
+                          )}
+                        <EntryRow
+                          row={row}
+                          now={now}
+                          boxed
+                          photoUrl={photoThumbnails[row.id]?.url}
+                          photoCount={photoThumbnails[row.id]?.count}
+                          onOpenPhoto={() => openPhotos(row.id)}
+                          onOpen={() => setEditing(asStored(row))}
+                          onRetry={retry}
+                        />
+                      </Fragment>
+                    ))}
+                    {markerAt === shownEntries.length && evening.length > 0 && (
+                      <NowMarker now={now} />
+                    )}
+                  </div>
+                </section>
+              )}
 
               {/* Under the rows, not over them: read as a header it looked like a
                   label for the box you were about to type into, when it is a
@@ -1220,30 +1397,8 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
                   than the per-row amounts it totals, which is exactly backwards. The
                   count stays quiet, because it names the list rather than measuring
                   it. */}
-              {shown.length > 0 && (
-                <p className="mt-3.5 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-faint">
-                  {/* Not `> 0`: a day whose only money is a refund has a total, and
-                      hiding it says the day carried none at all. */}
-                  {spent !== 0 && (
-                    <span>
-                      <span className="text-sm font-medium text-ink tabular-nums">{rupees(spent)}</span>{' '}
-                      spent
-                    </span>
-                  )}
-                  {logged > 0 && (
-                    <span>
-                      <span className="text-sm font-medium text-ink tabular-nums">
-                        {minutes(logged)}
-                      </span>{' '}
-                      logged
-                    </span>
-                  )}
-                  <span className="text-faint tabular-nums">
-                    {shown.length} {shown.length === 1 ? 'entry' : 'entries'}
-                  </span>
-                </p>
-              )}
-
+              {/* The totals line that sat here moved to the balance card at
+                  the top of the day (021) — one place sums the day, not two. */}
               <OnThisDay found={recalled} onPick={setDay} />
 
 

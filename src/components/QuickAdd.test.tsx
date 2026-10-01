@@ -205,13 +205,19 @@ describe('capturing an entry', () => {
 })
 
 describe('the empty-field hint', () => {
-  it('shows an example while the field is empty, and nothing once there is text', async () => {
-    const { box } = setup()
-    expect(screen.getByText('350 lunch · 2h client · dentist 5pm')).toBeTruthy()
+  it('shows example chips while the field is empty, and nothing once there is text', async () => {
+    const { box, onSubmit } = setup()
+    expect(screen.getByText('350 lunch')).toBeTruthy()
+    expect(screen.getByText('dentist 5pm')).toBeTruthy()
 
-    // Gone on the very first keystroke — it never sits under a real parse.
-    await userEvent.type(box, '5')
-    expect(screen.queryByText('350 lunch · 2h client · dentist 5pm')).toBeNull()
+    // A chip fills the box to be edited — it never submits (021).
+    await userEvent.click(screen.getByRole('button', { name: '2h client' }))
+    expect(box.value).toBe('2h client')
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    // And the chips are gone the moment there is text — they never sit under
+    // a real parse.
+    expect(screen.queryByText('350 lunch')).toBeNull()
   })
 
   it('says nothing in the live region on mount, so a screen reader is silent at launch', () => {

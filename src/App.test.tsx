@@ -389,9 +389,9 @@ describe('the part of the day that is already over', () => {
     await open()
 
     await waitFor(() => expect(screen.getByText('3 already passed')).toBeTruthy())
-    // Folded, not dropped: the count still describes the whole day.
+    // Folded, not dropped: the balance card still describes the whole day.
     expect(screen.queryByText('passed a')).toBeNull()
-    expect(screen.getByText(/3 entries/)).toBeTruthy()
+    expect(screen.getByText('3 total logs')).toBeTruthy()
   })
 
   it('unfolds them in place', async () => {
@@ -447,18 +447,16 @@ describe('with no network', () => {
     await log(box, '2h client work')
 
     // Arithmetic over local rows. None of it was ever a server's job. The
-    // figures carry their own weight now, so each is its own node — asserted on
-    // the totals line rather than on the rows, which print the same two numbers.
-    // `2 entries` exactly — the offline notice says "entries" too, in a longer
-    // sentence that an exact match does not reach.
-    const totals = await waitFor(() => {
-      const found = screen.getByText('2 entries').closest('p')
-      if (found === null) throw new Error('no totals line')
+    // figures live on the balance card now (021) — asserted there rather than
+    // on the rows, which print the same two numbers.
+    const card = await waitFor(() => {
+      const found = screen.getByText('2 total logs').closest('div')?.parentElement
+      if (found === null || found === undefined) throw new Error('no balance card')
       return found
     })
-    expect(totals.textContent).toContain('₹350 spent')
-    expect(totals.textContent).toContain('2h logged')
-    expect(totals.textContent).toContain('2 entries')
+    expect(card.textContent).toContain('₹350')
+    expect(card.textContent).toContain('2h')
+    expect(card.textContent).toContain('2 total logs')
   })
 
   it('answers a question about the log with no network', async () => {
@@ -601,14 +599,16 @@ describe('the four destinations', () => {
     await userEvent.click(within(main()).getByRole('button', { name: 'Open the day' }))
 
     // Back on the day, reading it — the calendar is navigation, never a place
-    // to stay.
-    expect(within(main()).getByRole('button', { name: 'Previous day' })).toBeTruthy()
+    // to stay. The capture box is the day screen's signature.
+    expect(within(main()).getByLabelText('What happened?')).toBeTruthy()
     expect(document.title).toContain(format(wanted, 'd MMM'))
   })
 
   it('keeps the day being read across a trip to You', async () => {
     await open()
-    await userEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+    // The arrows left the header (021); the keyboard still steps days once
+    // focus is out of the box.
+    await userEvent.keyboard('{Escape}{ArrowLeft}')
     const reading = document.title
 
     await go('You')
@@ -1217,10 +1217,11 @@ describe('using the app without an account', () => {
     await log(box, '350 lunch swiggy')
 
     await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
-    // The totals line, not the row — both print ₹350, which is the arithmetic
-    // working rather than a duplicate. Read off the line, because the figure
-    // and its label are separate nodes now.
-    expect(screen.getByText('1 entry').closest('p')?.textContent).toContain('₹350 spent')
+    // The balance card, not the row — both print ₹350, which is the
+    // arithmetic working rather than a duplicate.
+    expect(
+      screen.getByText('1 total log').closest('div')?.parentElement?.textContent,
+    ).toContain('₹350')
   })
 
   it('never labels a guest row as owed, queued or failed', async () => {
@@ -1486,7 +1487,7 @@ describe('the palette', () => {
 })
 
 describe('the now marker', () => {
-  it('cuts the spine today, and is absent on any other day', async () => {
+  it('cuts the day today, and is absent on any other day', async () => {
     const box = await open()
     await log(box, '350 lunch swiggy')
     await waitFor(() => expect(screen.getByText('lunch swiggy')).toBeTruthy())
@@ -1494,7 +1495,7 @@ describe('the now marker', () => {
     expect(screen.getByText(/^Now · /)).toBeTruthy()
 
     // Absent on a day that is not today — not parked at an edge.
-    await userEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+    await userEvent.keyboard('{Escape}{ArrowLeft}')
     await log(box, '100 chai')
     await waitFor(() => expect(screen.getByText('chai')).toBeTruthy())
     expect(screen.queryByText(/^Now · /)).toBeNull()

@@ -1,51 +1,44 @@
-import { addDays, parseISO, subDays } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { type ReactNode } from 'react'
-import { Chevron } from './Icons'
-import { dayEyebrow, dayKey, dayLabel, dayTitle } from '../lib/format'
+import { dayLabel } from '../lib/format'
 
 type Props = {
   day: string
   now: Date
-  onChange: (day: string) => void
   onOpenCalendar: () => void
-  /** The bell, when there is anything ahead. Sits with the day's own controls. */
+  /** The bell, when there is anything ahead. Sits with the day's own meta. */
   actions?: ReactNode
 }
 
 /**
- * The subject of the screen, in two lines.
+ * The subject of the screen, said editorially — Variant E (021): the weekday
+ * and an italic day number, the month italic and stepped back beneath, the
+ * ISO week at the right. The only lines in the app allowed this size.
  *
- * It was one centred line between two chevrons, which spent the widest part of
- * the header on two 44px arrows and left the date competing with them for the
- * middle. Read left, the eyebrow says which day relative to now and the date
- * below it is the thing itself — the only line in the app allowed to be this
- * size, so nothing else has to shout to be found.
- *
- * The chevrons move to the right as a pair. Stepping a day is a repeated
- * gesture, and two targets beside each other are one place to aim rather than
- * two edges to cross; on a phone they also land under the thumb rather than
- * across the top corners. The date itself stays the way into the calendar, and
- * keeps the accessible name it always had so nothing that looks for it moves.
+ * The chevrons are gone: swiping, the week strip, the keyboard arrows and the
+ * calendar all still step days, and the pair of 44px targets spent the
+ * widest part of the header on the one gesture that had four other routes.
  */
-export function DayHeader({ day, now, onChange, onOpenCalendar, actions }: Props) {
+export function DayHeader({ day, now, onOpenCalendar, actions }: Props) {
+  const at = parseISO(day)
+
   const said = (
     <>
-      <span className="block text-[0.6875rem] font-semibold tracking-[0.1em] text-faint uppercase">
-        {dayEyebrow(day, now)}
+      <span className="block truncate font-display text-[26px] leading-tight font-semibold tracking-tight text-ink">
+        {format(at, 'EEEE')}, <span className="font-normal italic">{format(at, 'd')}</span>
       </span>
-      <span className="mt-0.5 block truncate font-display text-[1.375rem] leading-tight font-semibold tracking-tight sm:text-2xl">
-        {dayTitle(day, now)}
+      <span className="block truncate font-display text-[21px] leading-tight italic text-muted">
+        {format(at, 'MMMM')}
       </span>
     </>
   )
 
   return (
-    <div className="flex items-end justify-between gap-2">
+    <div className="flex items-start justify-between gap-2">
       {/* The date is the way to the calendar on a phone, where the calendar is a
           destination in the bottom nav. On a wide screen it is a label and
           nothing else: the sidebar has held the whole month, permanently and at
-          no taps, since long before the nav existed, and a second route to
-          something already on screen is a control that has to be explained. */}
+          no taps, since long before the nav existed. */}
       <button
         type="button"
         onClick={onOpenCalendar}
@@ -56,24 +49,11 @@ export function DayHeader({ day, now, onChange, onOpenCalendar, actions }: Props
       </button>
       <div className="-mx-1 hidden min-w-0 px-1 py-1 lg:block">{said}</div>
 
-      <div className="flex shrink-0 items-center">
+      <div className="flex shrink-0 items-center gap-1 pt-1.5">
+        <span className="text-[0.6875rem] font-medium text-faint tabular-nums">
+          Week {format(at, 'I')}
+        </span>
         {actions}
-        <button
-          type="button"
-          aria-label="Previous day"
-          onClick={() => onChange(dayKey(subDays(parseISO(day), 1)))}
-          className="flex h-11 w-11 items-center justify-center rounded-lg text-faint transition-colors hover:text-ink active:text-ink"
-        >
-          <Chevron dir="left" size={18} />
-        </button>
-        <button
-          type="button"
-          aria-label="Next day"
-          onClick={() => onChange(dayKey(addDays(parseISO(day), 1)))}
-          className="-mr-2 flex h-11 w-11 items-center justify-center rounded-lg text-faint transition-colors hover:text-ink active:text-ink"
-        >
-          <Chevron dir="right" size={18} />
-        </button>
       </div>
     </div>
   )

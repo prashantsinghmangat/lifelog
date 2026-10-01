@@ -150,39 +150,38 @@ describe('local photo thumbnail', () => {
   })
 })
 
-describe('on the spine', () => {
-  it('draws a filled node in the kind colour instead of the glyph, keeping the words', () => {
-    render(<EntryRow row={row({})} now={NOW} spine onOpen={vi.fn()} onRetry={vi.fn()} />)
+describe('the ledger anatomy', () => {
+  it('leads with the clock column and badges the kind in its own colour', () => {
+    render(<EntryRow row={row({})} now={NOW} onOpen={vi.fn()} onRetry={vi.fn()} />)
 
-    // The node replaces the 15px mark entirely: the only ₹ left is the value.
+    // The badge replaces glyph and node alike: the only ₹ left is the value.
     expect(screen.getAllByText(/₹/)).toHaveLength(1)
     expect(screen.getByText('₹350')).toBeTruthy()
-    const node = document.querySelector('.bg-expense') as HTMLElement
-    expect(node).toBeTruthy()
-    expect(node.className).toContain('h-[11px]')
-    // Nothing rides on colour alone: the sr-only kind name is untouched.
+    const badge = document.querySelector('.bg-expense\\/10') as HTMLElement
+    expect(badge).toBeTruthy()
+    expect(badge.textContent).toBe('expense')
+    // Hidden from readers — the sr-only kind name says it once, properly.
+    expect(badge.getAttribute('aria-hidden')).toBe('true')
     expect(screen.getByText(/Expense/)).toBeTruthy()
   })
 
-  it('draws an event hollow — a ring on a surface centre', () => {
+  it('gives a done event the completed chip and the strike, never a value', () => {
     render(
       <EntryRow
-        row={row({ kind: 'event', amount_paise: null, title: 'dentist' })}
+        // 8am, behind the 10am NOW: behindYou says done.
+        row={row({
+          kind: 'event',
+          amount_paise: null,
+          title: 'dentist',
+          occurred_at: '2026-09-17T08:00:00+05:30',
+        })}
         now={NOW}
-        spine
         onOpen={vi.fn()}
         onRetry={vi.fn()}
       />,
     )
 
-    const node = document.querySelector('.border-event') as HTMLElement
-    expect(node).toBeTruthy()
-    expect(node.className).toContain('bg-surface')
-  })
-
-  it('keeps the glyph everywhere the spine is not', () => {
-    render(<EntryRow row={row({})} now={NOW} onOpen={vi.fn()} onRetry={vi.fn()} />)
-    // The kind mark's rupee glyph, distinct from the value at the right.
-    expect(screen.getAllByText(/₹/).length).toBeGreaterThan(1)
+    expect(screen.getByText('completed')).toBeTruthy()
+    expect(screen.getByText('dentist').className).toContain('line-through')
   })
 })

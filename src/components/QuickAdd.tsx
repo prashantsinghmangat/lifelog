@@ -259,7 +259,7 @@ export function AskTopics({
  * a live one: it sits outside `#quick-add-preview` so nothing is announced at
  * launch, the same silence the field itself starts in.
  */
-const HINT = '350 lunch · 2h client · dentist 5pm'
+const HINTS = ['350 lunch', '2h client', 'dentist 5pm']
 
 /** Written out, never interpolated: Tailwind only compiles classes it can see. */
 const DOT: Record<Kind, string> = {
@@ -836,8 +836,28 @@ export function QuickAdd({
                 autofocused, so this is the first thing on screen and a screen
                 reader must hear nothing about it on launch. Gone the moment
                 there is anything to say instead. */}
+            {/* The hint as three tappable chips (021): the same syntax the
+                text taught, now one tap from being edited rather than typed.
+                Each chip sits inside the row's own 44px height. */}
             {mode === 'log' && trimmed === '' && !asking && (
-              <span className="text-faint">{HINT}</span>
+              <span className="flex min-w-0 items-center gap-1.5 overflow-x-auto">
+                <span className="shrink-0 text-faint">e.g.</span>
+                {HINTS.map((hint) => (
+                  <button
+                    key={hint}
+                    type="button"
+                    onClick={() => {
+                      setText(hint)
+                      document.getElementById('quick-add')?.focus()
+                    }}
+                    className="flex h-11 shrink-0 items-center"
+                  >
+                    <span className="rounded bg-sunken px-2 py-0.5 text-ink transition-opacity hover:opacity-80">
+                      {hint}
+                    </span>
+                  </button>
+                ))}
+              </span>
             )}
             {/* The row exists to hold the control's height, so in Ask it says
                 what the control does rather than sitting visibly empty. Plain
@@ -1015,11 +1035,17 @@ export function QuickAdd({
                 aria-label={dictation.listening ? 'Stop dictation' : 'Dictate'}
                 aria-pressed={dictation.listening}
                 onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
-                className={`-mr-0.5 flex h-11 w-11 shrink-0 items-center justify-center transition-colors ${
-                  dictation.listening ? 'text-expense' : 'text-faint hover:text-muted'
-                }`}
+                className="-mr-0.5 flex h-11 w-11 shrink-0 items-center justify-center"
               >
-                <MicIcon size={18} />
+                {/* The accent disc — Variant E's mic (021); listening turns
+                    it the expense red the old plain glyph used. */}
+                <span
+                  className={`flex h-8 w-8 items-center justify-center rounded-full text-surface transition-colors ${
+                    dictation.listening ? 'bg-expense' : 'bg-accent'
+                  }`}
+                >
+                  <MicIcon size={16} />
+                </span>
               </button>
             )
           )}
