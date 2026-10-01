@@ -116,3 +116,31 @@ it('hands back what it removed, so Undo restores the bytes rather than a re-enco
 
   await removeAll('flicker-3')
 })
+
+it('adds a document without touching photos', async () => {
+  await put('doc-1', jpeg())
+  const seen = mount('doc-1')
+  await waitFor(() => expect(seen.current?.photos).toHaveLength(1))
+
+  await act(async () => {
+    await seen.current!.addDocument(new File(['x'], 'bill.pdf', { type: 'application/pdf' }))
+  })
+  await waitFor(() => expect(seen.current?.documents).toHaveLength(1))
+
+  expect(seen.current!.documents[0]?.name).toBe('bill.pdf')
+  expect(seen.current!.photos).toHaveLength(1)
+
+  await removeAll('doc-1')
+})
+
+it('lets a rejected document propagate, rather than swallowing it like a photo failure', async () => {
+  const seen = mount('doc-2')
+  await waitFor(() => expect(seen.current).not.toBeNull())
+
+  await expect(
+    seen.current!.addDocument(new File(['x'], 'archive.zip', { type: 'application/zip' })),
+  ).rejects.toThrow(/PDF, Word or Excel/)
+  expect(seen.current!.documents).toHaveLength(0)
+
+  await removeAll('doc-2')
+})

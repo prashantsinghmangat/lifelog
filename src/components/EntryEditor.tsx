@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { ArrowUpIcon, CalendarIcon, CameraIcon, CheckIcon, CloseIcon, ImageIcon } from './Icons'
+import {
+  ArrowUpIcon,
+  CalendarIcon,
+  CameraIcon,
+  CheckIcon,
+  CloseIcon,
+  DocumentIcon,
+  ImageIcon,
+} from './Icons'
 import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
 import { useAttachments } from '../hooks/useAttachments'
 import type { Attachment } from '../lib/attachments'
 import { expectForegroundReturn } from '../lib/applock'
 import { available as cameraAvailable, takePhoto } from '../lib/camera'
+import { shareBlob } from '../lib/deliver'
 import {
   done as isDone,
   leadWords,
@@ -131,8 +140,17 @@ export function EntryEditor({
    */
   const [problem, setProblem] = useState<string | null>(null)
 
-  const { photos, addState, add, remove: removePhoto, restore: restorePhoto } = useAttachments(row.id)
+  const {
+    photos,
+    documents,
+    addState,
+    add,
+    addDocument,
+    remove: removeAttachment,
+    restore: restoreAttachment,
+  } = useAttachments(row.id)
   const galleryInput = useRef<HTMLInputElement>(null)
+  const documentInput = useRef<HTMLInputElement>(null)
   /** Which photo the viewer is open on, stacked over this sheet. */
   const [viewing, setViewing] = useState<number | null>(null)
   /** The photo just removed, while taking it back is still on offer. */
@@ -141,20 +159,23 @@ export function EntryEditor({
   useEffect(() => () => window.clearTimeout(undoTimer.current), [])
 
   /**
-   * A removed photo is gone at once and takeable back, the same bargain a
-   * deleted entry makes — the app's rule is undo, never "are you sure?". The
-   * bytes come back from `remove` itself, so this restores the photo rather
-   * than a re-encode of it.
+   * A removed attachment — photo or document — is gone at once and takeable
+   * back, the same bargain a deleted entry makes — the app's rule is undo,
+   * never "are you sure?". The bytes come back from `remove` itself, so this
+   * restores the original rather than a re-encode of it. One slot for either
+   * kind: `remove`/`restore` already operate on either, and a photo removed
+   * and then a document removed only ever has to recall the most recent one.
    *
    * **Offered in the strip rather than in a toast**, which is where the first
    * attempt put it and where it could never be seen: `Toast` renders in flow
    * beneath `Sheet`'s `z-40`, and deliberately — a toast over a sheet's
    * Save/Cancel/Delete meant a tap aimed at Save landed on Undo and restored
-   * the row just deleted. The slot the photo occupied is the honest place for
-   * it anyway: it says what was removed as well as that something was.
+   * the row just deleted. The slot the attachment occupied is the honest
+   * place for it anyway: it says what was removed as well as that something
+   * was.
    */
-  async function dropPhoto(id: string) {
-    const taken = await removePhoto(id)
+  async function dropAttachment(id: string) {
+    const taken = await removeAttachment(id)
     if (taken === undefined) return
     setUndoable(taken)
     // Long enough to notice and decide, matching the toast's own window for an
@@ -166,11 +187,26 @@ export function EntryEditor({
   function undoRemove() {
     if (undoable === null) return
     if (undoTimer.current !== undefined) window.clearTimeout(undoTimer.current)
-    void restorePhoto(undoable)
+    void restoreAttachment(undoable)
     setUndoable(null)
   }
   /** A camera that would not open, said where a failed photo save is already said. */
   const [cameraProblem, setCameraProblem] = useState<string | null>(null)
+  /** A rejected or oversized document, said next to Document rather than Camera's slot. */
+  const [documentProblem, setDocumentProblem] = useState<string | null>(null)
+
+  async function pickDocuments(files: File[]) {
+    for (const file of files) {
+      try {
+        await addDocument(file)
+        setDocumentProblem(null)
+      } catch (failure) {
+        setDocumentProblem(
+          failure instanceof Error ? failure.message : "Couldn't save that document.",
+        )
+      }
+    }
+  }
 
   /** Cancelling says nothing: backing out of the camera is a decision, not a fault. */
   async function shoot() {
@@ -717,6 +753,20 @@ export function EntryEditor({
               })()
             }}
           />
+          {/* PDF/Word/Excel — never routed through the photo pipeline, see
+              `attachments.ts`'s `putDocument`. */}
+          <input
+            ref={documentInput}
+            type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            multiple
+            className="hidden"
+            onChange={(event) => {
+              const picked = event.target.files ? Array.from(event.target.files) : []
+              event.target.value = ''
+              void pickDocuments(picked)
+            }}
+          />
           <div className="flex gap-2">
             <button
               type="button"
@@ -741,6 +791,14 @@ export function EntryEditor({
                 Camera
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => documentInput.current?.click()}
+              className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
+            >
+              <DocumentIcon size={16} />
+              Document
+            </button>
           </div>
           {/* A photo that failed to save is not the same failure as the entry
               failing to save, and must never read as one. */}
@@ -754,10 +812,15 @@ export function EntryEditor({
               {cameraProblem}
             </p>
           )}
+          {documentProblem !== null && (
+            <p role="alert" className="mt-1.5 text-xs text-expense">
+              {documentProblem}
+            </p>
+          )}
           {(photos.length > 0 || undoable !== null) && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {/* Where the photo was, for as long as it can be had back. A
-                  toast cannot be seen from inside a sheet — see `dropPhoto`. */}
+              {/* Where the attachment was, for as long as it can be had back.
+                  A toast cannot be seen from inside a sheet — see `dropAttachment`. */}
               {undoable !== null && (
                 <button
                   type="button"
@@ -782,7 +845,7 @@ export function EntryEditor({
                   </button>
                   <button
                     type="button"
-                    onClick={() => void dropPhoto(photo.id)}
+                    onClick={() => void dropAttachment(photo.id)}
                     aria-label="Remove photo"
                     className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink/70 text-surface"
                   >
@@ -791,6 +854,35 @@ export function EntryEditor({
                 </div>
               ))}
             </div>
+          )}
+          {/* No preview — a document is opened through the OS, never rendered
+              in-app, the same reasoning that already rules out a PDF viewer. */}
+          {documents.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-1.5">
+              {documents.map((doc) => (
+                <li
+                  key={doc.id}
+                  className="flex items-center gap-2 rounded-lg border border-edge px-3 py-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => void shareBlob(doc.name, doc.blob)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-ink"
+                  >
+                    <DocumentIcon size={16} className="shrink-0 text-muted" />
+                    <span className="truncate">{doc.name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void dropAttachment(doc.id)}
+                    aria-label="Remove document"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted hover:bg-sunken"
+                  >
+                    <CloseIcon size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 

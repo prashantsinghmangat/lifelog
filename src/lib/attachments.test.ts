@@ -1,12 +1,14 @@
 import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  acceptedDocument,
   firstPhotoBlobs,
   fromFile,
   hasPhotoMap,
   list,
   orphansOf,
   put,
+  putDocument,
   remove,
   removeAll,
   sweepOrphans,
@@ -68,6 +70,69 @@ describe('hasPhotoMap', () => {
   it('is true only for entries with a stored photo', async () => {
     await put('map-1', blob())
     expect(await hasPhotoMap(['map-1', 'map-2'])).toEqual({ 'map-1': true, 'map-2': false })
+  })
+
+  it('treats an entry holding only a document as having no photo', async () => {
+    await putDocument('map-1', new File(['x'], 'bill.pdf', { type: 'application/pdf' }))
+    expect(await hasPhotoMap(['map-1'])).toEqual({ 'map-1': false })
+  })
+})
+
+describe('acceptedDocument', () => {
+  it.each([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ])('accepts %s by MIME type', (type) => {
+    expect(acceptedDocument(new File(['x'], 'file.bin', { type }))).toBe(true)
+  })
+
+  it.each(['pdf', 'doc', 'docx', 'xls', 'xlsx'])(
+    'accepts a .%s file by extension when the picker reports a blank type',
+    (extension) => {
+      expect(acceptedDocument(new File(['x'], `file.${extension}`, { type: '' }))).toBe(true)
+    },
+  )
+
+  it('rejects an image — that is Gallery and Camera\'s job, not Document\'s', () => {
+    expect(acceptedDocument(new File(['x'], 'photo.jpg', { type: 'image/jpeg' }))).toBe(false)
+  })
+
+  it('rejects a type and extension neither one recognises', () => {
+    expect(acceptedDocument(new File(['x'], 'archive.zip', { type: 'application/zip' }))).toBe(
+      false,
+    )
+  })
+})
+
+describe('putDocument', () => {
+  afterEach(async () => {
+    await removeAll('doc-1')
+  })
+
+  it('stores the file under kind, mimeType and name', async () => {
+    const file = new File(['x'], 'statement.pdf', { type: 'application/pdf' })
+    const stored = await putDocument('doc-1', file)
+    expect(stored.kind).toBe('document')
+    expect(stored.mimeType).toBe('application/pdf')
+    expect(stored.name).toBe('statement.pdf')
+    expect((await list('doc-1'))[0]?.id).toBe(stored.id)
+  })
+
+  it('rejects a file over 10 MB without storing it', async () => {
+    const big = new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'big.pdf', {
+      type: 'application/pdf',
+    })
+    await expect(putDocument('doc-1', big)).rejects.toThrow(/10 MB/)
+    expect(await list('doc-1')).toHaveLength(0)
+  })
+
+  it('rejects an unsupported type without storing it', async () => {
+    const file = new File(['x'], 'archive.zip', { type: 'application/zip' })
+    await expect(putDocument('doc-1', file)).rejects.toThrow(/PDF, Word or Excel/)
+    expect(await list('doc-1')).toHaveLength(0)
   })
 })
 
@@ -141,6 +206,11 @@ describe('firstPhotoBlobs', () => {
 
   it('returns an empty map for an empty request', async () => {
     expect(await firstPhotoBlobs([])).toEqual({})
+  })
+
+  it('never hands back a document as the representative blob', async () => {
+    await putDocument('thumb-1', new File(['x'], 'bill.pdf', { type: 'application/pdf' }))
+    expect(await firstPhotoBlobs(['thumb-1'])).toEqual({})
   })
 })
 

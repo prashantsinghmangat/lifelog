@@ -13,6 +13,10 @@ export type Attachment = {
   entryId: string
   blob: Blob
   createdAt: string
+  /** Absent means a photo — every record before this field existed is one. */
+  kind?: 'document'
+  mimeType?: string
+  name?: string
 }
 
 const DB_NAME = 'lifelog-attachments'
@@ -22,6 +26,26 @@ const ENTRY_INDEX = 'entryId'
 /** Longest side a stored photo is allowed to keep — a camera original is easily 4000px+. */
 const MAX_DIMENSION = 1600
 const JPEG_QUALITY = 0.82
+
+/** What the Document button accepts — PDF plus the common office formats. */
+const DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+])
+/** Some Android pickers hand back a blank or generic `type` — the extension is the fallback. */
+const DOCUMENT_EXTENSIONS = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx'])
+/** Documents skip the photo pipeline's downscale, so this is the only thing capping their size. */
+const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
+
+/** Whether a picked file is one of the document types this app will store. */
+export function acceptedDocument(file: File): boolean {
+  if (DOCUMENT_MIME_TYPES.has(file.type)) return true
+  const extension = file.name.split('.').pop()?.toLowerCase()
+  return extension !== undefined && DOCUMENT_EXTENSIONS.has(extension)
+}
 
 /**
  * What an image of this size is stored at: capped on the longest side, aspect
@@ -150,6 +174,28 @@ export async function put(entryId: string, blob: Blob): Promise<Attachment> {
   return attachment
 }
 
+/**
+ * Stores a document for an entry — the file's own bytes, unlike a photo there
+ * is no recompress step to shrink it first, so size and type are checked here
+ * instead.
+ */
+export async function putDocument(entryId: string, file: File): Promise<Attachment> {
+  if (!acceptedDocument(file)) throw new Error('Only PDF, Word or Excel files are supported')
+  if (file.size > MAX_DOCUMENT_SIZE) throw new Error('Documents can be at most 10 MB')
+
+  const attachment: Attachment = {
+    id: crypto.randomUUID(),
+    entryId,
+    blob: file,
+    createdAt: new Date().toISOString(),
+    kind: 'document',
+    mimeType: file.type,
+    name: file.name,
+  }
+  await run('readwrite', (store) => store.add(attachment))
+  return attachment
+}
+
 /** An entry's photos, oldest first. */
 export function list(entryId: string): Promise<Attachment[]> {
   return openDb().then(
@@ -214,7 +260,11 @@ export async function removeAll(entryId: string): Promise<void> {
   for (const photo of photos) await remove(photo.id)
 }
 
-/** Every entry id that currently has at least one stored photo. */
+/**
+ * Every entry id that currently has at least one stored photo — a document
+ * does not count, so this walks records rather than the key cursor `put`'s
+ * sibling function used to, the only way to see each one's `kind`.
+ */
 function storedEntryIds(): Promise<Set<string>> {
   return openDb().then(
     (db) =>
@@ -222,13 +272,12 @@ function storedEntryIds(): Promise<Set<string>> {
         const tx = db.transaction(STORE, 'readonly')
         const index = tx.objectStore(STORE).index(ENTRY_INDEX)
         const ids = new Set<string>()
-        // `nextunique` walks one entry per distinct key, so this is one pass
-        // over the index rather than one read per stored photo.
-        const request = index.openKeyCursor(undefined, 'nextunique')
+        const request = index.openCursor()
         request.onsuccess = () => {
           const cursor = request.result
           if (cursor) {
-            ids.add(cursor.key as string)
+            const attachment = cursor.value as Attachment
+            if (attachment.kind !== 'document') ids.add(attachment.entryId)
             cursor.continue()
           }
         }
@@ -279,7 +328,7 @@ export async function firstPhotoBlobs(
       const cursor = request.result
       if (!cursor) return
       const photo = cursor.value as Attachment
-      if (wanted.has(photo.entryId)) {
+      if (photo.kind !== 'document' && wanted.has(photo.entryId)) {
         const held = found[photo.entryId]
         // The oldest photo on an entry wins, because the cursor walks the
         // index in insertion order and the first one seen is kept — every one

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EntryEditor } from './EntryEditor'
 import type { Patch, Row } from '../hooks/useEntries'
-import type { AddState, Photo } from '../hooks/useAttachments'
+import type { AddState, Document, Photo } from '../hooks/useAttachments'
 import type { ToastState } from './Toast'
 
 /** Edit → save, the journey where a wrong parse gets corrected. */
@@ -16,8 +16,10 @@ import type { ToastState } from './Toast'
 vi.mock('../hooks/useAttachments', () => ({
   useAttachments: vi.fn(() => ({
     photos: [] as Photo[],
+    documents: [] as Document[],
     addState: 'idle' as AddState,
     add: vi.fn(async () => {}),
+    addDocument: vi.fn(async () => {}),
     remove: vi.fn(async () => undefined),
     restore: vi.fn(async () => {}),
   })),
@@ -600,13 +602,25 @@ describe('local photos', () => {
     expect(screen.getByRole('button', { name: 'Camera' })).toBeTruthy()
 
     const inputs = [...document.querySelectorAll('input[type="file"]')] as HTMLInputElement[]
-    // Gallery is the only file input. A `capture` one opens the photo picker
-    // in an Android WebView — proven on a Pixel 7 — so the camera goes through
-    // the plugin and an input carrying `capture` must never come back.
-    expect(inputs).toHaveLength(1)
+    // Gallery and Document are the only file inputs. A `capture` one opens the
+    // photo picker in an Android WebView — proven on a Pixel 7 — so the camera
+    // goes through the plugin and an input carrying `capture` must never come
+    // back.
+    expect(inputs).toHaveLength(2)
     expect(inputs.some((input) => input.hasAttribute('capture'))).toBe(false)
-    expect(inputs[0]?.accept).toBe('image/*')
-    expect(inputs[0]?.multiple).toBe(true)
+    const gallery = inputs.find((input) => input.accept === 'image/*')
+    expect(gallery?.multiple).toBe(true)
+  })
+
+  it('offers Document as a third control, accepting PDF and office files', () => {
+    setup()
+    expect(screen.getByRole('button', { name: 'Document' })).toBeTruthy()
+
+    const inputs = [...document.querySelectorAll('input[type="file"]')] as HTMLInputElement[]
+    const document_ = inputs.find((input) => input.accept !== 'image/*')
+    expect(document_?.multiple).toBe(true)
+    expect(document_?.accept).toContain('application/pdf')
+    expect(document_?.accept).toContain('.docx')
   })
 
   it('does not offer Camera where there is none', () => {
@@ -619,7 +633,15 @@ describe('local photos', () => {
 
   it('hands a photographed blob to the attachment hook', async () => {
     const add = vi.fn(async () => {})
-    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn(), restore: vi.fn() })
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [],
+      documents: [],
+      addState: 'idle',
+      add,
+      addDocument: vi.fn(async () => {}),
+      remove: vi.fn(),
+      restore: vi.fn(),
+    })
     setup()
 
     await userEvent.click(screen.getByRole('button', { name: 'Camera' }))
@@ -645,8 +667,10 @@ describe('local photos', () => {
   it('opens a photo full-size, over the editor rather than under it', async () => {
     vi.mocked(useAttachments).mockReturnValue({
       photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: '2026-09-05T10:00:00+05:30' }],
+      documents: [],
       addState: 'idle',
       add: vi.fn(),
+      addDocument: vi.fn(),
       remove: vi.fn(),
       restore: vi.fn(),
     })
@@ -662,7 +686,15 @@ describe('local photos', () => {
 
   it('hands a picked file to the attachment hook', async () => {
     const add = vi.fn(async () => {})
-    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn(), restore: vi.fn() })
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [],
+      documents: [],
+      addState: 'idle',
+      add,
+      addDocument: vi.fn(async () => {}),
+      remove: vi.fn(),
+      restore: vi.fn(),
+    })
     setup()
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -685,7 +717,15 @@ describe('local photos', () => {
           release = resolve
         }),
     )
-    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn(), restore: vi.fn() })
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [],
+      documents: [],
+      addState: 'idle',
+      add,
+      addDocument: vi.fn(async () => {}),
+      remove: vi.fn(),
+      restore: vi.fn(),
+    })
     setup()
 
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -701,11 +741,127 @@ describe('local photos', () => {
     expect(add).toHaveBeenCalledWith(second)
   })
 
+  function documentInputOf(container: ParentNode): HTMLInputElement {
+    const inputs = [...container.querySelectorAll('input[type="file"]')] as HTMLInputElement[]
+    const found = inputs.find((input) => input.accept !== 'image/*')
+    if (found === undefined) throw new Error('expected a document input')
+    return found
+  }
+
+  it('hands a picked document to the attachment hook', async () => {
+    const addDocument = vi.fn(async () => {})
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [],
+      documents: [],
+      addState: 'idle',
+      add: vi.fn(),
+      addDocument,
+      remove: vi.fn(),
+      restore: vi.fn(),
+    })
+    setup()
+
+    const file = new File(['x'], 'statement.pdf', { type: 'application/pdf' })
+    await userEvent.upload(documentInputOf(document), file)
+
+    expect(addDocument).toHaveBeenCalledWith(file)
+  })
+
+  it("shows a rejected document's own message, not the camera or photo one", async () => {
+    const addDocument = vi.fn(async () => {
+      throw new Error('Only PDF, Word or Excel files are supported')
+    })
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [],
+      documents: [],
+      addState: 'idle',
+      add: vi.fn(),
+      addDocument,
+      remove: vi.fn(),
+      restore: vi.fn(),
+    })
+    setup()
+
+    // The mock rejects regardless of content — what's under test is that the
+    // thrown message reaches the screen, not `acceptedDocument` itself (that's
+    // `attachments.test.ts`'s job). The file still has to pass the input's own
+    // `accept` filter, which `userEvent.upload` enforces the same way a real
+    // OS picker would.
+    const file = new File(['x'], 'statement.pdf', { type: 'application/pdf' })
+    await userEvent.upload(documentInputOf(document), file)
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toMatch(/PDF, Word or Excel/),
+    )
+  })
+
+  it('adds documents from a multi-select one at a time, not all at once', async () => {
+    let release: (() => void) | undefined
+    const addDocument = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    )
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [],
+      documents: [],
+      addState: 'idle',
+      add: vi.fn(),
+      addDocument,
+      remove: vi.fn(),
+      restore: vi.fn(),
+    })
+    setup()
+
+    const first = new File(['x'], 'one.pdf', { type: 'application/pdf' })
+    const second = new File(['y'], 'two.pdf', { type: 'application/pdf' })
+    void userEvent.upload(documentInputOf(document), [first, second])
+
+    await waitFor(() => expect(addDocument).toHaveBeenCalledTimes(1))
+    expect(addDocument).toHaveBeenCalledWith(first)
+
+    release?.()
+    await waitFor(() => expect(addDocument).toHaveBeenCalledTimes(2))
+    expect(addDocument).toHaveBeenCalledWith(second)
+  })
+
+  it('offers Undo for a removed document, the same as a removed photo', async () => {
+    const taken = {
+      id: 'doc-1',
+      entryId: 'row-1',
+      blob: new Blob(['x'], { type: 'application/pdf' }),
+      createdAt: '2026-09-05T10:00:00+05:30',
+      kind: 'document' as const,
+      mimeType: 'application/pdf',
+      name: 'statement.pdf',
+    }
+    const restore = vi.fn(async () => {})
+    vi.mocked(useAttachments).mockReturnValue({
+      photos: [],
+      documents: [{ id: 'doc-1', name: 'statement.pdf', mimeType: 'application/pdf', blob: taken.blob, createdAt: taken.createdAt }],
+      addState: 'idle',
+      add: vi.fn(),
+      addDocument: vi.fn(),
+      remove: vi.fn(async () => taken),
+      restore,
+    })
+    setup()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove document' }))
+    const undo = await screen.findByRole('button', { name: 'Undo' })
+
+    await userEvent.click(undo)
+    expect(restore).toHaveBeenCalledWith(taken)
+  })
+
   it('shows a save-failed state that says nothing about the entry itself', () => {
     vi.mocked(useAttachments).mockReturnValue({
       photos: [],
+      documents: [],
       addState: 'failed',
       add: vi.fn(),
+      addDocument: vi.fn(),
       remove: vi.fn(),
       restore: vi.fn(),
     })
@@ -719,8 +875,10 @@ describe('local photos', () => {
     const remove = vi.fn(async () => undefined)
     vi.mocked(useAttachments).mockReturnValue({
       photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: '2026-09-05T10:00:00+05:30' }],
+      documents: [],
       addState: 'idle',
       add: vi.fn(),
+      addDocument: vi.fn(),
       remove,
       restore: vi.fn(),
     })
@@ -750,8 +908,10 @@ describe('local photos', () => {
     const restore = vi.fn(async () => {})
     vi.mocked(useAttachments).mockReturnValue({
       photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: taken.createdAt }],
+      documents: [],
       addState: 'idle',
       add: vi.fn(),
+      addDocument: vi.fn(),
       remove: vi.fn(async () => taken),
       restore,
     })
@@ -768,8 +928,10 @@ describe('local photos', () => {
   it('offers nothing to undo before anything has been removed', () => {
     vi.mocked(useAttachments).mockReturnValue({
       photos: [{ id: 'photo-1', url: 'blob:fake', createdAt: '2026-09-05T10:00:00+05:30' }],
+      documents: [],
       addState: 'idle',
       add: vi.fn(),
+      addDocument: vi.fn(),
       remove: vi.fn(async () => undefined),
       restore: vi.fn(),
     })
@@ -784,8 +946,10 @@ describe('local photos', () => {
         { id: 'p2', url: 'blob:two', createdAt: '2026-09-05T10:01:00+05:30' },
         { id: 'p3', url: 'blob:three', createdAt: '2026-09-05T10:02:00+05:30' },
       ],
+      documents: [],
       addState: 'idle',
       add: vi.fn(),
+      addDocument: vi.fn(),
       remove: vi.fn(async () => undefined),
       restore: vi.fn(),
     })

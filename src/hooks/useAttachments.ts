@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as attachments from '../lib/attachments'
 
 export type Photo = { id: string; url: string; createdAt: string }
+/**
+ * A stored document, holding its blob directly rather than an object URL —
+ * unlike a photo it is never painted, only handed to `shareBlob` once, so
+ * there is nothing to gain from minting a URL before that moment.
+ */
+export type Document = { id: string; name: string; mimeType: string; blob: Blob; createdAt: string }
 
 /** What a timeline row draws: one photo, and how many that entry actually holds. */
 export type Thumbnail = { url: string; count: number }
@@ -38,6 +44,7 @@ function reconcileUrls(
 /** One entry's local photos: list, add (from a picked file), remove. */
 export function useAttachments(entryId: string) {
   const [photos, setPhotos] = useState<Photo[]>([])
+  const [documents, setDocuments] = useState<Document[]>([])
   const [addState, setAddState] = useState<AddState>('idle')
   // Tracks the URLs actually on screen, so unmounting can revoke them without
   // ever calling `setState` after the component is gone.
@@ -48,10 +55,22 @@ export function useAttachments(entryId: string) {
     // degrades to "no photos shown" rather than an unhandled rejection — this
     // is passive display, not a save the user is waiting on.
     const stored = await attachments.list(entryId).catch(() => [])
-    const { next, gone } = reconcileUrls(shown.current, stored)
+    const photoRecords = stored.filter((a) => a.kind !== 'document')
+    const { next, gone } = reconcileUrls(shown.current, photoRecords)
     revoke(gone)
     shown.current = next
     setPhotos(next)
+    setDocuments(
+      stored
+        .filter((a) => a.kind === 'document')
+        .map((a) => ({
+          id: a.id,
+          name: a.name ?? 'Document',
+          mimeType: a.mimeType ?? 'application/octet-stream',
+          blob: a.blob,
+          createdAt: a.createdAt,
+        })),
+    )
   }, [entryId])
 
   useEffect(() => {
@@ -82,6 +101,19 @@ export function useAttachments(entryId: string) {
     [entryId, refresh],
   )
 
+  /**
+   * A picked document file. Unlike `add`, a thrown validation message
+   * (wrong type, over 10 MB) is rethrown rather than swallowed, so the
+   * caller's own error slot can show it instead of a generic failure.
+   */
+  const addDocument = useCallback(
+    async (file: File) => {
+      await attachments.putDocument(entryId, file)
+      await refresh()
+    },
+    [entryId, refresh],
+  )
+
   /** Hands back what it removed, so the caller can offer Undo over the real bytes. */
   const remove = useCallback(
     async (id: string) => {
@@ -100,7 +132,7 @@ export function useAttachments(entryId: string) {
     [refresh],
   )
 
-  return { photos, addState, add, remove, restore }
+  return { photos, documents, addState, add, addDocument, remove, restore }
 }
 
 /**

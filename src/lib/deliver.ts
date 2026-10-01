@@ -105,6 +105,72 @@ export async function save(name: string, type: string, content: string): Promise
   return 'downloaded'
 }
 
+/** `FileReader` speaks data URLs; `Filesystem.writeFile`'s default encoding wants the bare payload. */
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result
+      if (typeof result !== 'string') {
+        reject(new Error('Failed to read the file'))
+        return
+      }
+      resolve(result.slice(result.indexOf(',') + 1))
+    }
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read the file'))
+    reader.readAsDataURL(blob)
+  })
+}
+
+/** `nativeShare`'s binary sibling — a stored attachment's bytes, not generated text. */
+async function nativeShareBlob(name: string, blob: Blob): Promise<Delivered | null> {
+  const found = await plugins()
+  if (!found) return null
+
+  const written = await found.fs.writeFile({
+    path: name,
+    data: await blobToBase64(blob),
+    directory: found.dir.Cache,
+  })
+
+  try {
+    await found.share.share({ title: name, url: written.uri })
+    return 'shared'
+  } catch (failure) {
+    if (failure instanceof Error && /cancel/i.test(failure.message)) return 'cancelled'
+    throw failure
+  } finally {
+    void found.fs.deleteFile({ path: name, directory: found.dir.Cache }).catch(() => undefined)
+  }
+}
+
+/**
+ * Opens a stored attachment's own bytes through the OS — a document has no
+ * in-app viewer, this is the only way it's ever read.
+ */
+export async function shareBlob(name: string, blob: Blob): Promise<Delivered> {
+  const natively = await nativeShareBlob(name, blob)
+  if (natively !== null) return natively
+
+  const file = new File([blob], name, { type: blob.type })
+  if (navigator.canShare?.({ files: [file] }) === true) {
+    try {
+      await navigator.share({ files: [file], title: name })
+      return 'shared'
+    } catch (failure) {
+      if (failure instanceof Error && failure.name === 'AbortError') return 'cancelled'
+    }
+  }
+
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
+  return 'downloaded'
+}
+
 /** Share where the platform supports files, otherwise download. */
 export async function shareOrDownload(
   name: string,
