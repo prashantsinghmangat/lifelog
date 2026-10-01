@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
  * The lock overlay. Deliberately not a `Sheet`: a sheet dismisses on backdrop
@@ -37,7 +37,12 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   }, [onUnlock])
 
   // Ask as the overlay appears — opening the app is the request to get in.
+  // Once per mount, guarded: the OS prompt itself pauses the activity, which
+  // re-renders App, and an unguarded effect re-prompted on every cancel.
+  const asked = useRef(false)
   useEffect(() => {
+    if (asked.current) return
+    asked.current = true
     void attempt()
   }, [attempt])
 

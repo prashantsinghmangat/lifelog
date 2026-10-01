@@ -92,9 +92,14 @@ async function channels(api: LocalNotificationsPlugin): Promise<void> {
     // importance 5 is IMPORTANCE_HIGH: sound, vibration, and a heads-up banner.
     importance: 5,
     vibration: true,
-    // 0 is VISIBILITY_PRIVATE — Android's own default, restored: a secured
-    // lock screen shows "content hidden" instead of the entry title, and the
-    // full notification appears once the phone is unlocked.
+    // 0 is VISIBILITY_PRIVATE. Measured truth, Android 16 emulator: this field
+    // never survives — the plugin's channels land as VISIBILITY_NO_OVERRIDE,
+    // and so does a channel created natively with setLockscreenVisibility, so
+    // no app can pin it. What actually protects the title is that Android
+    // notifications default to PRIVATE *per notification*: on a secured lock
+    // screen the OS redacts them whenever the user's own "sensitive
+    // notifications" setting says to. v1's `visibility: 1` was equally inert —
+    // the v2 move is kept for the honest config and the clean slate.
     visibility: 0,
   })
   await one(api, {

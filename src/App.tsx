@@ -270,7 +270,12 @@ export default function App() {
     setLock(next)
   }, [])
 
-  const overlay = locked ? <LockScreen onUnlock={() => setLockedHere(false)} /> : null
+  // Stable, or every App re-render hands LockScreen a new callback — and its
+  // prompt-on-mount effect re-fires: the pause event a BiometricPrompt itself
+  // raises re-rendered App, which re-prompted, for ever. Seen on the emulator.
+  const unlock = useCallback(() => setLockedHere(false), [])
+
+  const overlay = locked ? <LockScreen onUnlock={unlock} /> : null
 
   // Armed here rather than inside `Day`, so it covers the sign-in screen too
   // and survives a guest signing in — which unmounts and remounts `Day`.
