@@ -869,7 +869,10 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
     onSignOut: () => {
       void (async () => {
         forget(localStorage)
-        void cancelAllReminders()
+        // Awaited, not fired-and-forgotten: the offline path reloads the page
+        // below, and a reload tears the plugin bridge down mid-cancel — the
+        // S21 FE kept all ten alarms when this raced. cancelAll never throws.
+        await cancelAllReminders()
         const { error } = await supabase.auth.signOut()
         if (error !== null) {
           localStorage.removeItem(sessionStorageKey)
