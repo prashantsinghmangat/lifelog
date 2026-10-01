@@ -13,9 +13,9 @@ disagree this one is right.
 npm run android                    # build, then copy the web assets into android/
 npm run android:open               # open the native project in Android Studio
 npm run dev                        # vite dev server on :5173
-npm test                           # vitest run (638 tests)
+npm test                           # vitest run — the whole suite, once, at the end
 npm run test:watch                 # vitest watch
-npx vitest run -t "yesterday"      # tests whose name matches a substring (4 of 602)
+npx vitest run -t "yesterday"      # tests whose name matches a substring
 npx tsc -b                         # typecheck only (add --force to ignore the build cache)
 npm run build                      # tsc -b && vite build
 npm run preview                    # serve dist — the only way to exercise the service worker locally
@@ -243,6 +243,51 @@ toast. The tap did not miss, it hit the wrong control, and on a toast carrying U
 pressing Save restored the row you had just deleted. Logging something and editing an entry within
 the next few seconds is all it takes.
 
+**The app lock sits above the auth gate, and it is the OS's credential, not a login.** The
+realistic threat is someone holding the unlocked phone, and the auth gate was never a lock —
+`identity.ts` says so itself. So `LockScreen` (spec 023) renders above the `identity === null`
+gate in `App`, covering `Login` (which shows the remembered email) and guest mode identically,
+with Supabase never consulted. The prompt is the OS's own — biometric with device-credential
+fallback via `@aparajita/capacitor-biometric-auth` — so no biometric data ever reaches the app,
+only a result; a device with neither biometrics nor a screen lock keeps the switch off rather
+than growing an app passcode. The state is pure and parser-style (`src/lib/applock.ts`: `stamp`,
+`shouldLock`, `lifelog.lock`), with the plugin injected at the edges. While locked, `back()`
+returns `'root'` ahead of the sheet stack, so Android back can only minimise; while the lock is
+*on*, `@capacitor/privacy-screen` holds FLAG_SECURE, which blanks the recents thumbnail and
+blocks screenshots — a cost the setting's caption states. Two traps paid for this: the unlock
+callback must be stable (`useCallback` plus a prompt-once ref), because the pause event a
+BiometricPrompt itself raises re-rendered `App` and re-fired the prompt-on-mount effect on every
+cancel; and a resume must forgive a spent stamp, because with "Immediately" the OS prompt's own
+pause re-locked every successful unlock. Web/PWA deliberately has no lock of any kind: a JS
+overlay is a courtesy screen, and pretending otherwise is the one claim this app must not make.
+
+**Channel lock-screen visibility is not a thing an app can set on Android 16, and the reminders
+channel is `-v2` because of what finding that out cost.** Spec 023 meant to make the reminders
+channel lock-screen private; measurement showed the plugin's `visibility` field never reaches the
+channel (every channel lands VISIBILITY_NO_OVERRIDE), and a native `setLockscreenVisibility`
+before creation was tried and reverted. What actually governs redaction is Android's own
+per-notification default (VISIBILITY_PRIVATE) plus the user's "sensitive notifications" setting —
+the same contract every app lives under, and what the v1 channel's inert `visibility: 1` never
+changed either. The migration to `lifelog-reminders-v2` stayed anyway: honest config, clean
+slate, v1 deleted and every alarm re-armed onto v2 through the launch `sync`.
+
+**A read that cannot prove who is asking must not be sent, because the anon fallback once wiped a
+device.** An expired or revoked session made `authedFetch` fall back to the anon key; RLS then
+answered a verified-empty `200 []`, and `reconcile` — correctly trusting a whole read — deleted
+every synced row on the device. `authedFetch` now rejects with no session, the read reports
+`unreachable` (status 0, the same honest signal offline uses), and the local log stands (spec
+024). The rest of that hardening pass follows the same shape — close the path, keep the honest
+signal: sign-out clears the stored token and cancels every alarm even offline; `sweepOrphans`
+treats an empty live set as a no-op rather than proof every photo is an orphan; the production
+bundle drops `console.*` (32 direct calls → 2 inert references — the working Vite 8 spelling is
+`build.rolldownOptions.output.minify.compress.dropConsole`, not `esbuild.drop`, which oxc
+silently ignores); `dataExtractionRules` excludes cloud backup and D2D transfer, since the
+WebView storage holds a live session token and the notification plugin's SharedPreferences
+persist entry titles; export and camera temp files are deleted after use; `BACKUP_TOKEN` under 32
+characters counts as unset; and a release Gradle run refuses a synced `server` block, so an
+exported `CAP_DEV_URL` can no longer bake `cleartext: true` into a signed APK. The current model
+and its stated non-boundaries live in [SECURITY.md](SECURITY.md).
+
 **`src/lib/stats.ts` is the arithmetic behind the stats view, and it is pure for the same reason
 the parser is.** Every figure on that screen is a confident claim about the log, and a claim is
 only testable exactly if the module imports nothing stateful and never reads the clock — `now` is
@@ -458,10 +503,12 @@ same converge-on-next-launch shape the held-back weekday crons use.
 and whether a notification pushes itself in front of you, and **its settings belong to the user
 once it exists** — an app cannot raise them later. Reminders had been going out on Capacitor's
 `default` channel, created at importance 3 with vibration off, which is exactly why every one of
-them arrived silently. The fix is a *new* channel: `lifelog-reminders-v1` at importance 5, which
-`dumpsys` confirms carries `mSound=…/notification_sound` and `mVibrationEnabled=true`. The daily
-prompts get their own quieter channel so muting them in Android's settings does not also mute a
-reminder you asked for.
+them arrived silently. The fix is a *new* channel — now `lifelog-reminders-v2` after the spec 023
+migration — at importance 5, which `dumpsys` confirms carries `mSound=…/notification_sound` and
+`mVibrationEnabled=true`. The daily prompts get their own quieter channel so muting them in
+Android's settings does not also mute a reminder you asked for. (Why v2 exists, and why
+lock-screen visibility was never the channel's to set, is recorded under the app-lock section
+above.)
 
 **`src/lib/ahead.ts` is what is coming, and it costs no query.** The app could raise a reminder but
 never show you the set of them, so the only way to know what the phone would do was to wait. A
@@ -673,7 +720,8 @@ carry the *surface*, not the ink — drawn edge-to-edge the browser chrome is a 
 page, and a dark bar over a paper-coloured page reads as a header the app does not have.
 
 **The four kind colours are scanning accents, not four UI colours.** They are deep enough to read
-as ink with a hue rather than as a highlight, and the mark is 15px in a 20px gutter. At 16px in
+as ink with a hue rather than as a highlight, and the compact lists' mark is 15px in a 20px
+gutter (the timeline carries them as the ledger's tinted badge instead). At 16px in
 the old saturated hues, four of them down a column competed with the titles they were marking —
 the colour is there so the expenses in a day can be found at a glance, not so the row can be
 categorised by looking at it. `KIND_NAME` still carries the same fact in words, as it always did.
@@ -702,10 +750,13 @@ into the sidebar where navigation costs no taps at all. `You` is the account scr
 on compact and the same component inside a `Sheet` on `lg`. `BottomNav` and `WeekStrip` are both
 `lg:hidden` for that reason — on a wide screen they would repeat what the sidebar already shows.
 
-**Every date grid draws the same cell.** `DayCell` owns what selected, today and has-entries look
+**Every month grid draws the same cell.** `DayCell` owns what selected, today and has-entries look
 like, and `WEEK_STARTS` is the one place the week begins on Monday; `useMarkedDays` is the one
 place dots are loaded. Two grids disagreeing about which day starts the week is a bug you can see
-from across the room, and it is exactly the kind that arrives by copy-paste.
+from across the room, and it is exactly the kind that arrives by copy-paste. The week strip is
+the carve-out (spec 021): its cell anatomy — letter, number, accent pill — genuinely diverged
+from the month grid's disc, so it grew its own cells rather than bending `DayCell` to serve both,
+which is how the two would have drifted.
 
 **The calendar is navigation, so only one state is allowed to be loud.** The selected day is a
 filled 28px disc; today is a ring; everything else is plain. It used to fill the whole 44px cell,
@@ -743,28 +794,38 @@ was, and the longest titles are notes, where the words *are* the content. `line-
 timeline and in an answer; the editor gives it a textarea, because editing a sentence through a
 40-character window means scrolling sideways to read your own writing.
 
-**Every row draws the same way, wherever it appears.** Title on top; clock, category and anything
-else secondary on a quieter line beneath — with the **clock one step forward of the rest of that
-line**, `muted` against `faint`. Where a row carries a time, that time is what anchors it in the
-day, and flattened in with the categories and repeat rules it read as one more tag. That
-emphasis-in-place is the answer to the time gutter rather than a compromise with it: the gutter
-stays out for the reason below, and the fact it would have carried is not lost. Then the one
-number — money if the row has any, otherwise duration —
-right-aligned, `tabular-nums`, and in `muted` at regular weight.
+**The timeline's row is the ledger, and the time gutter it is built on was refused once and then
+taken knowingly.** The Variant-E redesign (spec 021) replaced the short-lived Today spine (spec
+016) and the timeline's 15px kind mark with one `EntryRow` anatomy: a fixed `w-14` clock column,
+a tinted kind badge with the metadata line beside it, the title beneath, the one number —
+`rowValue` — right-aligned in semibold ink, and a sunken `completed` chip on a done event. The
+old rule here was "`occurred_at` is optional, so a left-hand time gutter is not an option: a
+column empty on most rows is a 56px indent that buys nothing" — that reasoning was real and the
+trade is now taken with eyes open, because the two-tone ledger is built on the clock column; the
+row's own header comment records it. A `boxed` variant gives up the row's border and gutter
+bleed inside an epoch card, which draws both itself. An event still ahead carries its clock in
+ink and `until()`'s countdown beside it — beside the clock, never instead of it. Nothing rides
+on colour alone: the badge is `aria-hidden` and the `sr-only` kind name stays, so the kind is
+said exactly once. **The compact lists keep the 15px `KindMark`** — an answer's rows, the bell,
+the memories strip, the day peek, the empty-day examples: the ledger's clock column means *one
+day, in order*, true of the timeline and false of an answer spanning four months. The old spine
+exception survives inverted, and still must not be "fixed" in either direction.
 
-**Today draws its rows on a spine, and only Today — the exception is load-bearing.** "Every row
-draws the same way wherever it appears" stands, with one reasoned carve-out: the spine — a 1px
-`line` 30px from the screen edge, an 11px node per entry in its kind's colour (filled for
-anything logged, hollow for an event), a now marker cutting it at the current time — means *one
-day, in order*. That is true of Today and false of an answer spanning four months, the bell's
-next week, a memory's other year; those keep the 15px kind mark. The next person to notice the
-inconsistency must not "fix" it in either direction. The marker's position is the boundary of
-`stillAhead` in `events.ts` — the same clock comparison `passed()` makes, without its kind gate,
-because `passed` is deliberately false of repeats and non-events and would drag the marker above
-a standup that already rang. It recomputes on the existing 30-second tick and holds no state and
-no timer of its own, for the same reason `until` does not; on a day that is not today it is
-absent, never parked at an edge. The node replaces the mark, not the words: the `sr-only` kind
-name stays.
+**Today renders as up to two epoch cards, split at 6pm, and the split is a prefix.** Timed rows
+sort ascending and untimed rows after them, so Daylight (before 6pm) and Evening (6pm onward,
+plus every untimed row) concatenate without ever reordering the day — untimed rows ride the
+evening card for that reason, not for any claim about when a note happened. The now marker became
+the pill: it renders inside whichever card holds the moment, and the full `NIGHT HORIZON` banner
+appears only when the moment sits exactly on the boundary between two non-empty cards. Its
+position is still the boundary of `stillAhead` in `events.ts` — the same clock comparison
+`passed()` makes, without its kind gate, because `passed` is deliberately false of repeats and
+non-events and would drag the marker above a standup that already rang. It recomputes on the
+existing 30-second tick, holds no state and no timer of its own, and on a day that is not today
+it is absent, never parked at an edge. A day whose every row is inside the passed-fold renders
+the fold as its own card with the pill beneath it, because two empty epoch cards and no fold
+button was the first bug this layout produced. The epoch names follow the clock, not
+passed-ness — a future day's morning rows still read "Daylight", which is the truthful reading
+of the labels.
 
 **A row is directly manipulable and says so without an icon.** Its button is inset past the page
 gutter (`-mx-2 px-2 rounded-lg`) and takes `hover:bg-sunken active:bg-sunken`, so the feedback
@@ -773,14 +834,10 @@ on the wrapper: a rule that moved with the inset button would sit 8px wider than
 on the screen, which is why `AnswerCard` grew a wrapper it did not previously need. And `w-full`
 beside `-mx-2` is a bug rather than a shorthand — the box stays 100% wide and shifts 8px left, so
 the highlight overhangs one side and falls short on the other; `w-[calc(100%+1rem)]` is the fix
-wherever the button is not already a flex child. **The number is
-metadata, not the headline**: at medium weight in full-strength ink it competed with the title on
-every row, including the many rows where it is incidental. What the entry *is* comes first. That number comes from `rowValue` in `format.ts`,
-which used to be three copies of the same four lines in `EntryRow`, `AnswerCard` and a toast.
-**`occurred_at` is optional, so a left-hand time gutter is not an option**: most rows have no
-clock, and a column that is empty on most rows is a 56px indent that buys nothing. `AnswerCard`
-had already discovered this and collapsed the column; the timeline's secondary line is the
-version that survived.
+wherever the button is not already a flex child. The one number comes from `rowValue` in
+`format.ts`, which used to be three copies of the same four lines in `EntryRow`, `AnswerCard`
+and a toast; the ledger paragraph above records how the row now weights it and why the time
+column it once refused is there.
 
 **A day with nothing on it demonstrates the parser rather than describing it.** Three faded rows
 carry the line to type and what it becomes — `350 lunch swiggy` / *becomes an expense · ₹350 ·
@@ -789,9 +846,12 @@ move is editing something real. The transformation is the whole trick and an emp
 place it cannot be seen. This replaced three example chips, which showed the syntax and hid the
 result.
 
-**A summary goes under what it summarises.** The day's totals sit below the last row, where the
-row's own border is the rule above them. Above the capture box they read as a label for what you
-are about to type instead of a summary of what you have just read.
+**The day's summary is the balance card, and its two kinds of figure follow two different
+rules.** The totals line under the rows became the `HORIZON BALANCE` card beneath the week strip
+(spec 021): a tri-colour track and SPENT / FOCUS / SCHEDULE columns. Money and minutes are summed
+from **stored** rows — the agreed repeat rule, same as the chart — while the counts and the track
+count what the day *shows*, derived occurrences included: counting a drawing is honest, summing
+one five times is not.
 
 **The day is the biggest thing on the screen, and used to be the same size as a placeholder.**
 Every piece of text in the app sat between 12px and 16px, so `Today` in the header and `What
@@ -800,18 +860,20 @@ screen. Size is the cheapest hierarchy there is and the header is one line, so i
 density: the rows are untouched. `AnswerCard` had already proved this, putting its number at
 `text-3xl` over 12px working.
 
-**And it is said in two parts, because one string could only be one size.** `dayLabel` packs the
-relation and the date together — `Today`, `Sat, 30 Aug` — which is right for a tab title and for
-an accessible name, and wrong for the largest line on the screen: at one size the weekday, the
-date and the word "Today" all claim the same weight, so the header stated everything and
-emphasised nothing. `dayEyebrow` and `dayTitle` split it, and `dayLabel` is untouched — every
-control and every tab title that named a day still names it exactly as before.
+**And it is said editorially in a serif that costs nothing.** The header became Variant E's
+two-line serif (spec 021) — weekday and italic day number, the month stepped back beneath, the
+ISO week at the right with the bell — set in `--font-display`, a *system* serif stack, so the
+editorial voice arrived with no webfont and no bundle cost (Plus Jakarta Sans was priced for the
+mocks and declined, spec 019). `dayLabel` still packs the relation and the date into one string
+for the tab title and the date's accessible name; the earlier `dayEyebrow`/`dayTitle` split it
+replaced now survives only in `format.ts` and its tests.
 
-The chevrons moved with it. Centred between two 44px arrows, the widest part of the header was
-spent on the arrows and the date competed with them for the middle; paired on the right they are
-one place to aim rather than two screen edges to cross, and on a phone they sit under the thumb.
-The bell joins them, because what is coming is about the day and not about the app — which is what
-the quiet row above, holding only the wordmark and the account, is for.
+**The chevrons are gone, because stepping a day had four other routes.** Swiping, the week strip,
+the keyboard arrows and the calendar all step days, and the pair of 44px targets spent the widest
+part of the header on the one gesture that needed them least (spec 021). The compact top chrome
+row returned with the mock clone (spec 020) as a *wired* row, not a wordmark: search opens Ask,
+the avatar opens You — reversing the nav-era removal of the quiet first row with every control on
+it earning its place.
 
 **The day's totals lead with the figures and let their names sit back**, the same shape an
 answer's extras use. Flat 12px muted, that line was the quietest thing on screen while carrying
@@ -1097,12 +1159,11 @@ one — it has to be removed and re-added.
 **Bundle size must be measured with `.env.local` present.** Without it,
 [src/lib/supabase.ts](src/lib/supabase.ts) throws at module scope, the bundler proves the throw
 unconditional and tree-shakes the entire Supabase SDK away — producing a ~49 KB bundle that
-cannot run. The honest figure is **130.8 KB across everything the page fetches** (126.5 after
-spec 014 swapped the umbrella SDK for `@supabase/auth-js` + `@supabase/postgrest-js` direct
-imports, 128.5 after spec 015's palettes, +2.3 for the S21 audit's refinement pass — the spine,
-the chart's plot, the grouped You screen and the per-palette focus values), against a 150 KB
-budget — re-measure it, never project it, because the tree-shaking failure above
-makes a wrong measurement look like a triumph. Count the CSS and the lazy Capacitor chunks.
+cannot run. The figure means everything the page fetches — js + css + html, not the lazy
+Capacitor chunks nothing downloads — against a **150 KB budget** that
+`scripts/bundle-budget.mjs` enforces on every build. **136.87 KB measured 2026-10-01** (spec
+023). Re-measure, never project — the tree-shaking failure above makes a wrong measurement look
+like a triumph.
 
 **Every column of `Entry` must stay in `COLUMNS`.** A write is a full-row upsert now, so a column
 that is read into the type but missing from the select would be sent back as `undefined` and
@@ -1125,8 +1186,8 @@ hands back an ordinary error result, so the `catch` meant to notice never ran an
 is the discriminator: an HTTP status is proof the server answered, its absence proof it did not.
 That distinction is the whole difference between `queued` and `failed`.
 
-**A request can also never settle at all.** Offline with an expired access token, supabase-js
-waits on auth for a token that is not coming, so a write neither succeeded nor failed: the row
+**A request can also never settle at all.** Offline with an expired access token, the Supabase
+client waits on auth for a token that is not coming, so a write neither succeeded nor failed: the row
 read "saving" indefinitely, and — much worse — the sync loop's in-progress flag was never
 released, so *every later sync was blocked too*, including the one due when the network returned.
 Hence `PATIENCE`: stop waiting after 10s and treat it as no network. Abandoning a request is safe
@@ -1256,9 +1317,12 @@ into both accounts with the wrong one active.
 TypeScript strict with `noUncheckedIndexedAccess`. No `any`, no non-null assertions. Flat file
 layout — no barrel files, no `index.ts` re-exports, no directory per component.
 
-**The runtime dependency list is `react`, `react-dom`, `@supabase/auth-js` + `@supabase/postgrest-js`, `date-fns` and
+**The runtime dependency list is `react`, `react-dom`, `@supabase/auth-js` + `@supabase/postgrest-js`, `date-fns`,
 Capacitor (`core`, `android`, `local-notifications`, `app`, `filesystem`, `share`, `haptics`,
-`camera`). Ask before adding anything else.**
+`camera`), and the two native security plugins spec 023 argued for —
+`@aparajita/capacitor-biometric-auth`, because the OS prompt is the only way a fingerprint can
+gate the app without biometric data ever reaching it, and `@capacitor/privacy-screen`, because
+FLAG_SECURE is native state no web API can set. Ask before adding anything else.**
 The original "four dependencies only" rule was retired deliberately when the Android app was
 added, not broken by accident: Capacitor plugins are runtime dependencies, and each one was argued
 for on its own — `local-notifications` because no web API can raise an alarm with the app closed,
@@ -1370,11 +1434,6 @@ at the end of [README.md](README.md).
   keystore env vars set, on their own machine.
 - **Nothing runs the tests before a deploy.** Netlify runs `npm run build`, so `tsc -b` is a gate;
   the suite is not, and the parser's correctness is the thing that suite exists to hold.
-- **The nightly backup fails silently.** `backup.mts` has no `catch`, so a missing or expired
-  service-role key becomes a line in Netlify's function log and nothing else — no alert, no health
-  endpoint. `backup-run` exists so a human can go and look, which is a workaround and not a
-  monitor. And a snapshot can be listed and downloaded but there is nothing that restores one.
-
 
 - A submit that lands on another day gives no confirmation — the row just vanishes from the
   current view. This is the app's one genuine source of confusion.

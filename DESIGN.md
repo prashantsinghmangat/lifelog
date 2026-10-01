@@ -67,7 +67,7 @@ boundary has to be findable — while `line` alone stays below: it separates, it
 and nothing in the app is legible only because of a border. All of it is computed in
 `src/lib/contrast.test.ts`, never eyeballed.
 
-**Six palettes, selectable in You → Appearance, Amber the default.** Mode and palette are
+**Seven palettes, selectable in You → Appearance, Amber the default.** Mode and palette are
 orthogonal axes (`data-theme` × `data-palette`); every palette ships a light and a dark block so
 System keeps resolving whichever is chosen. The single source is `src/lib/palettes.ts` — the CSS
 blocks and the picker's swatches both come from it, kept equal by test. The four kind colours are
@@ -76,11 +76,13 @@ to its accent and checked at 3:1 on all three grounds like `edge` — it was a f
 read as the browser's default ring on every non-blue palette, and text fields always match
 `:focus-visible`, so on a phone that ring is a constant companion of the capture box and has to
 read as the app's. Paper is the original warm palette, preserved; Graphite and Sea are deliberate
-cool departures a reader opts into.
+cool departures a reader opts into; Mint is the Stitch mocks' own colour world, its light block
+read straight from the mock token table (spec 019) and its dark block derived here.
 
 **The four kind colours are scanning accents, not four UI colours.** Deep enough to read as ink
-with a hue rather than as a highlight, at 15px in a 20px gutter. They mark a row so the expenses
-can be found at a glance; they are not allowed to compete with the title they are marking.
+with a hue rather than as a highlight — carried by the timeline's tinted kind badge and by the
+15px `KindMark` in the compact lists. They mark a row so the expenses can be found at a glance;
+they are not allowed to compete with the title they are marking.
 
 Usage in the code today: `text-faint` 57, `text-muted` 41, `text-ink` 41. **Most text in this app
 is not full-strength ink**, and that is deliberate — the hierarchy is carried by how far back
@@ -103,11 +105,16 @@ in use; the large ones are single occurrences, and that is what makes them read 
 | Size | Where |
 | --- | --- |
 | `text-3xl` | the answer's lead number — the one figure a question returns |
-| `text-[1.375rem]` / `sm:text-2xl` | the day's date, the subject of the screen |
+| `font-display text-[26px]` / `text-[21px]` | the day header's two serif lines — the subject of the screen, and the only lines allowed this size (021) |
 | `text-base` | anything a finger types into; **never** for display text |
 | `text-sm` | row titles, button labels, values that matter |
 | `text-xs` | secondary lines, captions |
 | `text-[0.6875rem]` | eyebrows only — see below |
+
+**`--font-display` is a system serif stack** (`Iowan Old Style`, Charter, Palatino, Georgia) —
+no webfont, so it costs the bundle nothing. It belongs to the Variant-E editorial voice: the day
+header and the ledger's display figures. Body text stays the system sans. Plus Jakarta Sans was
+considered for the mocks and declined on budget (spec 019).
 
 **One thing per screen is allowed to be big.** The timeline's is the date; an answer's is its
 number. Before enlarging anything else, check what it would be competing with.
@@ -125,7 +132,7 @@ Where an eyebrow heads a **section** it also carries the grouping space: 26px ab
 The gap above a section must be visibly larger than the gaps inside it — that is what makes
 grouping read at all.
 
-`TODAY` over the date, `ON THIS DAY`, `COMING UP`, `TRY ASKING`, an answer's caption, a day
+`HORIZON BALANCE`, `ON THIS DAY`, `COMING UP`, `EDIT ENTRY`, an answer's caption, a day
 heading inside an answer, and the name each destination that is not a day gives itself. **The one
 exception is the bottom nav's four labels**, which are 11px sentence-case rather than eyebrows —
 confined to that bar and nowhere else. 11px with the letters opened up reads as a label rather than as small
@@ -176,10 +183,10 @@ not lose the day being read.
 
 | Destination | Capture control | What is on it |
 | --- | --- | --- |
-| Today | yes, Log | the day header, the week strip, the timeline, the totals, the memories |
-| Calendar | yes, Log | a Grid \| Chart toggle: `MonthGrid`, or the `Stats` chart |
-| Ask | yes, **Ask** | whatever the control draws — the answer, or `TRY ASKING` |
-| You | **no** | the account, theme, prompts, permission, exports, the manual |
+| Today | yes, Log | the serif day header, the week strip card, the balance card, the epoch cards, the memories |
+| Calendar | yes, Log | a Grid \| Chart toggle: the metric ribbon + `MonthGrid` + day peek, or the `Stats` chart |
+| Ask | yes, **Ask** (box ordered first) | the topic-group cards, or the answer card |
+| You | **no** | account, appearance, prompts, permission, App Lock (native), exports, the manual |
 
 - **The control is on three of the four**, which is what keeps the nav from costing anything:
   logging is one tap from anywhere but You.
@@ -194,38 +201,45 @@ not lose the day being read.
   A window dragged past 1024px while on Calendar or You strands the reader on a screen with no nav
   to leave it, beside a sidebar showing the same calendar. `App` watches the breakpoint and puts
   the view back on Today when it matches. Seen at 1440px, not reasoned about.
-- The three that are not a day name themselves in an **eyebrow**, not a headline. The nav already
-  says which one is live, and each screen has something of its own that deserves the size.
-- The live item carries `aria-current="page"`, and an `sr-only` live region announces the
+- The top chrome row's title names the screen (020); each destination keeps its own biggest
+  thing, so no screen name claims a headline size of its own.
+- The live nav item carries `aria-current="page"`, and an `sr-only` live region announces the
   destination on a change. Colour and weight alone do not say which one you are on.
 
 ### The header
 
-One row on a phone, one on a wide screen.
+Two layers on a phone since the mock clone (020/021); one serif line pair on a wide screen.
 
 ```
-TODAY                                    [bell] [<] [>]
-15 September
+[L] Today                              [search] [avatar]     ← app chrome, compact only
+Wednesday, 30                              Week 40  [bell]
+September
 ```
 
-The eyebrow says which day relative to now, the date below it is the thing itself — `dayEyebrow`
-and `dayTitle` in `format.ts`. `dayLabel` still packs both into one string for the tab title and
-the date's accessible name, and must keep doing so. The chevrons are paired at the right: stepping
-a day is a repeated gesture, and two targets side by side are one place to aim rather than two
-screen edges to cross.
+The top chrome row is compact-only and every control on it is wired — the wordmark tile names
+the app, search opens Ask, the avatar opens You. It reverses the nav-era removal of the quiet
+first row, as a wired return rather than a wordmark (020). The day itself is said editorially in
+the serif display stack: weekday and italic day number, the month italic and stepped back
+beneath, the ISO week at the right with the bell (021). **The chevrons are gone** — swiping, the
+week strip, the keyboard arrows and the calendar all still step days, and the pair of 44px
+targets spent the widest part of the header on the one gesture that had four other routes.
+`dayLabel` still packs the relation and the date into one string for the tab title and the
+date's accessible name, and must keep doing so.
 
-**The quiet row above it is gone, and that is what paid for the nav.** It held the wordmark and a
-20px account glyph: it named the app on a screen nobody reaches without opening the app, and hid
-the account in the least looked-at corner there is. Both belong to the nav now.
+**The week strip is a raised card of seven cells of its own** — letter, number, dot; the
+selected day an accent-filled pill, today accent-inked when not selected. It stopped sharing
+`DayCell` in 021: the strip's anatomy genuinely diverged from the month grid's disc, and one
+component bent to serve both is how they would drift. `DayCell` is the month grids' alone now.
 
 **On a phone the date opens the Calendar destination; on `lg` it is a label and nothing else.**
 The sidebar has held the whole month at no taps since long before the nav existed, and a second
 route to something already on screen is a control that has to be explained.
 
-**Every date grid draws the same cell.** `DayCell` owns what selected / today / has-entries look
-like. `WEEK_STARTS` is the one place the week begins on Monday. `useMarkedDays` is the one place
-dots are loaded. Two grids disagreeing about the first day of the week is visible from across the
-room and arrives by copy-paste.
+**Every month grid draws the same cell.** `DayCell` owns what selected / today / has-entries
+look like for the month sheet and the sidebar calendar (the week strip has its own cells — see
+above). `WEEK_STARTS` is the one place the week begins on Monday. `useMarkedDays` is the one
+place dots are loaded. Two grids disagreeing about the first day of the week is visible from
+across the room and arrives by copy-paste.
 
 **The cell is a 44px target with a 28px disc inside it.** Filling the whole cell made the selected
 day a solid block the width of the column — the loudest thing on a surface whose only job is
@@ -240,44 +254,55 @@ dot means something happened, not that a *note* happened.
 
 ### A row
 
-Every row draws the same way wherever it appears — timeline, answer, bell, memories.
-
-**The one exception is Today's spine, and it is an exception on purpose.** The spine — a 1px
-`line` rule running 30px from the screen edge, fading over its last 18%, with each entry an 11px
-node on it in its kind's colour (filled for anything logged; hollow, 1.5px ring on a `surface`
-centre, for an event) and a now marker cutting it at the current time — means *one day, in
-order*. That is true of Today and false of everywhere else a row appears: an answer spans four
-months, the bell lists next week, a memory is another year. Those keep the 15px kind mark, and
-the spine appears nowhere else. Do not "fix" the inconsistency in either direction — a spine
-under an answer draws a day-line through something that is not a day, and taking Today's away
-returns the timeline to a list of icons. The node replaces the mark, never the words: the
-`sr-only` kind name stays, and nothing is carried by colour alone. On the spine, content starts
-56px from the screen edge; the row's anatomy is otherwise unchanged. The now marker derives its
-position from the same moment comparison `passed()` makes and recomputes on the existing
-30-second tick — it has no state and no timer of its own, for the same reason `until` does not —
-and on a day that is not today it is absent, not parked at an edge.
+The timeline's row is the ledger (`EntryRow`, 021) — it retired the Today spine and the
+timeline's 15px kind mark, and a `boxed` variant gives up its own border and gutter bleed when
+an epoch card already draws them. **The compact lists keep the 15px `KindMark`** — an answer's
+rows, the bell, the memories strip, the day peek, the empty-day examples. The split is the old
+spine exception inverted and it is still on purpose: the ledger's clock column means *one day,
+in order*, which is true of the timeline and false of an answer spanning four months. Do not
+"fix" it in either direction.
 
 ```
-[kind mark 20px] [ title, two lines max              ] [ one number ]
-                 [ 9:15 am · in 47m · repeat · category ]
+[ 9:15 am ] [EXPENSE] in 47m · repeat · category       [ one number ]
+ w-14 col    badge                                      or `completed`
+            [ title, two lines max                   ]
 ```
 
-- **Title first, `line-clamp-2 leading-snug`.** One line with an ellipsis told you an entry
+- **The time column leads, blank where a row carries no clock.** The left gutter the old row
+  refused ("empty on most rows buys a 56px indent for nothing") is taken knowingly — the
+  two-tone ledger is built on the clock column, and the trade is recorded in the row's own
+  comment (021). An event still ahead carries its time in `font-semibold text-ink`; everything
+  else `text-faint tabular-nums`.
+- **The kind badge is a tinted pill naming the kind in its own colour** (`bg-<kind>/10
+  text-<kind>`, written-out map). It is `aria-hidden`; the `sr-only` kind name beside it stays,
+  so the kind is said once and never carried by colour alone.
+- **`in 47m` sits beside the clock, never instead of it** — the one coloured piece of text on a
+  row, for an event still ahead today. `until()` in `format.ts`, recomputed on the global
+  30-second tick.
+- **Metadata line is `text-[0.6875rem] text-faint`, joined with ` · `**, built by filtering nulls
+  out of an array — repeat label, category, off-day relation, sync state in words (`saved here,
+  not synced` / `the server refused this`). No empty separators.
+- **Title below, `line-clamp-2 leading-snug`.** One line with an ellipsis told you an entry
   existed and not what it was, and the longest titles are notes where the words *are* the content.
 - **Never write `block` beside `line-clamp-2`.** The clamp needs `display:-webkit-box` and `block`
   wins the cascade, so the clamp silently does nothing.
-- **Secondary line is `text-xs text-faint`, joined with ` · `**, built by filtering nulls out of an
-  array. No empty separators.
-- **The clock is a step forward of the rest of that line** — `text-muted tabular-nums` against
-  `text-faint`. Where a row carries a time, that time is what anchors it in the day; flattened in
-  with the categories and repeat rules it read as one more tag.
-- **The number is metadata, not the headline**: `text-sm text-muted tabular-nums`, right-aligned,
-  regular weight. It comes from `rowValue()` in `format.ts` — do not recompute it.
-- **No left-hand time gutter.** `occurred_at` is optional, so a time column is empty on most rows
-  and buys a 56px indent for nothing. That is why the clock is emphasised *in place* rather than
-  pulled into a column.
+- **The number comes from `rowValue()` in `format.ts`** — `text-sm font-semibold text-ink
+  tabular-nums`, right-aligned. Do not recompute it.
 - Struck through (`line-through text-muted`) when `behindYou()` — the moment passed, or it was
-  ticked off.
+  ticked off; a done event also carries a sunken `completed` chip, for the glance that never
+  reaches the title.
+
+### Today's day structure
+
+The day renders as up to two raised **epoch cards** — Daylight (timed rows before 6pm) and
+Evening (6pm onward, plus untimed rows, which already sort last — the split is a prefix, so
+concatenation never reorders the day). Headers carry a sun/moon glyph, the name and `n logs`;
+the passed-fold stays at the top of the first card. The **now pill** (`● 7:12 PM now` + fading
+rule) renders inside whichever card holds the moment, or as the full `NIGHT HORIZON` banner only
+when the moment sits exactly on the boundary between two non-empty cards; absent off-today. The
+**balance card** under the week strip (`HORIZON BALANCE`, tri-colour track, SPENT / FOCUS /
+SCHEDULE columns) replaced the old totals line: money and minutes sum stored rows (the repeat
+rule), while the counts and the track count what the day *shows*, occurrences included.
 
 **A row is directly manipulable, and says so without an icon.** The button is inset past the page
 gutter — `-mx-2 px-2 rounded-lg` plus `w-[calc(100%+1rem)]` where it is not a flex child — with
@@ -292,6 +317,13 @@ the wrapper already exists; in `AnswerCard` one was added for exactly this.
 Tailwind v4 gates `hover:` behind `@media (hover: hover)`, so a hover state does not stick to a
 row after a tap on a phone. No `@media` wrapper of your own is needed.
 
+### A card
+
+One recipe everywhere since the fidelity pass (018): `rounded-2xl border border-line bg-raised`,
+**no shadow** — the capture control keeps the app's only shadow, and a second raised object
+competing with it is exactly what a floating card would be. Epoch cards, the week strip, the
+balance card, chart cards, topic groups, the answer and You's groups all use it.
+
 ### A segmented control
 
 One component, `Segmented`: a 40px `sunken` track (radius 11, 3px padding) holding 34px
@@ -301,10 +333,13 @@ still `h-11` by negative margin — the pill is decoration inside the target.
 
 ### An answer
 
-Banded, not boxed: `border-y border-edge`, then conclusion first — an uppercase caption, the
-`text-3xl` lead, its extras, and only then the rows, grouped under day headings. **The closing
-rule is load-bearing** — without it the last row of the answer and the first row of the day read
-as one list.
+A raised card — an explicit reversal of 016's "banded, not boxed", recorded in the component
+header (018): the card grammar re-took the boundary job the `border-y` rules were doing.
+Conclusion first — the question echoed, the `text-3xl` lead on a tinted inner panel, a labelled
+category-distribution bar (single-hue opacity ramp, never the kind palette), the honest
+`From your log · n` badge, extras, then the rows grouped under day headings, with one follow-up
+pill under a money/hours `this <period>` answer that refills the box with the shifted question —
+a refill, never an action.
 
 ### A sheet
 
@@ -344,10 +379,13 @@ On compact the bottom edge of the screen is **one block, in flow, in this order*
 ```
 toast            ← when there is one
 capture control  ← fixed height, absent on You
-bottom nav       ← lg:hidden, absent while the field has text
+bottom nav       ← lg:hidden, and it stays up while the field has text
 ```
 
 On `lg` the block collapses to the top of the column via flex `order` and the nav is hidden.
+**On Ask the block turns `display: contents`** so the box orders itself first on the screen, the
+toast and nav keep the bottom, and the nav alone carries the floor — the 019 reorder, done with
+no new mechanism and no height constant.
 
 **There is no `--dock`, and re-introducing one is the wrong fix.** The toast used to be `fixed` at
 the bottom and subtract a constant from `index.css` to clear the control, because a message over
@@ -374,9 +412,11 @@ Other invariants here:
   exactly what a floating bar would be.
 - **The control carries `class="capture"`, which `index.css` reads.** The focus ring goes round the
   control, not round the field nested inside it — see §7.
-- **Send is filled once it is live** (`bg-ink` disc), the mic is not. An outline arrow the same
-  weight as the mic beside it said "there is a button here"; it did not say that pressing it is
-  the thing you came to do.
+- **One slot: the mic while the box is empty, send once there is something to save.** The mic
+  sits in an accent disc (Variant E, 021); send takes its place filled, because an outline arrow
+  the same weight as the mic said "there is a button here" without saying that pressing it is the
+  thing you came to do. The dock's hint line is three tappable example chips that fill the box
+  (44px targets inside the row's own height).
 - **`Log · Ask` is a 28px pill inside a 44px button, and it is `hidden lg:flex`.** On a phone the
   mode is a destination; the toggle survives for `lg`, where there is no nav and it is the only
   thing that can say the box has a second job. `QuickAdd` takes `ask` as a prop and the two can
@@ -437,9 +477,10 @@ carry the line to type and what it becomes — `350 lunch swiggy` → *becomes a
 food* — drawn like the entries they would turn into. Tapping one fills the box so the next move is
 editing something real.
 
-**Switching to Ask does the same for questions.** Three tappable questions, deliberately
-**subject-free** — a suggestion naming a merchant answers "nothing found" on a log that has never
-mentioned them, which is the worst possible introduction to the feature being introduced.
+**Switching to Ask does the same for questions.** Topic-group cards (Spending, Deep Focus,
+Events — 017/020) hold tappable questions that are deliberately **subject-free** — a suggestion
+naming a merchant answers "nothing found" on a log that has never mentioned them, which is the
+worst possible introduction to the feature being introduced.
 
 The pattern to copy: *show the transformation, fill the input rather than submitting, and never
 suggest something that can come back empty.*
@@ -466,8 +507,9 @@ suggest something that can come back empty.*
 
 No component library, no state manager, no data-fetching library, no icon package — icons are
 inline SVG on a 24-box stroked with `currentColor`. Runtime dependencies are `react`, `react-dom`,
-`@supabase/auth-js` + `@supabase/postgrest-js`, `date-fns` and Capacitor. **Ask before adding
-anything else.**
+`@supabase/auth-js` + `@supabase/postgrest-js`, `date-fns`, Capacitor, and the two native
+security plugins argued for in spec 023 (`@aparajita/capacitor-biometric-auth`,
+`@capacitor/privacy-screen`). **Ask before adding anything else.**
 
 No dashboard, no tabs, no search field, no tag UI, no category manager, no multi-day view, no
 second editor, no fifth kind, no "are you sure?" dialog, no onboarding carousel, no skeleton

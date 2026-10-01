@@ -35,9 +35,10 @@ The browser bundle has exactly four dependencies: `react`, `react-dom`,
 actually uses — the umbrella `@supabase/supabase-js` left in spec 014), `date-fns`. Capacitor
 (`@capacitor/core`, `@capacitor/android`,
 `@capacitor/local-notifications`, `@capacitor/app`, `@capacitor/filesystem`, `@capacitor/share`,
-`@capacitor/haptics`, `@capacitor/camera`) was added with the Android app and reaches the web
-bundle only through the dynamic imports in `reminders.ts`, `back.ts`, `deliver.ts`, `haptics.ts`
-and `camera.ts`; `@netlify/blobs` is
+`@capacitor/haptics`, `@capacitor/camera`) was added with the Android app, and the app lock
+added `@aparajita/capacitor-biometric-auth` and `@capacitor/privacy-screen`; all of it reaches
+the web bundle only through dynamic imports behind `isNative()` (`reminders.ts`, `back.ts`,
+`deliver.ts`, `haptics.ts`, `camera.ts`, `LockScreen.tsx`). `@netlify/blobs` is
 used by the backup functions and never by the app. No component library, no state manager, no
 data-fetching library, no icon package. The handful of icons are inline SVG.
 
@@ -215,12 +216,13 @@ of letting someone in.
 | --- | --- |
 | [DESIGN.md](DESIGN.md) | The UI rules, written to be followed — tokens, type scale, row anatomy, targets, the checklist. Read this before touching the interface. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The architecture and the reasoning, including the bug behind each rule and the traps that cost real time. |
+| [SECURITY.md](SECURITY.md) | The security and privacy model — what protects the data, what deliberately does not, and how each claim was verified. |
 
 ## Scripts
 
 ```bash
 npm run dev        # vite dev server on :5173
-npm test           # vitest run — 638 tests
+npm test           # vitest run — the whole suite
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist, the only way to exercise the service worker locally
 ```
@@ -635,30 +637,18 @@ them and expecting the running function to notice is the usual first mistake.
 
 ## Bundle size
 
-Measured with `npm run build`:
-
-| File | Raw | Gzipped |
-| --- | --- | --- |
-| `assets/index-*.js` | 487.72 kB | **141.58 kB** |
-| `assets/index-*.css` | 26.01 kB | 6.18 kB |
-| `index.html` | 1.21 kB | 0.62 kB |
-| **What a browser fetches** | | **148.38 kB** |
-| `assets/web-*.js` (×4) | 14.11 kB | 4.75 kB |
-| `assets/esm-*.js` (×4) | 2.59 kB | 1.51 kB |
-| Everything the build emits | | 154.64 kB |
-
-**The budget is 150 KB of what a browser fetches, and the headroom is 1.6 KB.** The eight small
-chunks below the line are the Capacitor plugins' web shims, and nothing downloads them:
-`reminders.ts`, `back.ts` and `deliver.ts` all check `isNative()` and return *before* the dynamic
+**The budget is 150 KB gzipped of what a browser fetches** — the main js chunk, the CSS and the
+HTML — and `scripts/bundle-budget.mjs` fails the build past it. Measured **136.87 KB** on
+2026-10-01. The build also emits a handful of small chunks nothing on the web downloads: the
+Capacitor plugins' web shims behind the dynamic imports in `reminders.ts`, `back.ts`,
+`deliver.ts`, `haptics.ts` and `camera.ts` — each checks `isNative()` and returns *before* the
 import, and inside the native shell the plugin proxies talk to the bridge rather than to these
-files. The stats screen cost 2.8 KB of the fetched figure. The one big remedy has already been
-spent: spec 014 swapped `@supabase/supabase-js` for direct `@supabase/auth-js` and
-`@supabase/postgrest-js` imports, dropping the SDK's unused half (`storage-js`, `realtime-js`,
-`functions-js`, `phoenix`) for 25.7 KB. The four small chunks are the dynamic imports in
-`reminders.ts` and `back.ts`, fetched only inside the native shell.
+files. The one big remedy has already been spent: spec 014 swapped `@supabase/supabase-js` for
+direct `@supabase/auth-js` and `@supabase/postgrest-js` imports, dropping the SDK's unused half
+(`storage-js`, `realtime-js`, `functions-js`, `phoenix`) for 25.7 KB.
 
-Service worker files (`sw.js` 1.39 kB, `workbox-*.js` 14.76 kB) are fetched by the service
-worker, not the page, and are not part of the above.
+Service worker files (`sw.js`, `workbox-*.js`) are fetched by the service worker, not the page,
+and are not part of the above.
 
 > Measure this **with `.env.local` present**. Without it, `src/lib/supabase.ts` throws at module
 > scope, the bundler proves the throw unconditional, and the entire Supabase SDK is tree-shaken
@@ -714,17 +704,21 @@ and an insert is rejected with `42501 new row violates row-level security policy
 
 ```
 src/
-  lib/        supabase.ts  store.ts  identity.ts  parser.ts  query.ts  history.ts
-              events.ts  occurrences.ts  ahead.ts  ics.ts  deliver.ts  reminders.ts
-              platform.ts  format.ts
+  lib/        parser.ts  store.ts  supabase.ts  identity.ts  query.ts  stats.ts
+              events.ts  occurrences.ts  history.ts  ahead.ts  format.ts  merchants.ts
+              reminders.ts  ics.ts  deliver.ts  back.ts  haptics.ts  camera.ts
+              attachments.ts  applock.ts  palettes.ts  platform.ts  statusbar.ts
+              openSettings.ts  signinLink.ts
   hooks/      useEntries.ts  useSession.ts  useTheme.ts  useSwipe.ts  useDictation.ts
-              useMarkedDays.ts  useOnline.ts  useNudges.ts
-  components/ Login.tsx  DayHeader.tsx  WeekStrip.tsx  DayCell.tsx  MonthGrid.tsx
-              BottomNav.tsx  Calendar.tsx  You.tsx  QuickAdd.tsx  AnswerCard.tsx
-              OnThisDay.tsx  AheadSheet.tsx  EntryRow.tsx  KindMark.tsx
-              EntryEditor.tsx  HelpSheet.tsx  Sheet.tsx  Toast.tsx  Icons.tsx
+              useMarkedDays.ts  useOnline.ts  useNudges.ts  useAttachments.ts
+  components/ Login.tsx  LockScreen.tsx  DayHeader.tsx  WeekStrip.tsx  DayCell.tsx
+              MonthGrid.tsx  Calendar.tsx  Stats.tsx  BottomNav.tsx  You.tsx
+              QuickAdd.tsx  AnswerCard.tsx  OnThisDay.tsx  AheadSheet.tsx  EntryRow.tsx
+              KindMark.tsx  EntryEditor.tsx  PhotoViewer.tsx  HelpSheet.tsx  Sheet.tsx
+              Segmented.tsx  Toast.tsx  Icons.tsx
   types.ts  App.tsx  main.tsx
 supabase/migrations/0001_entries.sql
+netlify/           the nightly backup functions and their tested helpers
 public/logo.svg  public/icon-192.png  public/icon-512.png  public/icon-maskable-512.png
 ```
 
@@ -774,15 +768,16 @@ set, rows are never removed.
   and You. Three of those already existed and were reachable only by knowing something — the month
   behind the date, the account behind a 20px glyph in the quietest row on the screen, and Ask
   behind a leading `?` and then behind a pill inside the capture control. Nothing new was added;
-  three things stopped hiding, and the header gave up its own quiet first row to pay for the space.
-  **The capture control is on three of the four, and the bar stands down the moment the field has
-  text**, so logging still costs exactly what it did — which is the condition the exception was
+  three things stopped hiding. **The capture control is on three of the four and the bar stays
+  up, including while the field has text** — it used to stand down on any text, which made it
+  flicker on every entry and, in Ask, removed the only way off the screen at the moment an answer
+  arrived. Logging still costs exactly what it did, which is the condition the exception was
   granted on.
 - **Swipe left or right** changes day, alongside the arrows. Ignores gestures that start on a
   field, inside an open sheet, or within 24px of a screen edge, where Android's back gesture lives.
-- **A week strip sits under the day header** on compact and medium. Arrows and swiping move one
-  day at a time, which is fine for yesterday and useless for Tuesday — the calendar was the only
-  way there. Not rendered on wide screens, where the
+- **A week strip sits under the day header** on compact and medium. Swiping and the keyboard
+  arrows move one day at a time, which is fine for yesterday and useless for Tuesday — the
+  calendar was the only way there. Not rendered on wide screens, where the
   sidebar already shows the whole month for no taps at all.
 - **Dictation** via the Web Speech API, on the web. The mic button is hidden where the API is
   absent or inert — iOS Safari, and the Android WebView, which exposes it but never answers.
