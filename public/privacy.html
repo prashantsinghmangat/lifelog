@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+    <title>lifelog — privacy</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        max-width: 38rem;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 4rem;
+        font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: #1a1a1a;
+        background: #faf8f4;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          color: #e8e4db;
+          background: #171613;
+        }
+      }
+      h1 {
+        font-size: 1.375rem;
+        margin-bottom: 0.25rem;
+      }
+      h2 {
+        font-size: 1rem;
+        margin-top: 2.25rem;
+      }
+      p,
+      li {
+        font-size: 0.9375rem;
+      }
+      .meta {
+        font-size: 0.8125rem;
+        opacity: 0.65;
+        margin-top: 0;
+      }
+      code {
+        font-size: 0.875em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>lifelog — privacy</h1>
+    <p class="meta">Last updated 2026-10-01. Describes what the app does today — not what a
+      future store listing or jurisdiction might separately require.</p>
+
+    <h2>What's stored, and where</h2>
+    <p>Your entries live in a Supabase Postgres database, in one table, protected by a
+      row-level-security policy that is the <strong>application-level, database access control</strong>
+      restricting each account to its own rows — not a guarantee covering every copy of the data
+      (the nightly backup below intentionally uses a privileged key that bypasses it).</p>
+    <p>Deleting an entry hides it from the app immediately; the row itself is retained — including
+      in backups — until it ages out automatically. A nightly backup copies the table to Netlify
+      Blobs and keeps the last 30 days of snapshots, which also include anything you've deleted
+      within that window.</p>
+    <p>Photos are stored only in this device's local browser storage (IndexedDB). They are
+      <strong>not uploaded or synchronized to LifLog's servers by the app</strong>.</p>
+
+    <h2>Account data</h2>
+    <p>Signing in (rather than using guest mode) is handled by Supabase Auth, which holds your
+      email address, a password if you chose that sign-in route, magic-link/one-time-code state
+      while you're signing in, and your session/refresh tokens.</p>
+
+    <h2>What isn't collected</h2>
+    <p>No analytics, telemetry, or tracking library is present in the app. No cookies are used —
+      your session is kept in this browser's local storage only.</p>
+
+    <h2>Your export</h2>
+    <p>"Export JSON" on the You screen downloads every entry you haven't deleted. It does not
+      include photos.</p>
+
+    <h2>Reminders</h2>
+    <p>Reminder notifications are scheduled entirely on your device. No push server is involved.</p>
+
+    <h2>On your Android device</h2>
+    <p>Android's own cloud backup and device-to-device transfer are deliberately excluded for this
+      app. Local storage holds a live session token, and the notification system's own storage
+      holds entry titles — neither is meant to leave the device by that route.</p>
+
+    <h2>Requesting data deletion</h2>
+    <p>There is no self-service deletion control in the app yet. To request deletion of your data,
+      open an issue at
+      <a href="https://github.com/prashantsinghmangat/lifelog/issues">github.com/prashantsinghmangat/lifelog/issues</a>.</p>
+
+    <h2>What this page doesn't cover</h2>
+    <p>This page describes LifLog as implemented today. It makes no claim about Google Play data
+      safety disclosures, GDPR, CCPA, or any other distribution- or jurisdiction-specific
+      requirement.</p>
+  </body>
+</html>

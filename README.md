@@ -683,6 +683,9 @@ Open the production URL in Chrome on Android → menu → **Add to Home screen**
 browser chrome (`display: standalone`). The service worker uses `registerType: 'autoUpdate'`,
 so a new deploy is picked up on next launch.
 
+The privacy policy lives at [`/privacy.html`](public/privacy.html), served the same way as every
+other file already in `public/` — no route or build step needed.
+
 ## Verifying RLS
 
 Querying from the Supabase SQL editor proves nothing — it runs as `postgres` and bypasses RLS.
