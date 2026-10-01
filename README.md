@@ -31,7 +31,9 @@ Single user. No sharing, no onboarding, no settings.
 | Deploy | Netlify (a Vercel config is committed too) |
 
 The browser bundle has exactly four dependencies: `react`, `react-dom`,
-`@supabase/supabase-js`, `date-fns`. Capacitor (`@capacitor/core`, `@capacitor/android`,
+`@supabase/auth-js` + `@supabase/postgrest-js` (the two halves of the Supabase SDK the app
+actually uses — the umbrella `@supabase/supabase-js` left in spec 014), `date-fns`. Capacitor
+(`@capacitor/core`, `@capacitor/android`,
 `@capacitor/local-notifications`, `@capacitor/app`, `@capacitor/filesystem`, `@capacitor/share`,
 `@capacitor/haptics`, `@capacitor/camera`) was added with the Android app and reaches the web
 bundle only through the dynamic imports in `reminders.ts`, `back.ts`, `deliver.ts`, `haptics.ts`
@@ -202,8 +204,10 @@ You can check the setting rather than remember it:
 curl -s "$VITE_SUPABASE_URL/auth/v1/settings" -H "apikey: $VITE_SUPABASE_ANON_KEY"
 ```
 
-`"disable_signup": true` is the state this app expects. `false` means anyone who finds the URL can
-create an account on your project.
+`"disable_signup": true` is the state this app *requires* — not a description of the current
+project, which measured `false` on 2026-10-01 while a tester's account was being set up. `false`
+means anyone who finds the URL can create an account on your project; re-check after any period
+of letting someone in.
 
 ## Docs
 
@@ -647,13 +651,11 @@ Measured with `npm run build`:
 chunks below the line are the Capacitor plugins' web shims, and nothing downloads them:
 `reminders.ts`, `back.ts` and `deliver.ts` all check `isNative()` and return *before* the dynamic
 import, and inside the native shell the plugin proxies talk to the bridge rather than to these
-files. The stats screen cost 2.8 KB of the fetched figure. If more room is ever needed, importing
-`@supabase/auth-js` and `@supabase/postgrest-js` directly drops the unused half of the SDK, which
-is worth far more than everything else on this page combined. The four small chunks are the dynamic imports in `reminders.ts` and `back.ts`, fetched only
-inside the native shell. The weight is `@supabase/supabase-js`, which pulls in `auth-js`,
-`postgrest-js`, `storage-js`, `realtime-js`, `functions-js` and `phoenix` — only auth and
-postgrest are used. If the budget ever gets tight, importing `@supabase/auth-js` and
-`@supabase/postgrest-js` directly drops the rest.
+files. The stats screen cost 2.8 KB of the fetched figure. The one big remedy has already been
+spent: spec 014 swapped `@supabase/supabase-js` for direct `@supabase/auth-js` and
+`@supabase/postgrest-js` imports, dropping the SDK's unused half (`storage-js`, `realtime-js`,
+`functions-js`, `phoenix`) for 25.7 KB. The four small chunks are the dynamic imports in
+`reminders.ts` and `back.ts`, fetched only inside the native shell.
 
 Service worker files (`sw.js` 1.39 kB, `workbox-*.js` 14.76 kB) are fetched by the service
 worker, not the page, and are not part of the above.

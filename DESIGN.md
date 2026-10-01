@@ -466,7 +466,8 @@ suggest something that can come back empty.*
 
 No component library, no state manager, no data-fetching library, no icon package — icons are
 inline SVG on a 24-box stroked with `currentColor`. Runtime dependencies are `react`, `react-dom`,
-`@supabase/supabase-js`, `date-fns` and Capacitor. **Ask before adding anything else.**
+`@supabase/auth-js` + `@supabase/postgrest-js`, `date-fns` and Capacitor. **Ask before adding
+anything else.**
 
 No dashboard, no tabs, no search field, no tag UI, no category manager, no multi-day view, no
 second editor, no fifth kind, no "are you sure?" dialog, no onboarding carousel, no skeleton

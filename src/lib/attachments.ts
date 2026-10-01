@@ -310,6 +310,12 @@ export function orphansOf(storedIds: Iterable<string>, liveIds: Iterable<string>
 
 /** Deletes every photo whose entry is no longer in the live log. */
 export async function sweepOrphans(liveEntryIds: string[]): Promise<void> {
+  // An empty live set is never evidence: it is what a parse-failed store, the
+  // quota fallback's `{entries: [], pending}` and a freshly minted identity all
+  // look like, and each of those once meant deleting every photo on the device
+  // — the only copies that exist. A log that holds photos is never legitimately
+  // empty, so there is nothing real to sweep against.
+  if (liveEntryIds.length === 0) return
   const stored = await storedEntryIds()
   for (const entryId of orphansOf(stored, liveEntryIds)) await removeAll(entryId)
 }

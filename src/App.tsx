@@ -55,6 +55,7 @@ import { isNative } from './lib/platform'
 import {
   alarmIds,
   cancel as cancelReminder,
+  cancelAll as cancelAllReminders,
   cancelFollowUps,
   onAction,
   permission as reminderPermission,
@@ -64,7 +65,7 @@ import {
   scheduleNudges,
   sync,
 } from './lib/reminders'
-import { supabase } from './lib/supabase'
+import { sessionStorageKey, supabase } from './lib/supabase'
 import type { ParsedEntry } from './lib/parser'
 import type { Entry } from './types'
 
@@ -858,10 +859,23 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
     onExportCalendar: () => void exportCalendar(),
     // Forgotten here as well as on the event, because signing out with no
     // network never reaches Supabase — and an offline sign-out that does not
-    // sign you out is worse than no button at all.
+    // sign you out is worse than no button at all. Every armed alarm goes too:
+    // a weekly repeat is a standing OS cron that would otherwise keep raising
+    // this account's entry titles to whoever holds the phone. And when the
+    // server call fails, auth-js has NOT cleared its storage — the refresh
+    // token is still at rest — so the key is removed by hand and the page
+    // relaunched, which is what kills the in-memory session and the refresh
+    // timer that would have written the token straight back.
     onSignOut: () => {
-      forget(localStorage)
-      void supabase.auth.signOut()
+      void (async () => {
+        forget(localStorage)
+        void cancelAllReminders()
+        const { error } = await supabase.auth.signOut()
+        if (error !== null) {
+          localStorage.removeItem(sessionStorageKey)
+          window.location.reload()
+        }
+      })()
     },
   }
 

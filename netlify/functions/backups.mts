@@ -1,5 +1,5 @@
 import { getStore } from '@netlify/blobs'
-import { authorised, isSnapshotKey } from '../lib/backup.ts'
+import { authorised, isSnapshotKey, usableSecret } from '../lib/backup.ts'
 
 /**
  * Reading the backups back out. A copy that cannot be retrieved is not a
@@ -18,8 +18,8 @@ import { authorised, isSnapshotKey } from '../lib/backup.ts'
  */
 export default async (request: Request): Promise<Response> => {
   const secret = process.env['BACKUP_TOKEN']
-  if (secret === undefined || secret === '') {
-    return new Response('BACKUP_TOKEN is not set', { status: 503 })
+  if (!usableSecret(secret)) {
+    return new Response('BACKUP_TOKEN is not set, or shorter than 32 characters', { status: 503 })
   }
 
   if (!authorised(request, secret)) {

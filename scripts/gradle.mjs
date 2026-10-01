@@ -102,6 +102,25 @@ if (task.length === 0) {
   process.exit(1)
 }
 
+// A release carrying a `server` block is the shipped-dev-build accident:
+// CAP_DEV_URL still exported when `cap sync` last ran bakes a LAN HTTP origin
+// and cleartext into a signed APK that only works on the network it was built
+// on. Same shape as build.gradle's signing guard: fail the task, name the fix.
+if (task.some((name) => /release/i.test(name))) {
+  const synced = 'android/app/src/main/assets/capacitor.config.json'
+  try {
+    if (JSON.parse(readFileSync(synced, 'utf8')).server !== undefined) {
+      console.error(
+        `${synced} contains a server block — a dev-server build must not be released.\n` +
+          'Unset CAP_DEV_URL and run `npx cap sync android` again.',
+      )
+      process.exit(1)
+    }
+  } catch {
+    // No synced config yet: Gradle itself will say so more usefully.
+  }
+}
+
 // A .bat can only be launched through a shell, and a shell resolves a bare name
 // against PATH rather than cwd — hence the absolute, quoted path. Passing one
 // command string instead of an args array also avoids Node's DEP0190 warning.

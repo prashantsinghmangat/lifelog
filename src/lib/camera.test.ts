@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  */
 
 const getPhoto = vi.fn()
+const deleteFile = vi.fn()
 
 vi.mock('./platform', () => ({ isNative: vi.fn(() => true) }))
 vi.mock('@capacitor/camera', () => ({
@@ -14,12 +15,16 @@ vi.mock('@capacitor/camera', () => ({
   CameraResultType: { Uri: 'uri' },
   CameraSource: { Camera: 'CAMERA' },
 }))
+vi.mock('@capacitor/filesystem', () => ({
+  Filesystem: { deleteFile: (...args: unknown[]) => deleteFile(...args) },
+}))
 
 const { isNative } = await import('./platform')
 const { available, takePhoto } = await import('./camera')
 
 afterEach(() => {
   getPhoto.mockReset()
+  deleteFile.mockReset()
   vi.mocked(isNative).mockReturnValue(true)
 })
 
@@ -67,5 +72,21 @@ describe('what came back', () => {
   it('treats a photo with no path as unavailable', async () => {
     getPhoto.mockResolvedValue({ webPath: undefined })
     expect(await takePhoto()).toBe('unavailable')
+  })
+
+  it("deletes the plugin's cache copy once the bytes are in hand", async () => {
+    getPhoto.mockResolvedValue({ webPath: 'blob:photo', path: 'file:///cache/capture.jpg' })
+    globalThis.fetch = vi.fn(async () => new Response(new Blob(['x'], { type: 'image/jpeg' })))
+
+    expect(await takePhoto()).toBeInstanceOf(Blob)
+    expect(deleteFile).toHaveBeenCalledWith({ path: 'file:///cache/capture.jpg' })
+  })
+
+  it('never loses the photo over a failed cleanup', async () => {
+    getPhoto.mockResolvedValue({ webPath: 'blob:photo', path: 'file:///cache/capture.jpg' })
+    globalThis.fetch = vi.fn(async () => new Response(new Blob(['x'], { type: 'image/jpeg' })))
+    deleteFile.mockRejectedValue(new Error('gone already'))
+
+    expect(await takePhoto()).toBeInstanceOf(Blob)
   })
 })

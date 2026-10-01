@@ -1,6 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { actionType, alarmIds, alarms, fireAt, notificationId } from './reminders'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { actionType, alarmIds, alarms, cancelAll, fireAt, notificationId } from './reminders'
+import { isNative } from './platform'
 import type { Entry } from '../types'
+
+const getPending = vi.fn()
+const cancelled = vi.fn()
+
+vi.mock('./platform', () => ({ isNative: vi.fn(() => false) }))
+vi.mock('@capacitor/local-notifications', () => ({
+  LocalNotifications: {
+    getPending: (...args: unknown[]) => getPending(...args),
+    cancel: (...args: unknown[]) => cancelled(...args),
+  },
+}))
 
 function entry(over: Partial<Entry> & { id: string }): Entry {
   return {
@@ -401,5 +413,43 @@ describe('a nag that rings until acted on', () => {
     expect(actionType(oneOff)).toBe('done')
     expect(actionType(repeat)).toBe('got_it')
     expect(actionType(plain)).toBeUndefined()
+  })
+})
+
+describe('cancelAll', () => {
+  afterEach(() => {
+    getPending.mockReset()
+    cancelled.mockReset()
+    vi.mocked(isNative).mockReturnValue(false)
+  })
+
+  it('cancels every pending id, the daily prompts included', async () => {
+    vi.mocked(isNative).mockReturnValue(true)
+    getPending.mockResolvedValue({ notifications: [{ id: 1 }, { id: 2 }, { id: 424242 }] })
+
+    await cancelAll()
+
+    expect(cancelled).toHaveBeenCalledWith({
+      notifications: [{ id: 1 }, { id: 2 }, { id: 424242 }],
+    })
+  })
+
+  it('does nothing when nothing is pending', async () => {
+    vi.mocked(isNative).mockReturnValue(true)
+    getPending.mockResolvedValue({ notifications: [] })
+
+    await cancelAll()
+    expect(cancelled).not.toHaveBeenCalled()
+  })
+
+  it('never reaches for the plugin away from the native shell', async () => {
+    await cancelAll()
+    expect(getPending).not.toHaveBeenCalled()
+  })
+
+  it('resolves even when the plugin throws — a sign-out must not fail over a notification', async () => {
+    vi.mocked(isNative).mockReturnValue(true)
+    getPending.mockRejectedValue(new Error('no bridge'))
+    await expect(cancelAll()).resolves.toBeUndefined()
   })
 })

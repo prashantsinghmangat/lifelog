@@ -81,6 +81,12 @@ async function nativeShare(name: string, content: string): Promise<Delivered | n
     // the message is what there is to go on.
     if (failure instanceof Error && /cancel/i.test(failure.message)) return 'cancelled'
     throw failure
+  } finally {
+    // The export is the whole log in plaintext, and left here it accumulated:
+    // one complete copy per press, cancelled shares included, outliving every
+    // sign-out. By the time share() settles the target has received the stream,
+    // so the file has done its only job.
+    void found.fs.deleteFile({ path: name, directory: found.dir.Cache }).catch(() => undefined)
   }
 }
 

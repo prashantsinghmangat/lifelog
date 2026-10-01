@@ -4,6 +4,24 @@ import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // The source has zero console statements of its own; this makes that
+  // structural rather than a discipline. Without it 32 dependency calls ship,
+  // several in auth-js printing AuthError objects on the refresh-token path —
+  // the one route a token-adjacent object could reach a production console.
+  // Vite 8 ignores the `esbuild.drop` spelling (it warns); this is the oxc
+  // minifier's, with mangle and whitespace restated since an object here
+  // replaces the defaults rather than extending them.
+  build: {
+    rolldownOptions: {
+      output: {
+        minify: {
+          mangle: true,
+          codegen: { removeWhitespace: true },
+          compress: { dropConsole: true, dropDebugger: true },
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),

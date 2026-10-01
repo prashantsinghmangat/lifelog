@@ -78,7 +78,21 @@ export async function takePhoto(): Promise<Taken> {
 
     if (photo.webPath === undefined) return 'unavailable'
     const response = await fetch(photo.webPath)
-    return await response.blob()
+    const taken = await response.blob()
+
+    // The plugin leaves its capture in the app cache at its own quality, where
+    // it outlives even the photo's later removal from the entry. Best effort:
+    // the photo in hand is never lost over a cleanup.
+    if (photo.path !== undefined) {
+      try {
+        const { Filesystem } = await import('@capacitor/filesystem')
+        await Filesystem.deleteFile({ path: photo.path })
+      } catch {
+        // The cache is still app-private, and the OS clears it eventually.
+      }
+    }
+
+    return taken
   } catch (failure) {
     if (backedOut(failure)) return 'cancelled'
     if (refused(failure)) return 'denied'

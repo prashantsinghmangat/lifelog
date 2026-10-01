@@ -1,4 +1,4 @@
-import { authorised } from '../lib/backup.ts'
+import { authorised, usableSecret } from '../lib/backup.ts'
 import { runBackup } from '../lib/run.ts'
 
 /**
@@ -15,8 +15,8 @@ import { runBackup } from '../lib/run.ts'
  */
 export default async (request: Request): Promise<Response> => {
   const secret = process.env['BACKUP_TOKEN']
-  if (secret === undefined || secret === '') {
-    return new Response('BACKUP_TOKEN is not set', { status: 503 })
+  if (!usableSecret(secret)) {
+    return new Response('BACKUP_TOKEN is not set, or shorter than 32 characters', { status: 503 })
   }
   if (!authorised(request, secret)) {
     return new Response('Not found', { status: 404 })

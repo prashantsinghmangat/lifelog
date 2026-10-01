@@ -83,6 +83,15 @@ describe('sweepOrphans', () => {
 
     await removeAll('sweep-keep')
   })
+
+  it('deletes nothing when the live set is empty — a parse-failed store and the quota fallback both look exactly like this', async () => {
+    await put('sweep-empty', blob())
+
+    await sweepOrphans([])
+
+    expect(await list('sweep-empty')).toHaveLength(1)
+    await removeAll('sweep-empty')
+  })
 })
 
 describe('targetSize', () => {

@@ -6,6 +6,7 @@ import {
   snapshotKey,
   stale,
   totalFrom,
+  usableSecret,
 } from './backup.ts'
 
 describe('which keys the download endpoint will accept', () => {
@@ -141,6 +142,21 @@ describe('paging', () => {
     expect(totalFrom(null)).toBeNull()
     expect(totalFrom('0-999/*')).toBeNull()
     expect(totalFrom('nonsense')).toBeNull()
+  })
+})
+
+describe('the strength floor on BACKUP_TOKEN', () => {
+  it('refuses 31 characters, exactly as if the token were unset', () => {
+    expect(usableSecret('a'.repeat(31))).toBe(false)
+  })
+
+  it('accepts 32', () => {
+    expect(usableSecret('a'.repeat(32))).toBe(true)
+  })
+
+  it('refuses unset and empty', () => {
+    expect(usableSecret(undefined)).toBe(false)
+    expect(usableSecret('')).toBe(false)
   })
 })
 

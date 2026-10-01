@@ -79,6 +79,17 @@ export function totalFrom(contentRange: string | null): number | null {
  * over HTTPS is not a realistic attack, but a credential comparison that leaks
  * its prefix is not worth keeping for the sake of one operator.
  */
+/**
+ * Whether BACKUP_TOKEN is set strongly enough to guard every row in the
+ * database. 32 characters is the floor: the token is the only thing between
+ * the open internet and a plaintext dump past RLS, and `BACKUP_TOKEN=test`
+ * being accepted in silence is the failure this refuses. Treated exactly like
+ * an unset token — a 503 naming the problem, never a weaker gate.
+ */
+export function usableSecret(secret: string | undefined): secret is string {
+  return typeof secret === 'string' && secret.length >= 32
+}
+
 export function authorised(request: Request, secret: string): boolean {
   const url = new URL(request.url)
   const header = request.headers.get('authorization') ?? ''

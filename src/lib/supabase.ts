@@ -20,10 +20,17 @@ if (!url || !anonKey) {
  */
 const ref = new URL(url).hostname.split('.')[0]
 
+/**
+ * Where the session lives at rest. Exported because sign-out must be able to
+ * clear it by hand: auth-js removes it only after the server call succeeds, so
+ * an offline sign-out otherwise leaves a live refresh token behind.
+ */
+export const sessionStorageKey = `sb-${ref}-auth-token`
+
 const auth = new GoTrueClient({
   url: `${url}/auth/v1`,
   headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
-  storageKey: `sb-${ref}-auth-token`,
+  storageKey: sessionStorageKey,
   persistSession: true,
   autoRefreshToken: true,
   detectSessionInUrl: true,
@@ -37,9 +44,17 @@ const auth = new GoTrueClient({
  */
 const authedFetch: typeof fetch = async (input, init) => {
   const { data } = await auth.getSession()
+  // No session means "we cannot prove who you are", and the honest answer is
+  // unreachable — the rejection becomes postgrest-js's status 0, which reads
+  // fall back from. Signing with the anon key instead got a verified-empty
+  // `200 []` back, which reconcile then applied as "every synced row was
+  // deleted" and emptied the device's log.
+  if (data.session === null) {
+    throw new TypeError('no session to sign the request with')
+  }
   const headers = new Headers(init?.headers)
   headers.set('apikey', anonKey)
-  headers.set('Authorization', `Bearer ${data.session?.access_token ?? anonKey}`)
+  headers.set('Authorization', `Bearer ${data.session.access_token}`)
   return fetch(input, { ...init, headers })
 }
 

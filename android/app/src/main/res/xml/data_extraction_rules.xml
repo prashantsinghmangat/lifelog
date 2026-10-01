@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The API-31+ half of the manifest's backup stance: allowBackup="false" turns
+  Auto Backup off, but device-to-device transfer is ruled separately by this
+  file. Every domain is excluded from both channels — the WebView's storage
+  holds the log and a live refresh token, and the notification plugin's
+  SharedPreferences hold scheduled entry titles.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

@@ -491,6 +491,26 @@ export async function cancelFollowUps(entry: Entry): Promise<void> {
 }
 
 /**
+ * Everything this app has armed, cancelled — entry alarms, follow-ups and the
+ * daily prompts alike. Sign-out is the caller: a weekly repeat is a standing
+ * cron the OS keeps for ever, so without this a signed-out phone went on
+ * raising the account's entry titles to whoever was holding it.
+ */
+export async function cancelAll(): Promise<void> {
+  const found = await plugin()
+  if (!found) return
+  try {
+    const pending = await found.api.getPending()
+    if (pending.notifications.length === 0) return
+    await found.api.cancel({
+      notifications: pending.notifications.map((armed) => ({ id: armed.id })),
+    })
+  } catch {
+    // Best effort: a sign-out must never fail over a notification.
+  }
+}
+
+/**
  * Delivers a notification's button press to the app. Capacitor wakes the app
  * briefly in the background to run this — that is how the event reaches JS —
  * so the handler must not assume anything is on screen.
