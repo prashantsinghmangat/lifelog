@@ -33,7 +33,16 @@ import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { ahead } from './lib/ahead'
-import { LOCK_AFTER, loadLock, saveLock, shouldLock, stamp, type LockState } from './lib/applock'
+import {
+  LOCK_AFTER,
+  loadLock,
+  saveLock,
+  shouldLock,
+  shouldLockOnResume,
+  stamp,
+  unlocked,
+  type LockState,
+} from './lib/applock'
 import { sweepOrphans } from './lib/attachments'
 import { arm as armBack, onHome, setLocked as setBackLocked } from './lib/back'
 import { save, shareOrDownload } from './lib/deliver'
@@ -157,9 +166,14 @@ export default function App() {
   /** Whether the OS has anything to verify with; null while still asking. */
   const [lockUsable, setLockUsable] = useState<boolean | null>(null)
   const lockRef = useRef(lock)
-  useEffect(() => {
-    lockRef.current = lock
-  }, [lock])
+  // Every write goes through here, and the ref is written *synchronously*:
+  // the resume event that follows an OS prompt arrives before React commits a
+  // re-render, and it must see the state the unlock just cleared.
+  const commitLock = useCallback((next: LockState) => {
+    lockRef.current = next
+    saveLock(localStorage, next)
+    setLock(next)
+  }, [])
 
   // back() must refuse to unwind sheets or change view behind the overlay.
   useEffect(() => {
@@ -177,15 +191,15 @@ export default function App() {
     void import('@capacitor/app').then(({ App: Native }) => {
       if (!live) return
       void Native.addListener('pause', () => {
-        const next = stamp(lockRef.current, Date.now())
-        saveLock(localStorage, next)
-        setLock(next)
+        commitLock(stamp(lockRef.current, Date.now()))
       }).then((handle) => {
         if (live) offs.push(() => void handle.remove())
         else void handle.remove()
       })
       void Native.addListener('resume', () => {
-        if (shouldLock(lockRef.current, Date.now())) setLockedHere(true)
+        // The resume rule, not the launch rule: a cleared stamp means the last
+        // pause was already unlocked through, never "cannot prove".
+        if (shouldLockOnResume(lockRef.current, Date.now())) setLockedHere(true)
       }).then((handle) => {
         if (live) offs.push(() => void handle.remove())
         else void handle.remove()
@@ -232,9 +246,7 @@ export default function App() {
   const toggleLock = useCallback(() => {
     if (lockRef.current.on) {
       // The app is unlocked to be here at all, so switching off asks nothing.
-      const next = { ...lockRef.current, on: false, pausedAt: null }
-      saveLock(localStorage, next)
-      setLock(next)
+      commitLock(unlocked({ ...lockRef.current, on: false }))
       setLockedHere(false)
       return
     }
@@ -251,29 +263,32 @@ export default function App() {
           androidBiometryStrength: AndroidBiometryStrength.weak,
           androidTitle: 'Turn on App Lock',
         })
-        const next = stamp({ ...lockRef.current, on: true }, Date.now())
-        saveLock(localStorage, next)
-        setLock(next)
+        // No stamp: armed with nothing to forgive, so the prompt's own
+        // pause/resume cannot lock the switch's first minute away.
+        commitLock(unlocked({ ...lockRef.current, on: true }))
       } catch {
         // Refused or cancelled: the switch stays off.
       }
     })()
-  }, [])
+  }, [commitLock])
 
   const cycleLockAfter = useCallback(() => {
     const at = LOCK_AFTER.findIndex((option) => option.ms === lockRef.current.after)
-    const next = {
+    commitLock({
       ...lockRef.current,
       after: LOCK_AFTER[(at + 1) % LOCK_AFTER.length]?.ms ?? 60_000,
-    }
-    saveLock(localStorage, next)
-    setLock(next)
-  }, [])
+    })
+  }, [commitLock])
 
   // Stable, or every App re-render hands LockScreen a new callback — and its
   // prompt-on-mount effect re-fires: the pause event a BiometricPrompt itself
   // raises re-rendered App, which re-prompted, for ever. Seen on the emulator.
-  const unlock = useCallback(() => setLockedHere(false), [])
+  // The stamp is spent here, synchronously: with "Immediately", the resume
+  // that follows the successful prompt otherwise re-locked every unlock.
+  const unlock = useCallback(() => {
+    commitLock(unlocked(lockRef.current))
+    setLockedHere(false)
+  }, [commitLock])
 
   const overlay = locked ? <LockScreen onUnlock={unlock} /> : null
 

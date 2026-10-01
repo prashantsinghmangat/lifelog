@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_LOCK, LOCK_AFTER, loadLock, saveLock, shouldLock, stamp } from './applock'
+import {
+  DEFAULT_LOCK,
+  LOCK_AFTER,
+  loadLock,
+  saveLock,
+  shouldLock,
+  shouldLockOnResume,
+  stamp,
+  unlocked,
+} from './applock'
 
 function store(initial: Record<string, string> = {}) {
   const held = new Map(Object.entries(initial))
@@ -58,6 +67,17 @@ describe('when the overlay goes up', () => {
 
   it('a stamp from the future locks — a clock that went backwards proves nothing', () => {
     expect(shouldLock(stamp(on, 20_000), 10_000)).toBe(true)
+  })
+
+  it('a resume after a spent stamp does not lock — the prompt pauses the app itself, and with Immediately every unlock re-locked', () => {
+    const immediate = { on: true, after: 0, pausedAt: null }
+    const paused = stamp(immediate, 10_000)
+    expect(shouldLockOnResume(paused, 10_000)).toBe(true)
+    expect(shouldLockOnResume(unlocked(paused), 10_050)).toBe(false)
+  })
+
+  it('a cold launch still treats the spent stamp as unprovable, and locks', () => {
+    expect(shouldLock(unlocked({ on: true, after: 0, pausedAt: 5_000 }), 10_000)).toBe(true)
   })
 
   it('offers exactly the three agreed timeouts', () => {

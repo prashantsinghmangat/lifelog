@@ -67,15 +67,35 @@ export function stamp(state: LockState, now: number): LockState {
 }
 
 /**
- * Whether the overlay should be up right now.
+ * Whether a cold launch should start locked.
  *
- * A missing stamp locks (cold launch, a cleared store), and a stamp from the
- * future locks too (a clock that went backwards) — both are states that cannot
- * prove the app was only briefly away, and the safe answer is the same.
+ * A missing stamp locks (a process killed without pausing, a cleared store),
+ * and a stamp from the future locks too (a clock that went backwards) — both
+ * are states that cannot prove the app was only briefly away, and the safe
+ * answer is the same.
  */
 export function shouldLock(state: LockState, now: number): boolean {
   if (!state.on) return false
   if (state.pausedAt === null) return true
   if (now < state.pausedAt) return true
   return now - state.pausedAt >= state.after
+}
+
+/**
+ * Whether a *resume* should lock — the one place a missing stamp means the
+ * opposite of what it means at launch. Every pause writes a stamp, and a
+ * successful unlock clears it; so no stamp at resume means the last pause was
+ * already paid for, not that the state is unprovable. Without this split,
+ * "Immediately" locked itself on the resume that follows its own unlock: the
+ * OS prompt pauses the activity, the unlock dismisses it, and the resume saw
+ * a fresh stamp with a zero timeout — for ever. Found on the S21 FE.
+ */
+export function shouldLockOnResume(state: LockState, now: number): boolean {
+  if (state.pausedAt === null) return false
+  return shouldLock(state, now)
+}
+
+/** A successful unlock: the recorded pause is spent. */
+export function unlocked(state: LockState): LockState {
+  return { ...state, pausedAt: null }
 }
