@@ -34,6 +34,7 @@ import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
 import { ahead } from './lib/ahead'
 import {
+  consumeExpectedPause,
   LOCK_AFTER,
   loadLock,
   saveLock,
@@ -191,7 +192,7 @@ export default function App() {
     void import('@capacitor/app').then(({ App: Native }) => {
       if (!live) return
       void Native.addListener('pause', () => {
-        commitLock(stamp(lockRef.current, Date.now()))
+        commitLock(stamp(lockRef.current, Date.now(), consumeExpectedPause()))
       }).then((handle) => {
         if (live) offs.push(() => void handle.remove())
         else void handle.remove()

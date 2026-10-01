@@ -258,8 +258,13 @@ blocks screenshots — a cost the setting's caption states. Two traps paid for t
 callback must be stable (`useCallback` plus a prompt-once ref), because the pause event a
 BiometricPrompt itself raises re-rendered `App` and re-fired the prompt-on-mount effect on every
 cancel; and a resume must forgive a spent stamp, because with "Immediately" the OS prompt's own
-pause re-locked every successful unlock. Web/PWA deliberately has no lock of any kind: a JS
-overlay is a courtesy screen, and pretending otherwise is the one claim this app must not make.
+pause re-locked every successful unlock. A third trap, same family: the camera and gallery
+pickers pause the app exactly the way backgrounding it does, so adding a photo re-locked on
+return too — `expectForegroundReturn`/`consumeExpectedPause` (spec 026) mark that pause as
+trusted, and a trusted pause gets a `TRUSTED_PAUSE_GRACE_MS` floor under the chosen timeout
+instead of locking on any gap, so a picker left open far longer than that still locks. Web/PWA
+deliberately has no lock of any kind: a JS overlay is a courtesy screen, and pretending otherwise
+is the one claim this app must not make.
 
 **Channel lock-screen visibility is not a thing an app can set on Android 16, and the reminders
 channel is `-v2` because of what finding that out cost.** Spec 023 meant to make the reminders

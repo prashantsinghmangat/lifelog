@@ -4,6 +4,7 @@ import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
 import { useAttachments } from '../hooks/useAttachments'
 import type { Attachment } from '../lib/attachments'
+import { expectForegroundReturn } from '../lib/applock'
 import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import {
   done as isDone,
@@ -174,6 +175,7 @@ export function EntryEditor({
   /** Cancelling says nothing: backing out of the camera is a decision, not a fault. */
   async function shoot() {
     setCameraProblem(null)
+    expectForegroundReturn()
     const taken = await takePhoto()
     if (taken === 'cancelled') return
     if (taken === 'denied') {
@@ -713,7 +715,10 @@ export function EntryEditor({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => galleryInput.current?.click()}
+              onClick={() => {
+                expectForegroundReturn()
+                galleryInput.current?.click()
+              }}
               className="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
             >
               <ImageIcon size={16} />

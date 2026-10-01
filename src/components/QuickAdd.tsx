@@ -13,6 +13,7 @@ import {
 import { KindMark } from './KindMark'
 import { PhotoViewer } from './PhotoViewer'
 import { useDictation } from '../hooks/useDictation'
+import { expectForegroundReturn } from '../lib/applock'
 import { fromFile, put } from '../lib/attachments'
 import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
@@ -428,6 +429,7 @@ export function QuickAdd({
    */
   async function shoot() {
     setPhotoProblem(null)
+    expectForegroundReturn()
     const taken = await takePhoto()
     if (taken === 'cancelled') return
     if (taken === 'denied') {
@@ -956,7 +958,10 @@ export function QuickAdd({
               />
               <button
                 type="button"
-                onClick={() => gallery.current?.click()}
+                onClick={() => {
+                  expectForegroundReturn()
+                  gallery.current?.click()
+                }}
                 aria-label="Add from gallery"
                 className="flex h-11 w-9 shrink-0 items-center justify-center text-faint transition-colors hover:text-muted"
               >

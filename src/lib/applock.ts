@@ -24,16 +24,30 @@ export const LOCK_AFTER = [
   { ms: 300_000, label: '5 minutes' },
 ] as const
 
+/**
+ * The floor under a trusted pause, regardless of the chosen timeout — long
+ * enough for the camera or gallery picker to open and return, short enough
+ * that a phone actually left behind during one still locks.
+ */
+export const TRUSTED_PAUSE_GRACE_MS = 15_000
+
 export type LockState = {
   on: boolean
   /** One of `LOCK_AFTER`'s ms values. */
   after: number
   /** Epoch ms of the last pause, or null when there is nothing to forgive. */
   pausedAt: number | null
+  /** Whether that pause was one the app itself caused (a photo picker). */
+  pausedTrusted: boolean
 }
 
 /** Off, and a 1-minute timeout once on — quick pocket-to-pocket re-entries stay free. */
-export const DEFAULT_LOCK: LockState = { on: false, after: 60_000, pausedAt: null }
+export const DEFAULT_LOCK: LockState = {
+  on: false,
+  after: 60_000,
+  pausedAt: null,
+  pausedTrusted: false,
+}
 
 /** The stored state, or the default when absent or unreadable. */
 export function loadLock(storage: Pick<Storage, 'getItem'>): LockState {
@@ -47,6 +61,7 @@ export function loadLock(storage: Pick<Storage, 'getItem'>): LockState {
         ? (parsed.after as number)
         : DEFAULT_LOCK.after,
       pausedAt: typeof parsed.pausedAt === 'number' ? parsed.pausedAt : null,
+      pausedTrusted: parsed.pausedTrusted === true,
     }
   } catch {
     return DEFAULT_LOCK
@@ -62,8 +77,8 @@ export function saveLock(storage: Pick<Storage, 'setItem'>, state: LockState): v
 }
 
 /** The moment the app left the foreground, recorded. */
-export function stamp(state: LockState, now: number): LockState {
-  return { ...state, pausedAt: now }
+export function stamp(state: LockState, now: number, trusted = false): LockState {
+  return { ...state, pausedAt: now, pausedTrusted: trusted }
 }
 
 /**
@@ -92,10 +107,41 @@ export function shouldLock(state: LockState, now: number): boolean {
  */
 export function shouldLockOnResume(state: LockState, now: number): boolean {
   if (state.pausedAt === null) return false
-  return shouldLock(state, now)
+  if (!state.pausedTrusted) return shouldLock(state, now)
+  // A pause the app caused itself (a photo picker) gets a floor under the
+  // chosen timeout — long enough to open and return from, short enough that
+  // a phone genuinely left behind during one still locks.
+  const after = Math.max(state.after, TRUSTED_PAUSE_GRACE_MS)
+  if (now < state.pausedAt) return true
+  return now - state.pausedAt >= after
 }
 
 /** A successful unlock: the recorded pause is spent. */
 export function unlocked(state: LockState): LockState {
-  return { ...state, pausedAt: null }
+  return { ...state, pausedAt: null, pausedTrusted: false }
+}
+
+/**
+ * A pause about to happen because *this app* opened a trusted system picker
+ * — the camera, the gallery chooser — and expects the activity back in a
+ * moment, never a user who left. Set immediately before the picker opens;
+ * `consumeExpectedPause` reads and clears it inside the pause listener, so
+ * only the very next pause gets the grace floor. The one deliberate
+ * exception to this file's purity: it must cross from a sibling component
+ * into `App`'s listener, and must not be persisted — a flag that outlives
+ * its guard (the picker never actually paused the activity) can at worst
+ * grant one unrelated later pause the grace window, never an indefinite
+ * unlocked state.
+ */
+let expectingReturn = false
+
+export function expectForegroundReturn(): void {
+  expectingReturn = true
+}
+
+/** True at most once per `expectForegroundReturn` call. */
+export function consumeExpectedPause(): boolean {
+  const was = expectingReturn
+  expectingReturn = false
+  return was
 }
