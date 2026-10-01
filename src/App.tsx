@@ -235,7 +235,11 @@ export default function App() {
     void import('@capacitor/privacy-screen')
       .then(({ PrivacyScreen }) =>
         lock.on
-          ? PrivacyScreen.enable({ android: { privacyModeOnActivityHidden: 'splash' } })
+          ? // 'dim', not 'splash': the splash cover shows the Capacitor
+            // template's own drawable/splash.png — a Capacitor logo this app
+            // never rebranded, because its real launch splash is the
+            // SplashScreen theme. A dim cover has no branding to get wrong.
+            PrivacyScreen.enable({ android: { privacyModeOnActivityHidden: 'dim' } })
           : PrivacyScreen.disable(),
       )
       .catch(() => {
