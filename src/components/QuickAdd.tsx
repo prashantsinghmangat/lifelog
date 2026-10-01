@@ -14,7 +14,7 @@ import { KindMark } from './KindMark'
 import { PhotoViewer } from './PhotoViewer'
 import { useDictation } from '../hooks/useDictation'
 import { expectForegroundReturn } from '../lib/applock'
-import { fromFile, put } from '../lib/attachments'
+import { fromFile, put, yieldToPaint } from '../lib/attachments'
 import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, parseMulti, type ParsedEntry } from '../lib/parser'
@@ -431,6 +431,12 @@ export function QuickAdd({
       } finally {
         setPending((n) => n - 1)
       }
+      // Back-to-back decodes starve the compositor: the thumbnail just added is
+      // laid out but never painted, because the main thread is already inside
+      // the next `createImageBitmap`. One frame's gap is what lets it appear —
+      // and what lets the last decode's native memory go before the next asks
+      // for its own.
+      await yieldToPaint()
     }
   }
 

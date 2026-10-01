@@ -14,6 +14,8 @@ import type { Entry } from '../types'
 vi.mock('../lib/attachments', () => ({
   fromFile: vi.fn(async () => new Blob(['x'], { type: 'image/jpeg' })),
   put: vi.fn(async () => {}),
+  // Real one waits on an animation frame; under test it only has to settle.
+  yieldToPaint: vi.fn(async () => {}),
 }))
 
 // The camera is a native plugin; what these tests pin is which outcome reaches

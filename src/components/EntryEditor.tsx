@@ -14,7 +14,7 @@ import {
 import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
 import { useAttachments } from '../hooks/useAttachments'
-import type { Attachment } from '../lib/attachments'
+import { yieldToPaint, type Attachment } from '../lib/attachments'
 import { expectForegroundReturn } from '../lib/applock'
 import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import { shareBlob } from '../lib/deliver'
@@ -769,9 +769,14 @@ export function EntryEditor({
               event.target.value = ''
               // Concurrent decodes of large photos can exhaust the WebView's
               // heap — see `attachments.ts`'s `fromFile` — so a multi-select
-              // pick adds one at a time rather than firing every `add` at once.
+              // pick adds one at a time rather than firing every `add` at once,
+              // with a frame between them so each thumbnail actually paints
+              // instead of waiting on the whole batch.
               void (async () => {
-                for (const file of picked) await add(file)
+                for (const file of picked) {
+                  await add(file)
+                  await yieldToPaint()
+                }
               })()
             }}
           />

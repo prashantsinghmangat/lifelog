@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   acceptedDocument,
   firstPhotoBlobs,
@@ -225,6 +225,40 @@ describe('fromFile', () => {
     await expect(fromFile(new File(['x'], 'x.jpg', { type: 'image/jpeg' }))).rejects.toThrow(
       /.+/,
     )
+  })
+
+  /**
+   * A 12MP photo is ~48MB of native memory, and the first decode in a batch to
+   * run out is not evidence the file is undecodable — only that the previous
+   * one had not let go yet. Pinned here because the retry is invisible when it
+   * works, and silently losing a photo is what it exists to stop.
+   */
+  it('retries a decode once, so a photo is not lost to a passing shortage', async () => {
+    const decode = vi
+      .fn<(file: File) => Promise<unknown>>()
+      .mockRejectedValueOnce(new Error('out of memory'))
+      .mockResolvedValueOnce({ width: 10, height: 10, close: vi.fn() })
+    vi.stubGlobal('createImageBitmap', decode)
+
+    // The encode needs a `document`, which this file's node environment has
+    // not — so it still rejects, and the two calls are the proof the retry ran
+    // rather than the first failure being passed straight on.
+    await expect(fromFile(new File(['x'], 'x.jpg', { type: 'image/jpeg' }))).rejects.toThrow()
+    expect(decode).toHaveBeenCalledTimes(2)
+
+    vi.unstubAllGlobals()
+  })
+
+  it('gives up after the second attempt rather than looping', async () => {
+    const decode = vi.fn<(file: File) => Promise<unknown>>().mockRejectedValue(new Error('nope'))
+    vi.stubGlobal('createImageBitmap', decode)
+
+    await expect(fromFile(new File(['x'], 'x.jpg', { type: 'image/jpeg' }))).rejects.toThrow(
+      /nope/,
+    )
+    expect(decode).toHaveBeenCalledTimes(2)
+
+    vi.unstubAllGlobals()
   })
 })
 

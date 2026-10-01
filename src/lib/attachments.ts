@@ -69,8 +69,40 @@ export function targetSize(
  * before the entry exists: the composer stages files and the editor saves them
  * against a row, and both have to produce the same bytes.
  */
+/**
+ * A gap wide enough for the browser to paint.
+ *
+ * An animation frame alone only schedules work; the macrotask after it is what
+ * lets the frame actually land, and lets native memory from the last decode go
+ * before the next one asks for its own.
+ */
+export function yieldToPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 0))
+  })
+}
+
+/**
+ * Decoding, with one second chance.
+ *
+ * A 12MP photo is ~48MB of **native** memory — invisible to `usedJSHeapSize`,
+ * and the first thing to run out on a phone part-way through a batch. A decode
+ * that fails for that reason usually succeeds once the previous one's memory
+ * has actually been returned, so the retry pauses first rather than asking
+ * again immediately. One retry, never a loop: a file the device genuinely
+ * cannot decode must still fail quickly.
+ */
+async function decode(file: File): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(file)
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    return await createImageBitmap(file)
+  }
+}
+
 export async function fromFile(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file)
+  const bitmap = await decode(file)
 
   const canvas = document.createElement('canvas')
   try {
@@ -94,10 +126,16 @@ export async function fromFile(file: File): Promise<Blob> {
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
-      (blob) =>
-        blob
-          ? resolve(blob)
-          : reject(new Error('the image could not be encoded — it may be too large')),
+      (blob) => {
+        // The JPEG is made; the canvas's own backing store (1600×1200 RGBA is
+        // ~7.7MB) has no further use. Zeroing it frees that now rather than
+        // whenever collection happens to come round, which across a batch is
+        // the difference between flat and climbing native memory.
+        canvas.width = 0
+        canvas.height = 0
+        if (blob) resolve(blob)
+        else reject(new Error('the image could not be encoded — it may be too large'))
+      },
       'image/jpeg',
       JPEG_QUALITY,
     )
