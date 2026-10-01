@@ -789,7 +789,12 @@ export function QuickAdd({
                   aria-label={`View photo ${position + 1}`}
                   className="h-full w-full overflow-hidden rounded-lg border border-edge"
                 >
-                  <img src={photo.url} alt="" className="h-full w-full object-cover" />
+                  {/* `transform-gpu` forces this blob URL onto its own
+                      compositing layer so it paints on its first frame — a
+                      freshly assigned blob src otherwise can stay blank in
+                      this WebView until something unrelated forces a
+                      repaint. */}
+                  <img src={photo.url} alt="" className="h-full w-full object-cover transform-gpu" />
                 </button>
                 <button
                   type="button"

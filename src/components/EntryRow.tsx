@@ -176,10 +176,13 @@ export function EntryRow({
           className={`-my-2 ml-3 flex h-11 shrink-0 items-center self-center ${boxed ? 'mr-3.5' : ''}`}
         >
           <span className="relative block h-9 w-9">
+            {/* `transform-gpu` forces this blob URL onto its own compositing
+                layer so it paints on its first frame — see `QuickAdd.tsx`'s
+                staged strip for the same fix. */}
             <img
               src={photoUrl}
               alt=""
-              className="h-full w-full rounded-md border border-line object-cover"
+              className="h-full w-full rounded-md border border-line object-cover transform-gpu"
             />
             {/* One thumbnail understated an entry holding three. The remainder
                 rather than the total, which is what sits beside a picture you

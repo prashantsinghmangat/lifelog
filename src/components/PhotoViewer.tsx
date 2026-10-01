@@ -209,7 +209,13 @@ export function PhotoViewer({ photos, index, onClose }: Props) {
           alt=""
           draggable={false}
           style={{
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+            // `translateZ(0)` forces this blob URL onto its own compositing
+            // layer so it paints on its first frame — a class like
+            // `transform-gpu` would be overridden by this inline transform
+            // anyway, so the hint is folded into the pan/zoom transform
+            // itself instead. See `QuickAdd.tsx`'s staged strip for the same
+            // underlying fix.
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale}) translateZ(0)`,
             // Only while a finger is down does this need to track exactly; the
             // double-tap wants the ease.
             transition: drag.current === null ? 'transform 150ms ease-out' : 'none',
