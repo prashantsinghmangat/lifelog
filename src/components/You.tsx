@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { CheckIcon, Chevron } from './Icons'
+import { CheckIcon } from './Icons'
 import { Segmented } from './Segmented'
 import { openReminderChannelSettings } from '../lib/openSettings'
 import { PALETTES, type PaletteName, type TokenBlock } from '../lib/palettes'
@@ -259,6 +259,16 @@ export function You({
             </p>
           </>
         )}
+
+        {/* The manual, where the mock keeps it (019). Quiet on purpose — the
+            account card gives it a place, not a louder voice. */}
+        <button
+          type="button"
+          onClick={onHelp}
+          className="mt-3.5 flex h-11 w-full items-center justify-center rounded-lg border border-line text-sm font-medium text-ink transition-colors hover:bg-sunken"
+        >
+          How to use lifelog
+        </button>
       </div>
 
       <Eyebrow id="appearance">Appearance</Eyebrow>
@@ -374,15 +384,6 @@ export function You({
 
       <Eyebrow id="your-log">Your log</Eyebrow>
       <Group>
-        {/* The least-used item on the screen, so it is an ordinary row now
-            rather than the loudest control — it was a full-width outlined
-            button above everything it should have sat under. */}
-        <Row
-          title="How to use lifelog"
-          detail="The manual — every example fills the box"
-          right={<Chevron dir="right" size={16} className="text-faint" />}
-          onClick={onHelp}
-        />
         <Row title="Export a copy" detail="JSON" onClick={onExport} />
 
         {/* The web's answer only: on the web no API can raise an alarm with

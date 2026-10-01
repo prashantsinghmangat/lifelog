@@ -248,7 +248,25 @@ describe('measures', () => {
   })
 })
 
+describe('the headline card', () => {
+  it('says what the period held on one strip', () => {
+    open()
+    // September: five entries, 2h 30m of time, one event — one string, so a
+    // screen reader hears one fact.
+    expect(screen.getByText('5 entries · 2h 30m logged · 1 event')).toBeTruthy()
+  })
+})
+
 describe('the category breakdown', () => {
+  it('captions each kind with the period honestly — done counted by behindYou', () => {
+    open()
+    // The one September event sits behind the 17th: done, and all of them.
+    expect(screen.getByText('1 done')).toBeTruthy()
+    expect(screen.getByText('100% done')).toBeTruthy()
+    // 150 minutes across the four September days that hold entries.
+    expect(screen.getByText('38m / active day')).toBeTruthy()
+  })
+
   it('draws a proportional bar under every kind row', () => {
     open()
     const card = screen.getByText('Category breakdown').nextElementSibling as HTMLElement

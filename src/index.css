@@ -242,6 +242,32 @@
   --color-focus: #46C8B8;
 }
 
+[data-palette='mint'] {
+  --color-surface: #F4FBF7;
+  --color-raised: #FFFFFF;
+  --color-sunken: #E9EFEB;
+  --color-ink: #161D1B;
+  --color-muted: #404847;
+  --color-faint: #5A6560;
+  --color-line: #E3ECE7;
+  --color-edge: #6F7A75;
+  --color-accent: #1F4E4B;
+  --color-focus: #1F4E4B;
+}
+
+[data-palette='mint'][data-theme='dark'] {
+  --color-surface: #0D1412;
+  --color-raised: #17201C;
+  --color-sunken: #202B26;
+  --color-ink: #E8F1ED;
+  --color-muted: #A6B6AF;
+  --color-faint: #8C9C95;
+  --color-line: #263129;
+  --color-edge: #707C76;
+  --color-accent: #7FC4BC;
+  --color-focus: #7FC4BC;
+}
+
 /* There is no `--dock`, and that is deliberate.
  *
  * The toast used to be `fixed` at the bottom and read a constant from here to

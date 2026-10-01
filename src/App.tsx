@@ -977,20 +977,38 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
             had to remember to change that number too, and it was wrong by two
             paddings the first time. As siblings, clearing each other is not
             something either of them has to do. */}
-        <div className="order-last mt-4 sticky bottom-0 z-10 bg-surface pt-2 lg:order-none lg:bottom-auto lg:top-0 lg:pt-1 lg:pb-2">
+        {/* On Ask the block dissolves (`display: contents`) so its children
+            order themselves as the mock lays the screen: the box first at the
+            top, the nav alone on the floor — still one render site, and no
+            height constant anywhere, which is the `--dock` lesson. On every
+            other view it stays the one sticky bottom unit it has always
+            been. */}
+        <div
+          className={
+            view === 'ask'
+              ? 'contents'
+              : 'order-last mt-4 sticky bottom-0 z-10 bg-surface pt-2 lg:order-none lg:bottom-auto lg:top-0 lg:pt-1 lg:pb-2'
+          }
+        >
           {/* First in the block, so it is a sibling *above* the control rather
               than a fixed layer over it. See `Toast` and `index.css`. */}
           {/* Always mounted, message or not: `Toast` is a live region, and a
               live region added in the same commit as its text is one a screen
               reader routinely never reads out. It occupies nothing when empty. */}
-          <Toast toast={toast} onDismiss={() => setToast(null)} />
+          <div className={view === 'ask' ? 'order-first' : ''}>
+            <Toast toast={toast} onDismiss={() => setToast(null)} />
+          </div>
 
           {/* Absent on You alone: that screen is about the account, and a
               capture box under it would be an invitation to log the settings.
               The floor moves onto the control whenever the nav is not there to
               hold it — on `lg` the block is at the top and neither does. */}
           {view !== 'you' && (
-            <div>
+            <div
+              className={
+                view === 'ask' ? 'order-first sticky top-0 z-10 bg-surface pt-2 pb-1' : ''
+              }
+            >
               <QuickAdd
                 day={day}
                 now={now}
@@ -1023,7 +1041,13 @@ function Day({ email, userId, local, theme, onTheme, palette, onPalette, resolve
               the only way off it, so an answer left you stranded with no way
               out but clearing the box. The bar is 60px and it is the app's
               only navigation: it stays. */}
-          <BottomNav view={view} onGo={setView} className={FLOOR} />
+          <BottomNav
+            view={view}
+            onGo={setView}
+            className={
+              view === 'ask' ? `order-last mt-4 sticky bottom-0 z-10 bg-surface pt-2 ${FLOOR}` : FLOOR
+            }
+          />
         </div>
 
         {view === 'today' && (

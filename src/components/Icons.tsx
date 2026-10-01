@@ -75,6 +75,15 @@ export function ClockIcon(props: Props) {
   )
 }
 
+export function WalletIcon(props: Props) {
+  return (
+    <Svg {...props}>
+      <rect x="3.5" y="6" width="17" height="13" rx="2.5" />
+      <path d="M20.5 11h-3.5a2 2 0 0 0 0 4h3.5" />
+    </Svg>
+  )
+}
+
 export function NoteIcon(props: Props) {
   return (
     <Svg {...props}>

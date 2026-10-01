@@ -683,7 +683,13 @@ export function QuickAdd({
           ring from the field onto the control — see there. Raised off the page
           rather than drawn on it: this is the strongest interactive thing on
           the screen and the only one that has to be found without looking. */}
-      <div className="capture order-last mt-2 rounded-xl border border-edge bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors focus-within:border-muted lg:order-first lg:mt-0">
+      <div
+        className={`capture ${
+          // On the Ask destination the box leads the screen (019) — its two
+          // halves swap exactly as they already do on `lg`, same mechanism.
+          ask ? 'order-first' : 'order-last mt-2 lg:order-first lg:mt-0'
+        } rounded-xl border border-edge bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-colors focus-within:border-muted`}
+      >
         <textarea
           id="quick-add"
           ref={box}

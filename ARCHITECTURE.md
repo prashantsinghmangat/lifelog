@@ -625,7 +625,9 @@ the SVG is the source of truth and the PNGs regenerate from it.
 
 **Colour never appears as a raw grey.** `src/index.css` defines semantic tokens — `surface`,
 `raised`, `sunken`, `ink`, `muted`, `faint`, `line`, `edge`, `accent`, `focus`, plus the four
-kind colours — swapped by `[data-palette]` × `[data-theme]` blocks: six palettes, each with a
+kind colours — swapped by `[data-palette]` × `[data-theme]` blocks: seven palettes (the
+seventh, Mint, is the Stitch mocks' own colour world, its light block read straight from
+design-ref's token table — spec 019), each with a
 light and a dark set, written from the single source `src/lib/palettes.ts` and held equal to it
 by `contrast.test.ts`. `focus` rides those blocks too, anchored to each palette's accent: it
 was a fixed mode-only blue, and the S21 audit read it as the browser's default ring — on the
@@ -823,7 +825,11 @@ the keyboard is not. Docked, the control rides up with the keyboard instead of l
 hundred pixels of dead space between the two; verified on the device. There is **one render site
 and no `MobileQuickAdd`**: `main` is a flex column, so `order-last lg:order-none` swaps it, and
 `QuickAdd` reverses its own two halves the same way so the answer and the examples stay *above*
-the field rather than below the screen edge. The `pb` floor is a real number because
+the field rather than below the screen edge. **Ask is the one destination where the box leads
+the screen instead** — the Stitch revamp's explicit call (spec 019), done with the same
+mechanisms and no new ones: the bottom block turns `display: contents` there so its children
+order themselves, the box swaps its halves exactly as `lg` does, and the nav alone keeps the
+floor. No height constant was added; that is the `--dock` lesson and it held. The `pb` floor is a real number because
 `env(safe-area-inset-bottom)` measures 0 in the Android WebView while the gesture bar is about
 24px.
 

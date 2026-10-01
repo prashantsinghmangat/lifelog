@@ -107,3 +107,12 @@ describe('the account block is metadata', () => {
     expect(screen.getByText('Guest')).toBeTruthy()
   })
 })
+
+describe('the manual lives on the account card', () => {
+  it('offers How to use lifelog there, one tap from the top', async () => {
+    const onHelp = vi.fn()
+    setup({ onHelp })
+    await userEvent.click(screen.getByRole('button', { name: 'How to use lifelog' }))
+    expect(onHelp).toHaveBeenCalledTimes(1)
+  })
+})

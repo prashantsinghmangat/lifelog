@@ -108,7 +108,7 @@ describe('every block clears its contrast floor on every ground', () => {
     }
   })
 
-  it('edge and focus: 3:1 non-text on all three grounds of all six palettes', () => {
+  it('edge and focus: 3:1 non-text on all three grounds of every palette', () => {
     for (const palette of PALETTES) {
       for (const mode of MODES) {
         for (const [ground, hex] of grounds(palette[mode])) {
@@ -127,7 +127,7 @@ describe('every block clears its contrast floor on every ground', () => {
     }
   })
 
-  it('kind colours: 3:1 on all three grounds of all six palettes', () => {
+  it('kind colours: 3:1 on all three grounds of every palette', () => {
     for (const palette of PALETTES) {
       for (const mode of MODES) {
         for (const kind of ['expense', 'time', 'event', 'note'] as const) {

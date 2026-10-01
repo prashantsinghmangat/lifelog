@@ -24,7 +24,7 @@
  * mode entirely and lets the test check edge like everything else.
  */
 
-export type PaletteName = 'amber' | 'paper' | 'graphite' | 'plum' | 'espresso' | 'sea'
+export type PaletteName = 'amber' | 'paper' | 'graphite' | 'plum' | 'espresso' | 'sea' | 'mint'
 
 export type TokenBlock = {
   surface: string
@@ -81,6 +81,15 @@ export const PALETTES: Palette[] = [
     label: 'Sea',
     light: { surface: '#EEF1EF', raised: '#FCFDFC', sunken: '#E2E8E5', ink: '#151A18', muted: '#4B534F', faint: '#5E6662', line: '#DCE3E0', edge: '#7F8381', accent: '#0F6B6B', focus: '#0F6B6B' },
     dark: { surface: '#0E1413', raised: '#17201F', sunken: '#1F2A28', ink: '#E8F0EE', muted: '#A3B2AE', faint: '#899793', line: '#243230', edge: '#6C7371', accent: '#46C8B8', focus: '#46C8B8' },
+  },
+  {
+    // The Stitch mocks' own colour world (spec 019): surface, container and
+    // ink from design-ref/lifelog_system/DESIGN.md, the dark block derived
+    // here — the mock ships none. Picked in You, the app is the mock.
+    name: 'mint',
+    label: 'Mint',
+    light: { surface: '#F4FBF7', raised: '#FFFFFF', sunken: '#E9EFEB', ink: '#161D1B', muted: '#404847', faint: '#5A6560', line: '#E3ECE7', edge: '#6F7A75', accent: '#1F4E4B', focus: '#1F4E4B' },
+    dark: { surface: '#0D1412', raised: '#17201C', sunken: '#202B26', ink: '#E8F1ED', muted: '#A6B6AF', faint: '#8C9C95', line: '#263129', edge: '#707C76', accent: '#7FC4BC', focus: '#7FC4BC' },
   },
 ]
 
