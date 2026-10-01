@@ -431,6 +431,20 @@ describe('the time, which is the whole entry for a reminder', () => {
   })
 })
 
+describe('the weekday shown next to the date', () => {
+  it("names the stored date's own weekday, not NOW's", () => {
+    // NOW (2026-09-05) and the default fixture's `occurred_on` are both
+    // Saturday — a bug reading NOW's weekday instead of the field's own value
+    // would pass undetected without picking a date that disagrees with it.
+    setup({ occurred_on: '2026-09-07' })
+    expect(screen.getByText('Mon')).toBeTruthy()
+    // The label's own accessible name must stay exactly "Date" — the weekday
+    // is a sibling, not appended text, or `getByLabelText('Date')` elsewhere
+    // in this file would stop matching.
+    expect(screen.getByLabelText('Date')).toBeTruthy()
+  })
+})
+
 describe('correcting the kind', () => {
   it('saves the chosen kind', async () => {
     const { onSave, save } = setup({ kind: 'note', title: 'dentist' })

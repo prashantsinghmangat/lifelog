@@ -1,12 +1,15 @@
+import { format, parseISO } from 'date-fns'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   ArrowUpIcon,
   CalendarIcon,
   CameraIcon,
   CheckIcon,
+  ClockIcon,
   CloseIcon,
   DocumentIcon,
   ImageIcon,
+  RepeatIcon,
 } from './Icons'
 import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
@@ -445,10 +448,10 @@ export function EntryEditor({
             plays the same exit spring Cancel does. */}
         <div className="mb-4 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[0.625rem] font-semibold tracking-[0.1em] text-faint uppercase">
+            <span className="inline-block rounded-full bg-sunken px-2 py-0.5 text-[0.625rem] font-semibold tracking-[0.1em] text-faint uppercase">
               Edit entry
-            </p>
-            <p className="mt-0.5 truncate text-[15px] font-semibold text-ink">{row.title}</p>
+            </span>
+            <p className="mt-1 truncate text-[15px] font-semibold text-ink">{row.title}</p>
           </div>
           <button
             type="button"
@@ -513,9 +516,19 @@ export function EntryEditor({
             unusable at 375px. */}
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="min-w-0 flex-1">
-            <label className={LABEL} htmlFor="entry-date">
-              Date
-            </label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className={`${LABEL} mb-0`} htmlFor="entry-date">
+                <CalendarIcon size={12} className="mr-1 -mt-0.5 inline" />
+                Date
+              </label>
+              {/* Read-only — the native picker already shows this once open;
+                  the field itself never says which day of the week it is.
+                  A sibling of the label, not inside it: the accessible name
+                  `getByLabelText('Date')` depends on stays exactly "Date". */}
+              <span className="text-[0.6875rem] font-medium text-faint">
+                {format(parseISO(day), 'EEE')}
+              </span>
+            </div>
             <input
               id="entry-date"
               type="date"
@@ -531,6 +544,7 @@ export function EntryEditor({
               entry all-day, which for an event means it alarms at 9am. */}
           <div className="min-w-0 flex-1">
             <label className={LABEL} htmlFor="entry-time">
+              <ClockIcon size={12} className="mr-1 -mt-0.5 inline" />
               Time
             </label>
             <input
@@ -602,24 +616,27 @@ export function EntryEditor({
           <button
             type="button"
             onClick={() => setChoice({ rule: undefined })}
-            className="mt-5 h-11 w-full rounded-lg border border-edge text-sm font-medium text-muted transition-colors hover:bg-sunken"
+            className="mt-5 flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-edge text-sm font-medium text-muted transition-colors hover:bg-sunken"
           >
+            <RepeatIcon size={14} />
             Stop repeating
           </button>
         ) : previously !== null ? (
           <button
             type="button"
             onClick={() => setChoice({ rule: stored })}
-            className="mt-5 h-11 w-full rounded-lg border border-edge text-sm font-medium text-muted transition-colors hover:bg-sunken"
+            className="mt-5 flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-edge text-sm font-medium text-muted transition-colors hover:bg-sunken"
           >
+            <RepeatIcon size={14} />
             Repeat {previously} again
           </button>
         ) : couldRepeatYearly ? (
           <button
             type="button"
             onClick={() => setChoice({ rule: 'FREQ=YEARLY' })}
-            className="mt-5 h-11 w-full rounded-lg border border-edge text-sm font-medium text-muted transition-colors hover:bg-sunken"
+            className="mt-5 flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-edge text-sm font-medium text-muted transition-colors hover:bg-sunken"
           >
+            <RepeatIcon size={14} />
             Repeat every year
           </button>
         ) : null}
@@ -628,14 +645,19 @@ export function EntryEditor({
         {kind === 'event' && (
           <fieldset className="mt-5">
             <legend className={LABEL}>Reminder</legend>
-            <div className="mt-1.5 flex flex-wrap gap-1 rounded-xl border border-line bg-sunken p-1">
+            {/* grid, not flex-wrap: a 5th chip — the typed, non-preset lead a
+                row already carries — simply starts a second row at the same
+                column width, rather than the row growing ragged. No
+                `whitespace-nowrap`: "1 month before" wraps to two lines in a
+                quarter-width column instead of overflowing it. */}
+            <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-xl border border-line bg-sunken p-1">
               {leadChips.map((chip) => (
                 <button
                   key={chip.label}
                   type="button"
                   aria-pressed={lead === chip.minutes}
                   onClick={() => setLeadChoice({ minutes: chip.minutes })}
-                  className={`h-11 rounded-lg px-3 text-xs whitespace-nowrap transition-colors ${
+                  className={`flex min-h-11 items-center justify-center rounded-lg px-1.5 py-1 text-center text-xs transition-colors ${
                     lead === chip.minutes
                       ? 'bg-accent font-medium text-surface shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
                       : 'text-muted hover:text-ink'
