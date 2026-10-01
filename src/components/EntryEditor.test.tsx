@@ -411,6 +411,22 @@ describe('the time, which is the whole entry for a reminder', () => {
     await save()
     expect(onSave.mock.calls[0]?.[0].occurred_at).toBeNull()
   })
+
+  it('steps the time by fifteen minutes and saves what it stepped to', async () => {
+    const { onSave, save } = setup({ kind: 'event', occurred_at: '2026-09-05T18:53:00+05:30' })
+    await userEvent.click(screen.getByRole('button', { name: '15 minutes later' }))
+    expect((screen.getByLabelText('Time') as HTMLInputElement).value).toBe('19:08')
+    await userEvent.click(screen.getByRole('button', { name: '15 minutes earlier' }))
+    await userEvent.click(screen.getByRole('button', { name: '15 minutes earlier' }))
+    expect((screen.getByLabelText('Time') as HTMLInputElement).value).toBe('18:38')
+    await save()
+    expect(onSave.mock.calls[0]?.[0].occurred_at).toContain('T18:38:00')
+  })
+
+  it('offers no steppers for an all-day entry — stepping would invent a time', () => {
+    setup({ kind: 'event', occurred_at: null })
+    expect(screen.queryByRole('button', { name: '15 minutes later' })).toBeNull()
+  })
 })
 
 describe('correcting the kind', () => {

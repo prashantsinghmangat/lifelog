@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { ArrowUpIcon, CameraIcon, CheckIcon, CloseIcon, ImageIcon } from './Icons'
+import { ArrowUpIcon, CalendarIcon, CameraIcon, CheckIcon, CloseIcon, ImageIcon } from './Icons'
 import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
 import { useAttachments } from '../hooks/useAttachments'
@@ -42,8 +42,10 @@ type Props = {
 }
 
 const LABEL = 'mb-1.5 block text-[0.6875rem] font-medium tracking-[0.08em] text-faint uppercase'
+// The sunken dress is Variant A's (022); the `edge` border is not negotiable —
+// an input boundary must clear 3:1, and the mock's whisper border does not.
 const FIELD =
-  'w-full rounded-lg border border-edge bg-surface px-3 text-base text-ink'
+  'w-full rounded-xl border border-edge bg-sunken/40 px-3 text-base text-ink'
 // 44px, like everything else. `text-base` with `py-2.5` measured 42 on a Galaxy
 // S21 FE — the app's own rule, missed by two pixels in the one place an entry is
 // corrected. The height is set rather than the padding, because the same base is
@@ -63,6 +65,20 @@ const KIND_TINT = {
   time: 'text-time',
   event: 'text-event',
   note: 'text-note',
+}
+
+const KIND_DOT = {
+  expense: 'bg-expense',
+  time: 'bg-time',
+  event: 'bg-event',
+  note: 'bg-note',
+}
+
+/** `18:53` ± minutes, wrapping at midnight — the steppers' arithmetic. */
+function shiftTime(value: string, by: number): string {
+  const [hours = 0, mins = 0] = value.split(':').map(Number)
+  const total = (((hours * 60 + mins + by) % 1440) + 1440) % 1440
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
 function rupeeText(paise: number | null): string {
@@ -387,6 +403,25 @@ export function EntryEditor({
     <Sheet label={`Edit ${row.title}`} onClose={onClose}>
       {(requestClose) => (
       <form onSubmit={(event) => save(event, requestClose)}>
+        {/* Variant A's header (022): what this sheet is, and a way out that
+            plays the same exit spring Cancel does. */}
+        <div className="mb-4 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[0.625rem] font-semibold tracking-[0.1em] text-faint uppercase">
+              Edit entry
+            </p>
+            <p className="mt-0.5 truncate text-[15px] font-semibold text-ink">{row.title}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={requestClose}
+            className="-mt-1.5 -mr-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-ink"
+          >
+            <CloseIcon size={18} />
+          </button>
+        </div>
+
         {/* Editable, because the parser guesses and a wrong guess otherwise
             means deleting and retyping the whole entry. */}
         <div
@@ -403,12 +438,16 @@ export function EntryEditor({
               // 44px, not 36: four of these share a row, and shrinking the
               // target to fit the row is how 44 quietly becomes 36. The track
               // grows instead, exactly as the theme control's already does.
-              className={`h-11 flex-1 rounded-lg text-xs transition-colors ${
+              className={`flex h-11 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs transition-colors ${
                 kind === option
                   ? `bg-raised font-medium shadow-[0_1px_2px_rgb(0_0_0/0.06)] ${KIND_TINT[option]}`
                   : 'text-muted hover:text-ink'
               }`}
             >
+              <span
+                aria-hidden="true"
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${KIND_DOT[option]}`}
+              />
               {KIND_NAME[option]}
             </button>
           ))}
@@ -463,6 +502,26 @@ export function EntryEditor({
               onChange={(event) => setTime(event.target.value)}
               className={INPUT}
             />
+            {/* One-handed micro-adjustment without the OS picker (022). Only
+                where there is a time to shift — stepping an all-day entry
+                would invent one. */}
+            {time !== '' && (
+              <div className="-mb-2 flex gap-1">
+                {[-15, 15].map((by) => (
+                  <button
+                    key={by}
+                    type="button"
+                    aria-label={by < 0 ? '15 minutes earlier' : '15 minutes later'}
+                    onClick={() => setTime(shiftTime(time, by))}
+                    className="flex h-11 min-w-0 flex-1 items-center justify-center"
+                  >
+                    <span className="flex h-8 w-full items-center justify-center rounded-lg bg-sunken text-xs font-medium text-muted tabular-nums">
+                      {by < 0 ? '−15m' : '+15m'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {showAmount && (
@@ -540,7 +599,7 @@ export function EntryEditor({
                   onClick={() => setLeadChoice({ minutes: chip.minutes })}
                   className={`h-11 rounded-lg px-3 text-xs whitespace-nowrap transition-colors ${
                     lead === chip.minutes
-                      ? 'bg-raised font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
+                      ? 'bg-accent font-medium text-surface shadow-[0_1px_2px_rgb(0_0_0/0.06)]'
                       : 'text-muted hover:text-ink'
                   }`}
                 >
@@ -626,8 +685,9 @@ export function EntryEditor({
           <button
             type="button"
             onClick={onAddToCalendar}
-            className="mt-5 h-11 w-full rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
+            className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-edge text-sm font-medium text-ink transition-colors hover:bg-sunken"
           >
+            <CalendarIcon size={16} />
             Add to calendar
           </button>
         )}
@@ -737,10 +797,13 @@ export function EntryEditor({
         {/* Primary first and filled; the two that undo sit back as plain text.
             All three were the same size and weight, so "Delete" had the same
             standing as "Save" on a sheet you open to make a small change. */}
-        <div className="sticky bottom-0 -mx-5 mt-5 flex items-center gap-1 border-t border-line bg-raised px-5 pt-3 pb-1">
+        {/* `pb` is a real number: the WebView reports a 0 safe-area inset
+            while the gesture pill is ~24px — the same lesson the capture
+            dock's floor carries. */}
+        <div className="sticky bottom-0 -mx-5 mt-5 flex items-center gap-1 border-t border-line bg-raised px-5 pt-3 pb-2.5">
           <button
             type="submit"
-            className="h-11 flex-1 rounded-lg bg-ink text-sm font-medium text-surface transition-opacity hover:opacity-90"
+            className="h-11 flex-1 rounded-xl bg-accent text-sm font-medium text-surface transition-opacity hover:opacity-90"
           >
             Save
           </button>
