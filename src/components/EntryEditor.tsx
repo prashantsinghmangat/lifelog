@@ -707,9 +707,14 @@ export function EntryEditor({
             multiple
             className="hidden"
             onChange={(event) => {
-              const files = event.target.files
-              if (files) for (const file of files) void add(file)
+              const picked = event.target.files ? Array.from(event.target.files) : []
               event.target.value = ''
+              // Concurrent decodes of large photos can exhaust the WebView's
+              // heap — see `attachments.ts`'s `fromFile` — so a multi-select
+              // pick adds one at a time rather than firing every `add` at once.
+              void (async () => {
+                for (const file of picked) await add(file)
+              })()
             }}
           />
           <div className="flex gap-2">

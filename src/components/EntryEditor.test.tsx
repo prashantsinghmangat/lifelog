@@ -672,6 +672,35 @@ describe('local photos', () => {
     expect(add).toHaveBeenCalledWith(file)
   })
 
+  /**
+   * Concurrent decodes of large photos can exhaust the WebView's heap — see
+   * `attachments.ts`'s `fromFile` — so a multi-select pick must add one at a
+   * time rather than firing every `add` at once.
+   */
+  it('adds photos from a multi-select one at a time, not all at once', async () => {
+    let release: (() => void) | undefined
+    const add = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve
+        }),
+    )
+    vi.mocked(useAttachments).mockReturnValue({ photos: [], addState: 'idle', add, remove: vi.fn(), restore: vi.fn() })
+    setup()
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    const first = new File(['x'], 'one.jpg', { type: 'image/jpeg' })
+    const second = new File(['y'], 'two.jpg', { type: 'image/jpeg' })
+    void userEvent.upload(input, [first, second])
+
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(1))
+    expect(add).toHaveBeenCalledWith(first)
+
+    release?.()
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(2))
+    expect(add).toHaveBeenCalledWith(second)
+  })
+
   it('shows a save-failed state that says nothing about the entry itself', () => {
     vi.mocked(useAttachments).mockReturnValue({
       photos: [],
