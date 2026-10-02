@@ -12,6 +12,11 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    # The suite's fixtures carry +05:30 stamps and assert local clock readings:
+    # 28 tests fail under UTC (measured 2 Oct 2026). Pinned to the timezone the
+    # suite is verified in, until the fixtures are made timezone-agnostic.
+    env:
+      TZ: Asia/Kolkata
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
