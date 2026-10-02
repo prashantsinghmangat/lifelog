@@ -95,10 +95,15 @@ silently losing data. Nation-state and malware-on-device threats are out of scop
   required state is `disable_signup: true`; it measured `false` on 2026-10-01 while a tester had
   access. `curl "$VITE_SUPABASE_URL/auth/v1/settings"` answers it in one line — re-check after
   letting anyone in.
-- **No restore path.** Snapshots can be listed and downloaded; nothing reads one back. An
-  untested restore is not a restore.
-- **No backup monitor.** A failed nightly run is a line in Netlify's function log and nothing
-  else; `backup-run` exists so a human can go and look.
+- **Restore** (spec 025): `backup-restore` reads a named snapshot back through the
+  `restore_entries` RPC — `security definer`, executable by `service_role` alone, so the trigger
+  bypass it exists for is never reachable from a client key. Same `BACKUP_TOKEN` gate as the
+  other two endpoints; the service-role key never leaves the function. The live destructive
+  drill is recorded in the spec's Log — until that ran, this entry still read "untested".
+- **Backup monitor** (spec 042): a dead-man's switch — the nightly function pings
+  healthchecks.io only after a successful snapshot write, so a failed run *or a dead schedule*
+  becomes an email within a day. The ping URL is not a secret worth guarding: replaying it can
+  only falsely mark a backup healthy, which is why it still lives in an env var, not the repo.
 - Not implemented, knowingly: encryption at rest, session/device management, account deletion
   self-service, 2FA, photo namespacing by account, clearing the device log on sign-out (it is
   also the only offline copy).

@@ -90,6 +90,26 @@ export function usableSecret(secret: string | undefined): secret is string {
   return typeof secret === 'string' && secret.length >= 32
 }
 
+/**
+ * Success ping for the dead-man's switch (spec 042). The switch works by
+ * absence — healthchecks.io emails when a day passes with no ping — so the one
+ * thing this must never do is ping on failure, which `backup.mts` guarantees
+ * by only reaching it after `runBackup` has resolved. In the other direction a
+ * monitoring outage must never fail or stall a backup that succeeded: the
+ * fetch is capped at five seconds and every rejection is swallowed. An unset
+ * URL means monitoring is not configured, which is allowed — the repo works
+ * without the service.
+ */
+export async function healthcheckPing(url: string | undefined, get = fetch): Promise<void> {
+  if (url === undefined || url === '') return
+  try {
+    await get(url, { signal: AbortSignal.timeout(5000) })
+  } catch {
+    // The backup succeeded; only its heartbeat was lost. Silence is correct —
+    // a thrown heartbeat would turn a good backup into a reported failure.
+  }
+}
+
 export function authorised(request: Request, secret: string): boolean {
   const url = new URL(request.url)
   const header = request.headers.get('authorization') ?? ''

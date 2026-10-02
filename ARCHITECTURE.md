@@ -1412,14 +1412,24 @@ at the end of [README.md](README.md).
   bundle, so anything can call `/auth/v1/signup` directly, and only the project's own
   **Allow new users to sign up** setting refuses that. It was measured as `disable_signup: false`
   during the release audit. `curl "$VITE_SUPABASE_URL/auth/v1/settings"` answers it in one line.
-- **There is still no restore.** A snapshot can be listed and downloaded and nothing reads one
-  back. Doing it by hand needs the service-role key (the snapshot spans users and carries
-  `user_id`, which RLS will not accept from an anon client) and a decision about `entries_touch`,
-  which rewrites `updated_at` on every upsert — so a restore silently restamps every row it
-  touches. An untested restore is not a restore.
-- **The nightly backup still has no monitor.** A throw becomes a 500 and a line in Netlify's
-  function log, and nothing is pushed anywhere. `backup.mts` deliberately has no `catch`: a caught
-  error returning 200 would be quieter, not louder. `backup-run` is how a human goes and looks.
+- **Restore exists and the trigger decision is made** (spec 025). `backup-restore.mts` reads a
+  named snapshot and calls `restore_entries` (migration `0002`) — `security definer`,
+  `service_role`-only, which disables `entries_touch` *by name* for its own transaction so
+  `updated_at` lands exactly as the snapshot holds it. By-name over
+  `session_replication_role = replica`, deliberately: replica mode would also skip the FK
+  system triggers and needs a GUC grant Supabase may or may not give the migration role,
+  while `ALTER TABLE … DISABLE TRIGGER` asks nothing but table ownership and names exactly the
+  one trigger that lies. DDL being transactional is what makes a failed upsert put the trigger
+  back on rollback. The endpoint reads Blobs and never writes it — `backup-run` is the thing
+  that can overwrite today's only good snapshot.
+- **The backup's monitor watches for absence, from outside** (spec 042). The failure that
+  matters is the nightly run not happening at all, and no code inside this repo can report that
+  it never ran — so `backup.mts` pings a healthchecks.io dead-man's switch *only after* the
+  snapshot write succeeds, and a missed day becomes an email. `backup.mts` still has no `catch`
+  and the ping adds none around the write: a caught error returning 200 would be quieter, not
+  louder. In the other direction `healthcheckPing` swallows everything, because a monitoring
+  outage must never fail a backup that succeeded. Nightly only — a manual `backup-run` proving a
+  backup *can* run must not reset the timer watching whether the schedule *does*.
 - **Running `backup-run` after an incident can overwrite the day's only good snapshot**, since the
   key is one per UTC day and `store.set` replaces. Yesterday's is untouched, so the window is 24h.
 

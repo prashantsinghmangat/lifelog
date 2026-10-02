@@ -632,6 +632,30 @@ scheduled function cannot be invoked over HTTP, so there is a separate trigger:
 It reports failures rather than swallowing them, which is the point: seeing `SUPABASE_SERVICE_ROLE_KEY
 is not set` immediately beats finding no snapshot tomorrow.
 
+**Restoring a backup** (spec 025) — the proof the snapshots are backups rather than a habit:
+
+```
+/.netlify/functions/backup-restore?token=…&key=entries-2026-09-05.json
+→ {"snapshot":"entries-2026-09-05.json","restored":42}
+```
+
+It reads the named snapshot out of Blobs and upserts every row — soft-deleted ones included —
+through the `restore_entries` RPC (migration `0002`), which disables the `entries_touch` trigger
+for its own transaction so `updated_at` lands exactly as the snapshot holds it. All-or-nothing:
+a failure partway rolls the whole restore back and the response says so. It never writes to
+Blobs — after an incident the snapshots are the only good copies, and running `backup-run`
+first would overwrite today's (see the warning above). Run the migration once in the SQL editor
+before first use.
+
+**Knowing the backup failed** (spec 042): set `BACKUP_HEALTHCHECK_URL` to a
+[healthchecks.io](https://healthchecks.io) ping URL and configure that check to expect one ping
+a day with a few hours' grace. The nightly function pings it only **after** the snapshot write
+succeeds, so a crashed run — or a schedule that silently stopped firing — becomes an email
+within a day. Unset, nothing pings and nothing complains: monitoring is opt-in like the token.
+Drill it once: pause the check's pings (or break a variable and `backup-run`), and watch the
+alert actually arrive — an alert that has never fired is as untested as a restore that has
+never run.
+
 Note that environment variables reach a deployed function only on the **next deploy**. Editing
 them and expecting the running function to notice is the usual first mistake.
 

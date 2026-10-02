@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   authorised,
+  healthcheckPing,
   isSnapshotKey,
   rowRange,
   snapshotKey,
@@ -193,5 +194,33 @@ describe('the shared secret guarding the backup endpoints', () => {
     // the endpoint's behaviour depends on which of the two the caller got right.
     const request = ask(`${URL_BASE}?token=${SECRET}`, { authorization: 'Bearer wrong' })
     expect(authorised(request, SECRET)).toBe(false)
+  })
+})
+
+describe('the dead-man ping (spec 042)', () => {
+  it('does nothing at all when no URL is configured', async () => {
+    let called = 0
+    const get = (() => {
+      called += 1
+      return Promise.resolve(new Response('ok'))
+    }) as typeof fetch
+    await healthcheckPing(undefined, get)
+    await healthcheckPing('', get)
+    expect(called).toBe(0)
+  })
+
+  it('pings the configured URL once', async () => {
+    const seen: string[] = []
+    const get = ((url: string | URL) => {
+      seen.push(String(url))
+      return Promise.resolve(new Response('ok'))
+    }) as typeof fetch
+    await healthcheckPing('https://hc-ping.example/abc', get)
+    expect(seen).toEqual(['https://hc-ping.example/abc'])
+  })
+
+  it('swallows a rejection — a monitoring outage never fails the backup', async () => {
+    const get = (() => Promise.reject(new Error('down'))) as typeof fetch
+    await expect(healthcheckPing('https://hc-ping.example/abc', get)).resolves.toBeUndefined()
   })
 })
