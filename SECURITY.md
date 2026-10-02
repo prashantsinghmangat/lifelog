@@ -78,9 +78,19 @@ silently losing data. Nation-state and malware-on-device threats are out of scop
 - **Export and camera temp files are cleaned up.** A shared export is deleted from the app cache
   after the share sheet settles; the camera's temp capture is best-effort deleted after its bytes
   are read ([src/lib/deliver.ts](src/lib/deliver.ts), [src/lib/camera.ts](src/lib/camera.ts)).
-- **The photo store cannot be mass-wiped by a bad read.** `sweepOrphans` with an empty live set
-  is a no-op — the quota fallback and a parse-failed store both produce one
-  ([src/lib/attachments.ts](src/lib/attachments.ts)).
+- **The photo sweep only runs against a log the caller can vouch for** (spec 044). `sweepOrphans`
+  takes a `vouched` argument and refuses without it; the old empty-set no-op remains underneath.
+  That guard alone was not enough, and the cost is on the record: on 2026-10-02, signing in after
+  a guest session **permanently deleted twenty photos** from three live entries on the S21 FE.
+  `fetchAll` computed whether its read was complete, spent that on `reconcile` and returned a bare
+  array, so a read that resolved without completing was indistinguishable from a whole log — and
+  after a guest session the stale state it returned was the guest's single row. Every other photo
+  on the device was an orphan by that measure, and one is not zero. `fetchAll` now returns
+  `{ entries, whole }` and the launch sweep passes `whole && !local`: the read must have completed,
+  *and* the log must belong to the identity that owns the photos, because the store is one store
+  per device while the log is per identity. Photos are device-only — no Supabase, no nightly
+  backup, no Android backup — so a wrong sweep is unrecoverable, which is why it is gated twice.
+  [src/lib/attachments.ts](src/lib/attachments.ts), [src/hooks/useEntries.ts](src/hooks/useEntries.ts).
 - **A release build refuses a dev server block.** [scripts/gradle.mjs](scripts/gradle.mjs) exits
   before any `*Release*` task if the synced Capacitor config carries `server` — `CAP_DEV_URL`
   left exported can no longer bake `cleartext: true` into a signed APK.

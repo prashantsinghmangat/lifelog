@@ -175,6 +175,16 @@ async function impatient<T>(work: PromiseLike<T>, ms: number): Promise<T | 'time
   }
 }
 
+/**
+ * Every row this device holds, and whether that claim was actually checked.
+ *
+ * `whole` is true only when a read completed and its `count` agreed — the same
+ * test `reconcile` uses before it is allowed to remove anything. It is part of
+ * the return rather than a detail inside it so that a caller which *deletes* on
+ * the strength of this list has to look at it.
+ */
+export type WholeLog = { entries: Entry[]; whole: boolean }
+
 /** Newest day first, oldest entry within it — the order `fetchAll` returned. */
 function byDayDescending(rows: Entry[]): Entry[] {
   return [...rows].sort(
@@ -586,9 +596,15 @@ export function useEntries(day: string, userId: string, local = false) {
    * first, so what comes back includes rows that have not synced yet — a
    * question must not ignore an entry typed a minute ago on a train.
    */
-  const fetchAll = useCallback(async (): Promise<Entry[]> => {
+  const fetchAll = useCallback(async (): Promise<WholeLog> => {
     // This device *is* the whole log. Same answer, one step shorter.
-    if (local) return byDayDescending(current.current.entries)
+    //
+    // `whole: false` even so, and the distinction is the point: these rows are
+    // every row *this guest* has, and they are still not a statement about the
+    // device's photo store, which is shared with whatever account was last
+    // signed in here. Callers that only want rows ignore the flag; the one that
+    // deletes things must not.
+    if (local) return { entries: byDayDescending(current.current.entries), whole: false }
 
     const since = new Date().toISOString()
     const fetched: Entry[] = []
@@ -644,9 +660,12 @@ export function useEntries(day: string, userId: string, local = false) {
       if (whole || fetched.length > 0) {
         apply((prev) => reconcile(prev, fetched, null, since, whole))
       }
-      return byDayDescending(current.current.entries)
+      // `whole` travels with the rows rather than being spent here. Dropping it
+      // at this boundary is what let a broken read look exactly like a complete
+      // one to `sweepOrphans`, which then deleted twenty photos — see spec 044.
+      return { entries: byDayDescending(current.current.entries), whole }
     } catch {
-      return byDayDescending(current.current.entries)
+      return { entries: byDayDescending(current.current.entries), whole: false }
     }
   }, [apply, local])
 

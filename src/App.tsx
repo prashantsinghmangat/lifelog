@@ -494,7 +494,9 @@ function Day({
     if (corpus !== null || loading_.current) return
     loading_.current = true
     void fetchAll()
-      .then(setCorpus)
+      // Rows only: a question is answered from what this device holds, and a
+      // short read is still a better corpus than none.
+      .then(({ entries }) => setCorpus(entries))
       .catch(() => setCorpus([]))
       .finally(() => {
         loading_.current = false
@@ -807,12 +809,25 @@ function Day({
   // the phone, and a reinstall does not lose the lot. No-op away from native.
   useEffect(() => {
     void fetchAll()
-      .then((all) => {
+      .then(({ entries: all, whole }) => {
         setHistory(all)
-        // Only from a load that actually completed — never from `.catch`
-        // below, so a network hiccup can never read as "every entry gone"
-        // and sweep away photos that are still owed a real reconnect.
-        void sweepOrphans(all.map((row) => row.id)).catch(() => {
+        // `whole && !local` is the whole guard, and each half was paid for.
+        //
+        // `.catch` was never enough. A read that *resolves* without completing
+        // returns whatever this device already held, which after a guest
+        // session is the guest's own handful of rows — and sweeping against
+        // those deleted twenty photos belonging to the account on the S21 FE
+        // (spec 044). `whole` is the same test `reconcile` must pass before it
+        // may remove a row; deleting the only copy of a photo deserves it at
+        // least as much.
+        //
+        // `!local` because the photo store is one store for the device while
+        // the log is per-identity: a guest's rows, however complete for the
+        // guest, say nothing about whose photos are still wanted.
+        void sweepOrphans(
+          all.map((row) => row.id),
+          whole && !local,
+        ).catch(() => {
           // Storage that can't be swept this launch gets another chance next one.
         })
         return sync(all, new Date())
@@ -1001,7 +1016,9 @@ function Day({
    */
   async function exportJson() {
     try {
-      const all = await fetchAll()
+      // Rows only: an export of what this device holds is still worth taking,
+      // and it is a copy rather than a deletion.
+      const { entries: all } = await fetchAll()
       const where = await save(
         `lifelog-${dayKey(new Date())}.json`,
         'application/json',
@@ -1018,7 +1035,7 @@ function Day({
 
   async function exportCalendar() {
     try {
-      const all = await fetchAll()
+      const { entries: all } = await fetchAll()
       const wanted = forCalendar(all, now)
       if (wanted.length === 0) {
         setToast({ text: 'No upcoming events to export' })

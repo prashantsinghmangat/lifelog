@@ -161,7 +161,7 @@ describe('sweepOrphans', () => {
     await put('sweep-keep', blob())
     await put('sweep-gone', blob())
 
-    await sweepOrphans(['sweep-keep'])
+    await sweepOrphans(['sweep-keep'], true)
 
     expect(await list('sweep-keep')).toHaveLength(1)
     expect(await list('sweep-gone')).toHaveLength(0)
@@ -172,10 +172,47 @@ describe('sweepOrphans', () => {
   it('deletes nothing when the live set is empty — a parse-failed store and the quota fallback both look exactly like this', async () => {
     await put('sweep-empty', blob())
 
-    await sweepOrphans([])
+    await sweepOrphans([], true)
 
     expect(await list('sweep-empty')).toHaveLength(1)
     await removeAll('sweep-empty')
+  })
+
+  /**
+   * Spec 044, measured on the S21 FE: twenty photos were permanently deleted
+   * from three live entries. Signing in after a guest session re-ran the launch
+   * fetch, the read did not complete, and `fetchAll` returned the stale
+   * single-entry state left from guest mode. Every other photo was an orphan by
+   * that measure — and the empty-set guard passed, because one is not zero.
+   */
+  it('deletes nothing when the caller cannot vouch for the list, however many ids it holds', async () => {
+    await put('sweep-account', blob())
+    await put('sweep-guest', blob())
+
+    // Exactly the shape that did the damage: a short, real, non-empty list
+    // that simply is not the whole log the photo store belongs to.
+    await sweepOrphans(['sweep-guest'], false)
+
+    expect(await list('sweep-account')).toHaveLength(1)
+    expect(await list('sweep-guest')).toHaveLength(1)
+
+    await removeAll('sweep-account')
+    await removeAll('sweep-guest')
+  })
+
+  it('still collects a real orphan once the caller can vouch', async () => {
+    // The guard must not cost the feature: a vouched list still sweeps.
+    await put('sweep-live', blob())
+    await put('sweep-dead', blob())
+
+    await sweepOrphans(['sweep-live'], false)
+    expect(await list('sweep-dead')).toHaveLength(1)
+
+    await sweepOrphans(['sweep-live'], true)
+    expect(await list('sweep-dead')).toHaveLength(0)
+    expect(await list('sweep-live')).toHaveLength(1)
+
+    await removeAll('sweep-live')
   })
 })
 

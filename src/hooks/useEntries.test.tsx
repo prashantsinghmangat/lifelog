@@ -583,7 +583,7 @@ describe('logging with no network', () => {
     const local = await mounted()
     // The corpus behind `?` questions, the memories under a day, the export and
     // the set reminders are re-armed from all come through here.
-    const all = await local.result.current.fetchAll()
+    const { entries: all } = await local.result.current.fetchAll()
     expect(all.map((row) => row.title)).toEqual(['from the server'])
   })
 
@@ -857,7 +857,7 @@ describe('reading the whole log', () => {
     longLog(2300)
     const { result } = await mounted()
 
-    const all = await act(() => result.current.fetchAll())
+    const { entries: all } = await act(() => result.current.fetchAll())
 
     expect(all).toHaveLength(2300)
     expect(calls.filter((call) => call.op === 'range').map((call) => call.arg)).toEqual([
@@ -875,7 +875,7 @@ describe('reading the whole log', () => {
     longLog(1500)
     const { result } = await mounted()
 
-    const all = await act(() => result.current.fetchAll())
+    const { entries: all } = await act(() => result.current.fetchAll())
 
     expect(all).toHaveLength(1500)
     expect(result.current.all).toHaveLength(1500)
@@ -889,7 +889,7 @@ describe('reading the whole log', () => {
     serverCap = 300
     const { result } = await mounted()
 
-    const all = await act(() => result.current.fetchAll())
+    const { entries: all } = await act(() => result.current.fetchAll())
 
     expect(all).toHaveLength(1200)
   })
@@ -906,6 +906,61 @@ describe('reading the whole log', () => {
     readsBeforeFailing = 1
     const after = await act(() => result.current.fetchAll())
 
-    expect(after).toHaveLength(2500)
+    expect(after.entries).toHaveLength(2500)
+  })
+
+  /**
+   * Spec 044. `whole` used to be computed, spent on `reconcile` and thrown away,
+   * so a read that stopped halfway returned the same bare array as a complete
+   * one. `sweepOrphans` believed it and deleted twenty photos off a real phone.
+   * Anything that *removes* on the strength of this list has to be able to ask.
+   */
+  describe('whether the read can be vouched for', () => {
+    it('says so when every row the server counted actually arrived', async () => {
+      longLog(1500)
+      const { result } = await mounted()
+
+      const read = await act(() => result.current.fetchAll())
+
+      expect(read.whole).toBe(true)
+      expect(read.entries).toHaveLength(1500)
+    })
+
+    it('refuses to vouch when a page failed partway through', async () => {
+      longLog(2500)
+      const { result } = await mounted()
+      await act(() => result.current.fetchAll())
+
+      readsBeforeFailing = 1
+      const read = await act(() => result.current.fetchAll())
+
+      // The rows still come back — they are this device's log and every other
+      // caller wants them. What is withheld is the authority to delete by them.
+      expect(read.whole).toBe(false)
+      expect(read.entries).toHaveLength(2500)
+    })
+
+    it('refuses to vouch when the server cannot be reached at all', async () => {
+      offlineResult = true
+      connection(false)
+      const { result } = await mounted()
+
+      const read = await act(() => result.current.fetchAll())
+
+      expect(read.whole).toBe(false)
+    })
+
+    it('refuses to vouch for a guest log, which cannot speak for the device', async () => {
+      // The photo store is one store per device while the log is per identity,
+      // so a guest's rows — however complete for the guest — say nothing about
+      // whose photos are still wanted. This is the half `whole` alone misses.
+      longLog(3)
+      const view = renderHook(() => useEntries('2026-09-05', 'local-guest', true))
+      await waitFor(() => expect(view.result.current.loading).toBe(false))
+
+      const read = await act(() => view.result.current.fetchAll())
+
+      expect(read.whole).toBe(false)
+    })
   })
 })

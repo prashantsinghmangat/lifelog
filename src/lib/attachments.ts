@@ -475,13 +475,34 @@ export function orphansOf(storedIds: Iterable<string>, liveIds: Iterable<string>
   return [...new Set(storedIds)].filter((id) => !live.has(id))
 }
 
-/** Deletes every photo whose entry is no longer in the live log. */
-export async function sweepOrphans(liveEntryIds: string[]): Promise<void> {
-  // An empty live set is never evidence: it is what a parse-failed store, the
-  // quota fallback's `{entries: [], pending}` and a freshly minted identity all
-  // look like, and each of those once meant deleting every photo on the device
-  // — the only copies that exist. A log that holds photos is never legitimately
-  // empty, so there is nothing real to sweep against.
+/**
+ * Deletes every photo whose entry is no longer in the live log.
+ *
+ * @param vouched Whether the caller can swear this list is the **whole** log
+ *   for **this device's photo store**. Both halves are load-bearing, and the
+ *   parameter exists because this is the one question the call site must answer
+ *   out loud — the previous signature let it be skipped by saying nothing.
+ *
+ *   Measured on the S21 FE, 2026-10-02: twenty photos were permanently deleted
+ *   from three live entries. Signing in after a guest session re-ran the launch
+ *   fetch, that read did not complete, and `fetchAll` returned the stale
+ *   single-entry state left over from guest mode. Every other photo on the
+ *   device was an orphan by that measure. The length guard below passed,
+ *   because one is not zero.
+ *
+ *   A list is vouched only when a read actually completed (`whole`) *and* it
+ *   belongs to the identity that owns the photos. A guest's log can never
+ *   vouch: the store is global while the log is per-identity, so a guest's rows
+ *   say nothing about an account's photos. Namespacing the store by account
+ *   would remove that second clause; until then it is stated here.
+ */
+export async function sweepOrphans(liveEntryIds: string[], vouched: boolean): Promise<void> {
+  if (!vouched) return
+  // An empty live set is never evidence either: it is what a parse-failed
+  // store, the quota fallback's `{entries: [], pending}` and a freshly minted
+  // identity all look like, and each of those once meant deleting every photo
+  // on the device — the only copies that exist. A log that holds photos is
+  // never legitimately empty, so there is nothing real to sweep against.
   if (liveEntryIds.length === 0) return
   const stored = await storedEntryIds()
   for (const entryId of orphansOf(stored, liveEntryIds)) await removeAll(entryId)
