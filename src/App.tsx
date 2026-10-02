@@ -1656,8 +1656,14 @@ function Day({
             stays docked, and the result stays beside the thing that made it. */}
         {view === 'ask' && (
           <div className="mt-4 flex flex-1 flex-col">
-            {!askFilled && (
-              <>
+            {/* Hidden, never unmounted. The first keystroke in Ask flips
+                `askFilled`, and tearing this block out of the DOM in that
+                moment is what ate the letter: the reflow raced the soft
+                keyboard's composition commit, and spec 030's one-frame delay
+                only moved the race, it could not make an unmount safe.
+                `display: none` keeps the teardown out of the IME's way and
+                drops the block from the accessibility tree all the same. */}
+            <div className={askFilled ? 'hidden' : 'contents'}>
                 {/* A true status, or nothing: the mock this follows (spec 017)
                     headed the screen "Neural Sync", which names no feature
                     this app has. What is real is where the answers come from
@@ -1685,8 +1691,7 @@ function Day({
                   onPick={(asked) => setPrefill(asked)}
                   onHelp={() => setHelpOpen(true)}
                 />
-              </>
-            )}
+            </div>
 
             {/* The one thing that belongs low on this screen: pinned above the
                 capture control, not floating mid-page. */}

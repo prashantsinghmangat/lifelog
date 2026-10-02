@@ -1,5 +1,5 @@
 import { format, parseISO } from 'date-fns'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnswerCard } from './AnswerCard'
 import {
   ArrowUpIcon,
@@ -620,11 +620,24 @@ export function QuickAdd({
    * for a control, and removing it would break the one habit the log's owner
    * already has.
    */
+  /**
+   * What the answering pass reads. In Ask, every keystroke prices a question
+   * parse and a full `summariseLog` over the log, and that work sharing the
+   * keystroke's own render is the other half of how the first letter typed
+   * there was lost — the IME's commit waited on it. The deferred copy lets
+   * the keystroke commit first and the answer land one render behind, which
+   * no one can see. Log keeps the live text: its parse preview is cheap and
+   * has to track the key, and nothing about it may change here.
+   */
+  const deferredText = useDeferredValue(text)
+  const read = mode === 'ask' ? deferredText : text
+  const readTrimmed = read.trim()
+
   const question = useMemo(() => {
-    if (trimmed === '') return null
-    if (mode !== 'ask' && !trimmed.startsWith('?')) return null
-    return parseQuestion(asQuestion(text), now)
-  }, [mode, text, trimmed, now])
+    if (readTrimmed === '') return null
+    if (mode !== 'ask' && !readTrimmed.startsWith('?')) return null
+    return parseQuestion(asQuestion(read), now)
+  }, [mode, read, readTrimmed, now])
 
   const asking = question !== null
 
@@ -659,8 +672,8 @@ export function QuickAdd({
    * button, never acted on by itself.
    */
   const wouldLog = useMemo(
-    () => (mode === 'ask' && trimmed !== '' ? parse(asEntry(text), new Date(now), day) : null),
-    [mode, trimmed, text, now, day],
+    () => (mode === 'ask' && readTrimmed !== '' ? parse(asEntry(read), new Date(now), day) : null),
+    [mode, readTrimmed, read, now, day],
   )
   useEffect(() => {
     if (asking) onNeedCorpus()

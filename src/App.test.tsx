@@ -668,10 +668,26 @@ describe('the four destinations', () => {
     await userEvent.click(screen.getByRole('button', { name: /how much this month/ }))
     const box = screen.getByLabelText('What do you want to know?') as HTMLTextAreaElement
     expect(box.value).toBe('how much this month')
-    // The suggestions never sit under a result.
-    await waitFor(() => expect(screen.queryByText('Spending')).toBeNull())
+    // The suggestions never sit under a result — hidden, though, not torn
+    // out: unmounting this block on the filling keystroke is what ate the
+    // first letter typed in Ask (spec 035).
+    await waitFor(() => expect(screen.getByText('Spending').closest('.hidden')).not.toBeNull())
     // And nothing was logged by the tap.
     expect(screen.queryByText(/entries saved/)).toBeNull()
+  })
+
+  it('hides the topics while typing rather than tearing them out, and brings them back emptied', async () => {
+    await open()
+    await go('Ask')
+
+    const box = screen.getByLabelText('What do you want to know?') as HTMLTextAreaElement
+    await userEvent.type(box, 'e')
+    // Still in the DOM: the teardown is what raced the soft keyboard's
+    // composition commit on Android. `display: none` keeps it out of the way.
+    await waitFor(() => expect(screen.getByText('Spending').closest('.hidden')).not.toBeNull())
+
+    await userEvent.clear(box)
+    await waitFor(() => expect(screen.getByText('Spending').closest('.hidden')).toBeNull())
   })
 
   it('answers from Ask without filing the question away as an entry', async () => {
