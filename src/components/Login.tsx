@@ -55,7 +55,14 @@ export function Login({ onGuest, onCancel }: Props) {
   const [code, setCode] = useState('')
   const [link, setLink] = useState('')
   const [sent, setSent] = useState(false)
-  const [pasting, setPasting] = useState(false)
+  /**
+   * Starts true: pasting the link is the route that works on the email this
+   * project can actually send. See the note above `Props` — the six-digit code
+   * needs `{{ .Token }}` in the template, which needs custom SMTP, so showing
+   * the code field first put the one field that cannot be filled in front of
+   * the step that completes the sign-in.
+   */
+  const [pasting, setPasting] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
 
@@ -181,7 +188,7 @@ export function Login({ onGuest, onCancel }: Props) {
   function switchTo(next: Mode) {
     setMode(next)
     setSent(false)
-    setPasting(false)
+    setPasting(true)
     setCode('')
     setLink('')
     setMessage(null)

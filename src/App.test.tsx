@@ -16,7 +16,14 @@ import App from './App'
 import { back } from './lib/back'
 import { dayKey } from './lib/format'
 import { load } from './lib/store'
-import { cancelFollowUps, rearm, type RearmResult, type ScheduleResult } from './lib/reminders'
+import { supabase } from './lib/supabase'
+import {
+  cancelAll,
+  cancelFollowUps,
+  rearm,
+  type RearmResult,
+  type ScheduleResult,
+} from './lib/reminders'
 
 /**
  * The journeys that only exist once everything is wired together: whether a
@@ -75,8 +82,26 @@ function builder() {
   return self
 }
 
+/** What `signOut()` does when a test asks for it. Reset in `beforeEach`. */
+let signOutResult: { error: { message: string } | null } | 'throw' = { error: null }
+
 vi.mock('./lib/supabase', () => ({
-  supabase: { from: () => builder(), auth: { signOut: vi.fn() } },
+  // The real key name, because sign-out clearing *this* is the invariant: an
+  // undefined export here removed a key called "undefined" and every assertion
+  // about the token at rest would have passed without the code doing anything.
+  sessionStorageKey: 'sb-project-auth-token',
+  supabase: {
+    from: () => builder(),
+    auth: {
+      signOut: vi.fn(async () => {
+        if (signOutResult === 'throw') {
+          // supabase-js rethrows what it does not recognise as an auth error.
+          throw new Error('storage unavailable')
+        }
+        return signOutResult
+      }),
+    },
+  },
 }))
 
 /** Who this device belongs to. A guest is the same shape with no account. */
@@ -129,6 +154,9 @@ vi.mock('./lib/reminders', () => ({
     return rearmResult
   }),
   sync: vi.fn(async () => undefined),
+  // Sign-out cancels every armed alarm, and must finish before the reload that
+  // follows tears the plugin bridge down mid-cancel.
+  cancelAll: vi.fn(async () => undefined),
   scheduleNudges: vi.fn(async () => 'scheduled'),
   permission: vi.fn(async () => 'granted'),
   requestPermission: vi.fn(async () => true),
@@ -158,12 +186,18 @@ afterEach(cleanup)
 
 let ids = 0
 beforeEach(() => {
+  // Both, because `invocationCallOrder` is one counter shared across every
+  // mock: comparing two of them only means anything if neither carries a call
+  // from an earlier test.
+  vi.mocked(cancelAll).mockClear()
+  vi.mocked(supabase.auth.signOut).mockClear()
   who = { id: 'user-1', email: 'you@example.com' }
   rowsOnServer = []
   scheduleResult = 'scheduled'
   rearmResult = 'scheduled'
   cancelThrows = false
   unreachable = false
+  signOutResult = { error: null }
   nagHandler = null
   ids = 0
   // The log persists between mounts now, so without this each test inherits the
@@ -1526,5 +1560,87 @@ describe('the top chrome', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Account and settings' }))
     expect(screen.getByText('you@example.com · signed in')).toBeTruthy()
+  })
+})
+
+/**
+ * Sign-out, which has to beat the offline path or it is not a sign-out.
+ *
+ * The invariant, and the only thing these three cases exist to hold: **after
+ * sign-out the refresh token is not at rest**, whichever way `signOut()`
+ * answers. auth-js clears its own storage only once the server call has
+ * succeeded, so a returned error and a throw both leave the token on disk —
+ * and the throw used to escape as an unhandled rejection that skipped the
+ * cleanup entirely, leaving the identity forgotten and the token live. The
+ * next launch read it and signed the user straight back in.
+ */
+describe('signing out', () => {
+  const TOKEN = 'sb-project-auth-token'
+
+  /** Reaches the button and presses it, with a token and an identity in place. */
+  async function signOut() {
+    localStorage.setItem(TOKEN, JSON.stringify({ refresh_token: 'v1-still-good' }))
+    localStorage.setItem('lifelog.who', JSON.stringify(who))
+
+    await open()
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+  }
+
+  it('clears the token and the identity when Supabase signs out cleanly', async () => {
+    signOutResult = { error: null }
+
+    await signOut()
+
+    await waitFor(() => expect(localStorage.getItem(TOKEN)).toBeNull())
+    expect(localStorage.getItem('lifelog.who')).toBeNull()
+    expect(vi.mocked(cancelAll)).toHaveBeenCalled()
+  })
+
+  it('clears the token when Supabase answers with an error — the offline path', async () => {
+    // Airplane mode: auth-js returns a retryable fetch error and has *not*
+    // cleared its storage, so the key has to be removed by hand.
+    signOutResult = { error: { message: 'Failed to fetch' } }
+
+    await signOut()
+
+    await waitFor(() => expect(localStorage.getItem(TOKEN)).toBeNull())
+    expect(localStorage.getItem('lifelog.who')).toBeNull()
+    expect(vi.mocked(cancelAll)).toHaveBeenCalled()
+  })
+
+  it('clears the token even when signOut throws rather than refusing', async () => {
+    signOutResult = 'throw'
+
+    await signOut()
+
+    await waitFor(() => expect(localStorage.getItem(TOKEN)).toBeNull())
+    expect(localStorage.getItem('lifelog.who')).toBeNull()
+    expect(vi.mocked(cancelAll)).toHaveBeenCalled()
+  })
+
+  /**
+   * Ordering, not just occurrence: the reload that follows a failed sign-out
+   * tears the plugin bridge down, and the S21 FE kept all ten alarms when that
+   * raced the cancel. The reload itself cannot be observed here — jsdom's
+   * `Location` is unforgeable, so `reload` can be neither spied nor replaced —
+   * but it happens strictly after `signOut` settles, so a cancel that precedes
+   * `signOut` cannot be outrun by it.
+   */
+  it('cancels every armed alarm before it even asks Supabase to sign out', async () => {
+    signOutResult = { error: { message: 'Failed to fetch' } }
+
+    await signOut()
+
+    await waitFor(() => expect(localStorage.getItem(TOKEN)).toBeNull())
+    const cancelled = vi.mocked(cancelAll).mock.invocationCallOrder[0]
+    const asked = vi.mocked(supabase.auth.signOut).mock.invocationCallOrder[0]
+    expect(cancelled).toBeDefined()
+    expect(asked).toBeDefined()
+    expect(cancelled!).toBeLessThan(asked!)
   })
 })

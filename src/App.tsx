@@ -1069,14 +1069,37 @@ function Day({
     onSignOut: () => {
       void (async () => {
         forget(localStorage)
-        // Awaited, not fired-and-forgotten: the offline path reloads the page
-        // below, and a reload tears the plugin bridge down mid-cancel — the
-        // S21 FE kept all ten alarms when this raced. cancelAll never throws.
-        await cancelAllReminders()
-        const { error } = await supabase.auth.signOut()
-        if (error !== null) {
+        /**
+         * Whether Supabase itself cleared the session, which is the only
+         * outcome that can be trusted to have done so.
+         */
+        let clean = false
+        try {
+          // Awaited, not fired-and-forgotten: the path below reloads the page,
+          // and a reload tears the plugin bridge down mid-cancel — the S21 FE
+          // kept all ten alarms when this raced. cancelAll never throws.
+          await cancelAllReminders()
+          const { error } = await supabase.auth.signOut()
+          clean = error === null
+        } catch {
+          // supabase-js answers most failures with `{ error }` but rethrows
+          // anything it does not recognise as an auth error — the same
+          // behaviour `Login` guards on the way in. Uncaught here, the cleanup
+          // below never ran: the identity was already forgotten, so the app
+          // showed the sign-in screen, while the refresh token sat at rest and
+          // the refresh timer kept running. The next launch read that token
+          // and signed the user straight back in. A sign-out that does not
+          // sign you out is the one failure this button must not have.
+        } finally {
+          // Unconditional. auth-js removes its own storage only after the
+          // server call succeeds, so every other outcome leaves the refresh
+          // token on disk, and this is the whole point of exporting the key.
           localStorage.removeItem(sessionStorageKey)
-          window.location.reload()
+          // Only when the session may still be live in memory: a clean
+          // sign-out has already torn down its own refresh timer, and
+          // reloading it away would cost a needless flash of the sign-in
+          // screen for nothing.
+          if (!clean) window.location.reload()
         }
       })()
     },

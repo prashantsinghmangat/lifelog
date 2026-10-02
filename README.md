@@ -168,9 +168,12 @@ Then, Authentication → Emails → **Magic link or OTP**. The default only cont
 ```
 
 The repo keeps a ready version at
-[`supabase/templates/magic-link.html`](supabase/templates/magic-link.html). Paste it into
-**Confirm signup** too: `signInWithOtp` uses Magic Link for an existing user but Confirm signup
-for one that does not exist yet, and each template saves separately.
+[`supabase/templates/magic-link.html`](supabase/templates/magic-link.html). **Magic Link is the
+only template this app uses.** `signInWithOtp` would fall back to Confirm signup for an address
+that has no user yet, but `shouldCreateUser: false` means it never gets that far — an unknown
+address is refused, not enrolled — and with sign-ups off at the project level there is no such
+path at all. Leave Confirm signup alone; filling it in would only prepare for an account
+creation this app does not do.
 
 Note the built-in email service allows **2 messages per hour for the whole project**. Testing runs
 into that quickly; the app then shows `email rate limit exceeded`. Custom SMTP raises the default

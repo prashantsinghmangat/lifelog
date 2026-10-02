@@ -34,10 +34,17 @@ silently losing data. Nation-state and malware-on-device threats are out of scop
   an expired session once produced a verified-empty `200 []` that `reconcile` read as "your log
   is empty" and wiped the device's synced rows. Status 0 now means unreachable, and the local log
   is returned untouched. Verified on the emulator with a revoked refresh token.
-- **Sign-out clears the session at rest, offline included.** `onSignOut` awaits `signOut()`, then
-  removes the `sb-<ref>-auth-token` key unconditionally and cancels every pending notification —
-  entry alarms, follow-ups, both daily prompts (`reminders.cancelAll()`). Verified on the
-  S21 FE: airplane-mode sign-out, relaunch → signed out, pending alarms 18 → 0.
+- **Sign-out clears the session at rest on every outcome, offline included.** `onSignOut` forgets
+  the remembered identity, awaits `reminders.cancelAll()` — entry alarms, follow-ups, both daily
+  prompts — then asks Supabase to sign out. The `sb-<ref>-auth-token` key is removed in a
+  `finally`, so it goes whether that call resolves cleanly, resolves with an error, or **throws**:
+  auth-js clears its own storage only after the server call succeeds, and it rethrows what it does
+  not recognise as an auth error, which previously escaped as an unhandled rejection and left the
+  identity forgotten but the refresh token live — signed out on screen, signed back in on the next
+  launch. The page is reloaded on anything but a clean sign-out, which is what kills the
+  in-memory session and the refresh timer that would otherwise write the token straight back.
+  Verified on the S21 FE: airplane-mode sign-out, relaunch → signed out, pending alarms 18 → 0;
+  all three outcomes are pinned in `App.test.tsx` (*signing out*).
 - **An offline token expiry is not a sign-out.** `identity.ts` remembers who the device belongs
   to so the log stays readable on a flight; it grants nothing server-side — every request still
   carries whatever token Supabase has, and a real `SIGNED_OUT` forgets it.
@@ -93,8 +100,18 @@ silently losing data. Nation-state and malware-on-device threats are out of scop
 
 - **The Supabase sign-up toggle is the invariant's third layer and is outside this repo.** The
   required state is `disable_signup: true`; it measured `false` on 2026-10-01 while a tester had
-  access. `curl "$VITE_SUPABASE_URL/auth/v1/settings"` answers it in one line — re-check after
-  letting anyone in.
+  access, and `false` again on 2026-10-02 during the authentication audit. The settings endpoint
+  answers it in one line, and needs the key header — without it the reply is only
+  `No API key found in request`:
+
+  ```bash
+  curl -s "$VITE_SUPABASE_URL/auth/v1/settings" -H "apikey: $VITE_SUPABASE_ANON_KEY"
+  ```
+
+  Re-check after letting anyone in. While it is `false`, a pasted sign-in link is the route that
+  carries the risk: anyone who can create an account here can obtain a valid magic link for it,
+  and the paste route now refuses tokens that are not addressed to this project's own host
+  ([src/lib/signinLink.ts](src/lib/signinLink.ts)), which is the half of that this repo can hold.
 - **Restore** (spec 025): `backup-restore` reads a named snapshot back through the
   `restore_entries` RPC — `security definer`, executable by `service_role` alone, so the trigger
   bypass it exists for is never reachable from a client key. Same `BACKUP_TOKEN` gate as the
