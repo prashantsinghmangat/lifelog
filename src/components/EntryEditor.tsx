@@ -10,6 +10,7 @@ import {
   DocumentIcon,
   ImageIcon,
   RepeatIcon,
+  TrashIcon,
 } from './Icons'
 import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
@@ -24,7 +25,6 @@ import {
   nextFireAt,
   recurring,
   reminderAt,
-  repeatLabel,
   repeatOnly,
 } from '../lib/events'
 import {
@@ -67,7 +67,6 @@ const INPUT = `${FIELD} h-11`
 
 /** As long as the toast gives an action, rather than a second timing to keep in step. */
 const UNDO_WINDOW = 6000
-const AREA = `${FIELD} min-h-20 resize-y py-2.5 leading-relaxed`
 
 // Short, because four of these share a row on a 375px screen.
 const KIND_NAME = { expense: 'Expense', time: 'Time', event: 'Event', note: 'Note' }
@@ -363,14 +362,11 @@ export function EntryEditor({
     requestClose()
   }
 
-  // The date and time are editable below, so repeating them here would be noise.
-  // The repeat is not: it is the one thing about the entry that no field shows,
-  // and the date field alone reads as a one-off. Read off `pending`, so
-  // switching the kind to a note stops claiming a repeat the save is about to
-  // drop.
-  const context = [row.category, repeatLabel(pending)].filter(
-    (bit): bit is string => bit !== null && bit !== '',
-  )
+  // The date and time are editable below, so repeating them here would be
+  // noise. The repeat used to belong here too, back when no field showed it;
+  // the recurrence card does now, and the reminder chips own the lead, so the
+  // category — which genuinely has no field — is all that is left to say.
+  const context = row.category !== null && row.category !== '' ? row.category : null
 
   /**
    * When this entry next happens, and when its reminder actually comes —
@@ -450,12 +446,26 @@ export function EntryEditor({
     <Sheet label={`Edit ${row.title}`} onClose={onClose}>
       {(requestClose) => (
       <form onSubmit={(event) => save(event, requestClose)}>
-        {/* Variant A's header (022): what this sheet is, and a way out that
-            plays the same exit spring Cancel does. */}
+        {/* Variant A's header (022, restated by SCREEN_19 in 038): what this
+            sheet is, and a way out that plays the same exit spring Cancel
+            does. The pill's second segment appears only when something true
+            fills it — "Done" for a ticked entry, "Active" for an event whose
+            next moment is still coming; a plain note gets no adjective. */}
         <div className="mb-4 flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <span className="inline-block rounded-full bg-sunken px-2 py-0.5 text-[0.625rem] font-semibold tracking-[0.1em] text-faint uppercase">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sunken px-2 py-0.5 text-[0.625rem] font-semibold tracking-[0.1em] text-faint uppercase">
               Edit entry
+              {finished ? (
+                <>
+                  <span aria-hidden="true" className="h-1 w-1 rounded-full bg-faint" />
+                  <span>Done</span>
+                </>
+              ) : kind === 'event' && nextAt !== null ? (
+                <>
+                  <span aria-hidden="true" className="h-1 w-1 rounded-full bg-faint" />
+                  <span className="text-event">Active</span>
+                </>
+              ) : null}
             </span>
             <p className="mt-1 truncate text-[15px] font-semibold text-ink">{row.title}</p>
           </div>
@@ -463,7 +473,7 @@ export function EntryEditor({
             type="button"
             aria-label="Close"
             onClick={requestClose}
-            className="-mt-1.5 -mr-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:text-ink"
+            className="-mt-1 -mr-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sunken text-muted transition-colors hover:text-ink"
           >
             <CloseIcon size={18} />
           </button>
@@ -500,22 +510,29 @@ export function EntryEditor({
           ))}
         </div>
 
-        {context.length > 0 && <p className="mt-4 text-xs text-faint">{context.join(' · ')}</p>}
-
         <div className="mt-5">
           <label className={LABEL} htmlFor="entry-title">
             Title
           </label>
-          {/* A textarea, not a one-line input. The longest titles are notes,
-              and editing one through a 40-character window meant scrolling
-              sideways to read your own sentence. */}
-          <textarea
-            id="entry-title"
-            rows={3}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            className={AREA}
-          />
+          {/* SCREEN_19's inset well: the field and what the parser read out of
+              it, one object. The `edge` border stays against the mock's
+              borderless wash — an input boundary must clear 3:1 (022). */}
+          <div className="rounded-xl border border-edge bg-sunken/40 transition-colors focus-within:border-muted">
+            {/* A textarea, not a one-line input. The longest titles are notes,
+                and editing one through a 40-character window meant scrolling
+                sideways to read your own sentence. */}
+            <textarea
+              id="entry-title"
+              rows={3}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="min-h-20 w-full resize-y bg-transparent px-3 py-2.5 text-base leading-relaxed text-ink outline-none"
+            />
+            {/* The category used to float above the title as an orphaned
+                caption; as the well's own subtitle it reads as what the title
+                *means* — which is what it is. */}
+            {context !== null && <p className="px-3 pb-2.5 text-xs text-faint">{context}</p>}
+          </div>
         </div>
 
         {/* Two per row: date and time, then amount or minutes. Four abreast is
@@ -619,14 +636,27 @@ export function EntryEditor({
             switch: "Stop repeating" says the consequence, where a toggle labelled
             "Repeat" would leave you working out which way is on. */}
         {repeats !== null ? (
-          <button
-            type="button"
-            onClick={() => setChoice({ rule: undefined })}
-            className="mt-5 flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-edge text-sm font-medium text-muted transition-colors hover:bg-sunken"
-          >
-            <RepeatIcon size={14} />
-            Stop repeating
-          </button>
+          // SCREEN_19's recurrence card: the fact on the left, the one action
+          // on the right. The mock's "Change" trigger is not here because
+          // nothing backs it — the parser is where a rule is changed (see
+          // `repeats` above), and a control that opens nothing is worse than
+          // none.
+          <div className="mt-5 flex items-center justify-between gap-3 rounded-xl border border-line bg-sunken/40 p-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sunken text-ink">
+                <RepeatIcon size={16} />
+              </span>
+              <p className="truncate text-sm font-medium text-ink">Repeats {repeats}</p>
+            </div>
+            <button
+              type="button"
+              aria-label="Stop repeating"
+              onClick={() => setChoice({ rule: undefined })}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-sunken hover:text-expense"
+            >
+              <CloseIcon size={16} />
+            </button>
+          </div>
         ) : previously !== null ? (
           <button
             type="button"
@@ -764,6 +794,9 @@ export function EntryEditor({
             input carrying `capture`, so a single plain input could pick an
             existing image and never take a new one. */}
         <div className="mt-5">
+          {/* SCREEN_19's section eyebrow — the mock's own words, and true:
+              a bill is proof, a ticket is reference. */}
+          <p className={LABEL}>Proof &amp; reference</p>
           <input
             ref={galleryInput}
             type="file"
@@ -955,30 +988,37 @@ export function EntryEditor({
         {/* `pb` is a real number: the WebView reports a 0 safe-area inset
             while the gesture pill is ~24px — the same lesson the capture
             dock's floor carries. */}
-        <div className="sticky bottom-0 -mx-5 mt-5 flex items-center gap-1 border-t border-line bg-raised px-5 pt-3 pb-2.5">
+        {/* SCREEN_19's stacked deck: the one primary action full-width and
+            alone on its row, the two that undo beneath it at opposite ends —
+            so a thumb aimed at Save has nothing destructive beside it. */}
+        <div className="sticky bottom-0 -mx-5 mt-5 border-t border-line bg-raised px-5 pt-3 pb-2.5">
           <button
             type="submit"
-            className="h-11 flex-1 rounded-xl bg-accent text-sm font-medium text-surface transition-opacity hover:opacity-90"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-accent text-sm font-medium text-surface transition-opacity hover:opacity-90"
           >
+            <CheckIcon size={16} />
             Save
           </button>
-          <button
-            type="button"
-            onClick={requestClose}
-            className="h-11 rounded-lg px-3 text-sm text-muted transition-colors hover:bg-sunken"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onDelete()
-              requestClose()
-            }}
-            className="h-11 rounded-lg px-3 text-sm text-expense transition-colors hover:bg-sunken"
-          >
-            Delete
-          </button>
+          <div className="mt-1 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={requestClose}
+              className="h-11 rounded-lg px-3 text-sm text-muted transition-colors hover:bg-sunken"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onDelete()
+                requestClose()
+              }}
+              className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-sm text-expense transition-colors hover:bg-sunken"
+            >
+              <TrashIcon size={14} />
+              Delete
+            </button>
+          </div>
         </div>
       </form>
       )}

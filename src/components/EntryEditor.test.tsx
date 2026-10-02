@@ -83,6 +83,28 @@ function setup(over: Partial<Row> = {}) {
   return { onSave, onToast, onDelete, onAddToCalendar, onClose, save }
 }
 
+describe('the header pill says only what is true', () => {
+  // SCREEN_19 headed the sheet "EDIT ENTRY · Active" unconditionally; here the
+  // second segment exists only when the data backs it (spec 038).
+  it('says Active for an event whose moment is still coming', () => {
+    setup({ kind: 'event', occurred_on: '2026-09-07', occurred_at: '2026-09-07T09:00:00+05:30' })
+    expect(screen.getByText('Active')).toBeTruthy()
+  })
+
+  it('says Done for a ticked entry', () => {
+    setup({ kind: 'note', data: { done: true } })
+    // Scoped to the pill — the Mark-done button below also reads "Done".
+    expect(screen.getByText('Edit entry', { exact: false }).textContent).toContain('Done')
+    expect(screen.queryByText('Active')).toBeNull()
+  })
+
+  it('says nothing extra for a plain note', () => {
+    setup({ kind: 'note', amount_paise: null })
+    expect(screen.queryByText('Active')).toBeNull()
+    expect(screen.queryByText('Done')).toBeNull()
+  })
+})
+
 describe('when the entry next happens', () => {
   /**
    * The sheet could name the rule and not the moment.
@@ -107,7 +129,7 @@ describe('when the entry next happens', () => {
     setup(standup)
     expect(screen.getByText(/Next/).textContent).toContain('7 Sep at 10:00 am')
     // The rule is still there — the two answer different questions.
-    expect(screen.getByText('weekdays')).toBeTruthy()
+    expect(screen.getByText('Repeats weekdays')).toBeTruthy()
   })
 
   it('counts from the day the repeat starts, so it cannot land before it exists', () => {
@@ -241,13 +263,13 @@ describe('turning a repeat off', () => {
 
   it('says the entry is a one-off the moment the repeat is off', async () => {
     setup({ kind: 'event', title: 'standup', occurred_at: null, category: null, data: weekdays })
-    expect(screen.getByText('weekdays')).toBeTruthy()
+    expect(screen.getByText('Repeats weekdays')).toBeTruthy()
     // Marking done is withheld from anything that repeats, so its arrival is
     // the sheet agreeing this is now a single occurrence.
     expect(screen.queryByRole('button', { name: /Mark done/ })).toBeNull()
 
     await userEvent.click(screen.getByRole('button', { name: 'Stop repeating' }))
-    expect(screen.queryByText('weekdays')).toBeNull()
+    expect(screen.queryByText('Repeats weekdays')).toBeNull()
     expect(screen.getByRole('button', { name: /Mark done/ })).toBeTruthy()
   })
 
@@ -518,9 +540,9 @@ describe('correcting the kind', () => {
 describe('something that repeats', () => {
   const weekdays = { rrule: 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR' }
 
-  it('says so, because no field on the sheet does', () => {
+  it('says so, on the recurrence card no other field replaces', () => {
     setup({ kind: 'event', title: 'standup', data: weekdays })
-    expect(screen.getByText(/weekdays/)).not.toBeNull()
+    expect(screen.getByText('Repeats weekdays')).not.toBeNull()
   })
 
   // `done` lives on the row, so ticking off today's standup would silence every
