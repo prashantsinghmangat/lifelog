@@ -73,6 +73,14 @@ single characters, so the trailing `\b` is load-bearing: without it `in a house`
 day` and `meeting in a moment` all become reminders. Durations are deliberately *not* extended
 this way — `45 min gym` is a time log, and `half an hour of yoga` is still a note.
 
+**The parser may decline to parse, but may never silently invent structure.** An amount, date,
+clock time or repeat it cannot express does not get guessed: the line is kept whole as a note,
+digits visible, exactly as typed — `gym every 2 weeks` is a note, not ₹2, and `water bill every
+month` is a note until monthly repeats earn their place. Wrong structure is worse than none: a
+note still shows the user their own words, while an invented ₹2 or a misfiled day lies quietly.
+`src/lib/releaseGate.test.ts` enforces this — a corpus of realistic lines, each pinned to its
+honest reading, grown whenever a new class of input turns up.
+
 **`src/lib/store.ts` is the log; the server is a copy of it.** This is the offline story, and it
 is the app's actual position rather than a fallback: nothing about parsing an entry, showing a
 day, totalling it, answering a question or raising a reminder needs a network, so none of it

@@ -158,7 +158,12 @@ function takeDate(input: string, now: Date): Cut<Date> | null {
     )
   if (named) return named
 
-  return cut(input, new RegExp(`\\b(${WEEKDAY})\\b`, 'i'), (m) => {
+  // `last monday` is the same day this matcher already finds — the most recent
+  // one — so `last` is swallowed rather than left dangling in the title:
+  // `haircut last monday` was saving as "haircut last". Swallowed only, on
+  // purpose: asked on a Saturday, `last saturday` still means today, a reading
+  // the question grammar pins (query.test.ts).
+  return cut(input, new RegExp(`\\b(?:last\\s+)?(${WEEKDAY})\\b`, 'i'), (m) => {
     const target = WEEKDAYS[(m[1] ?? '').toLowerCase()]
     if (target === undefined) return null
     return subDays(today, (today.getDay() - target + 7) % 7)
