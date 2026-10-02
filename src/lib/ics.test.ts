@@ -184,3 +184,11 @@ describe('determinism', () => {
     expect(toIcs(rows, NOW)).toBe(toIcs(rows, NOW))
   })
 })
+
+describe('a monthly repeat in the export (spec 041)', () => {
+  it('carries the RRULE and survives its stored date passing', () => {
+    const row = entry({ id: 'm1', occurred_on: '2026-08-12', data: { rrule: 'FREQ=MONTHLY;BYMONTHDAY=12' } })
+    expect(forCalendar([row], NOW)).toHaveLength(1)
+    expect(lines(toIcs([row], NOW))).toContain('RRULE:FREQ=MONTHLY;BYMONTHDAY=12')
+  })
+})

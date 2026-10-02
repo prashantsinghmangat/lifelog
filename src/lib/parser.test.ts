@@ -1369,3 +1369,48 @@ describe('one line, several entries', () => {
     expect(r?.every((entry) => entry.kind === 'event')).toBe(true)
   })
 })
+
+describe('a monthly repeat (spec 041)', () => {
+  it('reads `every month` as one repeating event, day taken from the entry', () => {
+    const r = parse('electricity bill every month', NOW)
+    expect(r?.kind).toBe('event')
+    expect(r?.data.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=1')
+    expect(r?.occurredOn).toBe(TODAY)
+    expect(r?.title).toBe('electricity bill')
+    expect(r?.amountPaise).toBeUndefined()
+  })
+
+  it('a typed date decides the day of the month', () => {
+    const r = parse('rent every month 5 jan', NOW)
+    expect(r?.data.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=5')
+    expect(r?.occurredOn).toBe('2026-01-05')
+    expect(r?.title).toBe('rent')
+  })
+
+  it('the day being viewed decides it when nothing is typed', () => {
+    const r = parse('rent every month', NOW, '2026-09-10')
+    expect(r?.data.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=10')
+    expect(r?.occurredOn).toBe('2026-09-10')
+  })
+
+  it('keeps a clock time', () => {
+    const r = parse('rent every month 9am', NOW)
+    expect(r?.data.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=1')
+    expect(r?.occurredAt).toContain('09:00:00')
+  })
+
+  it('refuses a lead, the weekly rule applied again', () => {
+    const r = parse('rent every month remind 1 day before', NOW)
+    expect(r?.data.lead).toBeUndefined()
+    expect(r?.title).toContain('remind')
+  })
+
+  it('`next month` and `every 2 weeks` still degrade to whole notes', () => {
+    for (const line of ['pay electricity next month', 'gym every 2 weeks']) {
+      const r = parse(line, NOW)
+      expect(r?.kind).toBe('note')
+      expect(r?.title).toBe(line)
+      expect(r?.data.rrule).toBeUndefined()
+    }
+  })
+})

@@ -121,3 +121,18 @@ describe('what is left alone', () => {
     expect(found[0]?.occurred_at).toBeNull()
   })
 })
+
+describe('a monthly repeat drawn on its day (spec 041)', () => {
+  const MONTHLY = { rrule: 'FREQ=MONTHLY;BYMONTHDAY=12' }
+
+  it('lands on its day each month and nowhere else', () => {
+    const rows = [entry({ occurred_on: '2026-09-12', data: MONTHLY })]
+    expect(occurrencesOn(rows, '2026-10-12')).toHaveLength(1)
+    expect(occurrencesOn(rows, '2026-10-13')).toHaveLength(0)
+  })
+
+  it('never lands before its own start', () => {
+    const rows = [entry({ occurred_on: '2026-09-12', data: MONTHLY })]
+    expect(occurrencesOn(rows, '2026-08-12')).toHaveLength(0)
+  })
+})

@@ -75,8 +75,8 @@ this way — `45 min gym` is a time log, and `half an hour of yoga` is still a n
 
 **The parser may decline to parse, but may never silently invent structure.** An amount, date,
 clock time or repeat it cannot express does not get guessed: the line is kept whole as a note,
-digits visible, exactly as typed — `gym every 2 weeks` is a note, not ₹2, and `water bill every
-month` is a note until monthly repeats earn their place. Wrong structure is worse than none: a
+digits visible, exactly as typed — `gym every 2 weeks` is a note, not ₹2, and `meeting sometime
+tomorrow` lands on the day without an invented hour. Wrong structure is worse than none: a
 note still shows the user their own words, while an invented ₹2 or a misfiled day lies quietly.
 `src/lib/releaseGate.test.ts` enforces this — a corpus of realistic lines, each pinned to its
 honest reading, grown whenever a new class of input turns up.

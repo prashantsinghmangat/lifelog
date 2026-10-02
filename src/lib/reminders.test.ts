@@ -495,3 +495,38 @@ describe('cancelAll', () => {
     await expect(cancelAll()).resolves.toBeUndefined()
   })
 })
+
+describe('a monthly repeat arms (spec 041)', () => {
+  const NOW = new Date(2026, 8, 10, 9, 0, 0)
+  const monthly = (day: number) => ({ rrule: `FREQ=MONTHLY;BYMONTHDAY=${day}` })
+
+  it('is one standing cron on a day every month has', () => {
+    const row = entry({
+      id: 'monthly-cron',
+      occurred_on: '2026-09-12',
+      occurred_at: '2026-09-12T19:00:00+05:30',
+      data: monthly(12),
+    })
+    const armed = alarms(row, NOW)
+    expect(armed).toHaveLength(1)
+    const at = new Date('2026-09-12T19:00:00+05:30')
+    expect(armed[0]).toEqual({
+      id: notificationId('monthly-cron'),
+      on: { day: 12, hour: at.getHours(), minute: at.getMinutes() },
+    })
+  })
+
+  it('holds back behind a start still ahead, as the weekly crons do', () => {
+    const row = entry({ id: 'monthly-held', occurred_on: '2026-11-12', data: monthly(12) })
+    expect(alarms(row, NOW)).toEqual([
+      { id: notificationId('monthly-held'), at: new Date(2026, 10, 12, 9, 0, 0, 0) },
+    ])
+  })
+
+  it('arms the 31st as a one-off at the next month that has one', () => {
+    const row = entry({ id: 'monthly-31', occurred_on: '2027-01-31', data: monthly(31) })
+    expect(alarms(row, new Date(2027, 1, 10, 9, 0, 0))).toEqual([
+      { id: notificationId('monthly-31'), at: new Date(2027, 2, 31, 9, 0, 0, 0) },
+    ])
+  })
+})

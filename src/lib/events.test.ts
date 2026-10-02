@@ -453,3 +453,41 @@ describe('stillAhead — the now marker’s half of passed', () => {
     expect(stillAhead(tomorrow, NOW)).toBe(true)
   })
 })
+
+describe('a monthly repeat (spec 041)', () => {
+  const MONTHLY = { rrule: 'FREQ=MONTHLY;BYMONTHDAY=12' }
+
+  it('is recurring, says its day in words, and is never behind you', () => {
+    const row = entry({ occurred_on: '2026-08-12', data: MONTHLY })
+    expect(recurring(row)).toBe(true)
+    expect(repeatLabel(row)).toBe('every month on the 12th')
+    expect(passed(row, NOW)).toBe(false)
+    const first = entry({ occurred_on: '2026-09-01', data: { rrule: 'FREQ=MONTHLY;BYMONTHDAY=1' } })
+    expect(repeatOnly(first)).toBe('every month on the 1st')
+  })
+
+  it('answers this month while the day is ahead, next month after', () => {
+    const row = entry({ occurred_on: '2026-08-12', data: MONTHLY })
+    expect(nextOccurrence(row, NOW)).toEqual(new Date(2026, 8, 12))
+    expect(nextOccurrence(row, new Date(2026, 8, 20, 10, 0, 0))).toEqual(new Date(2026, 9, 12))
+  })
+
+  it('counts today only while its moment is still ahead', () => {
+    // NOW is 14:30 on the 5th.
+    const fifth = { rrule: 'FREQ=MONTHLY;BYMONTHDAY=5' }
+    const ahead = entry({ occurred_on: '2026-08-05', occurred_at: at('2026-08-05', '18:00:00'), data: fifth })
+    expect(nextOccurrence(ahead, NOW)).toEqual(new Date(2026, 8, 5))
+    const gone = entry({ occurred_on: '2026-08-05', occurred_at: at('2026-08-05', '09:00:00'), data: fifth })
+    expect(nextOccurrence(gone, NOW)).toEqual(new Date(2026, 9, 5))
+  })
+
+  it('never answers before the row starts', () => {
+    const row = entry({ occurred_on: '2026-11-12', data: MONTHLY })
+    expect(nextOccurrence(row, NOW)).toEqual(new Date(2026, 10, 12))
+  })
+
+  it('skips the months without its day', () => {
+    const row = entry({ occurred_on: '2027-01-31', data: { rrule: 'FREQ=MONTHLY;BYMONTHDAY=31' } })
+    expect(nextOccurrence(row, new Date(2027, 1, 10))).toEqual(new Date(2027, 2, 31))
+  })
+})

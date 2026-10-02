@@ -37,9 +37,23 @@ export function weeklyDays(entry: Entry): number[] | null {
   return days.length === 0 ? null : days
 }
 
-/** Yearly or weekly — either way, its date is not the last word on when it happens. */
+/**
+ * The day of the month a monthly rule fires on, or null. Stored as
+ * `FREQ=MONTHLY;BYMONTHDAY=n`, n fixed at parse time from the entry's own day —
+ * the same one-row-many-rings shape the weekly rule uses.
+ */
+export function monthlyDay(entry: Entry): number | null {
+  const rule = entry.data.rrule
+  if (typeof rule !== 'string' || !rule.startsWith('FREQ=MONTHLY')) return null
+  const day = /BYMONTHDAY=(\d{1,2})/.exec(rule)?.[1]
+  if (day === undefined) return null
+  const n = Number.parseInt(day, 10)
+  return n >= 1 && n <= 31 ? n : null
+}
+
+/** Yearly, weekly or monthly — either way, its date is not the last word on when it happens. */
 export function recurring(entry: Entry): boolean {
-  return entry.data.rrule === 'FREQ=YEARLY' || weeklyDays(entry) !== null
+  return entry.data.rrule === 'FREQ=YEARLY' || weeklyDays(entry) !== null || monthlyDay(entry) !== null
 }
 
 /**
@@ -83,9 +97,20 @@ export function leadWords(minutes: number): string {
  * wrong for a control that offers to turn a repeat off: an entry with only a
  * lead has no repeat to stop.
  */
+/** `12` → `12th`, honouring 1st/2nd/3rd and the 11th–13th exception. */
+function ordinal(n: number): string {
+  const tail = n % 100
+  const suffix = tail >= 11 && tail <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')
+  return `${n}${suffix}`
+}
+
 export function repeatOnly(entry: Entry): string | null {
   const weekly = weeklyDays(entry)
-  if (weekly === null) return entry.data.rrule === 'FREQ=YEARLY' ? 'every year' : null
+  if (weekly === null) {
+    const monthDay = monthlyDay(entry)
+    if (monthDay !== null) return `every month on the ${ordinal(monthDay)}`
+    return entry.data.rrule === 'FREQ=YEARLY' ? 'every year' : null
+  }
 
   const days = [...new Set(weekly)].sort((a, b) => a - b)
   if (days.length === 5 && days.every((day, i) => day === i + 1)) return 'weekdays'
@@ -143,6 +168,26 @@ export function nextOccurrence(entry: Entry, now: Date): Date | null {
       const at = entry.occurred_at === null ? null : parseISO(entry.occurred_at)
       const due = new Date(candidate)
       due.setHours(at?.getHours() ?? 9, at?.getMinutes() ?? 0, 0, 0)
+      if (due >= now) return candidate
+    }
+    return null
+  }
+
+  const monthDay = monthlyDay(entry)
+  if (monthDay !== null) {
+    // The weekly branch's two bounds, restated: never before the row's own
+    // start, and today only while its moment is still ahead. A month without
+    // the day — the 31st in February — is a month it does not happen in: the
+    // leap-day rule below, applied twelve times as often.
+    const from = on > today ? on : today
+    for (let ahead = 0; ahead < 14; ahead += 1) {
+      const candidate: Date = new Date(from.getFullYear(), from.getMonth() + ahead, monthDay)
+      if (candidate.getDate() !== monthDay) continue
+      if (candidate < from) continue
+      if (candidate.getTime() > from.getTime()) return candidate
+      const at = entry.occurred_at === null ? null : parseISO(entry.occurred_at)
+      const due = new Date(candidate)
+      due.setHours(at?.getHours() ?? ALL_DAY_HOUR, at?.getMinutes() ?? 0, 0, 0)
       if (due >= now) return candidate
     }
     return null

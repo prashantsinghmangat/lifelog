@@ -1,5 +1,5 @@
 import { format, parseISO } from 'date-fns'
-import { weeklyDays } from './events'
+import { monthlyDay, weeklyDays } from './events'
 import type { Entry } from '../types'
 
 /**
@@ -50,6 +50,11 @@ function falls(entry: Entry, day: string): boolean {
 
   const weekly = weeklyDays(entry)
   if (weekly !== null) return weekly.includes(on.getDay())
+
+  // A short month simply has no such `day` to be asked about, so the 31st
+  // skipping February needs no branch here.
+  const monthDay = monthlyDay(entry)
+  if (monthDay !== null) return on.getDate() === monthDay
 
   if (entry.data.rrule !== 'FREQ=YEARLY') return false
   // Matched as text so 29 February only ever recalls another 29 February,

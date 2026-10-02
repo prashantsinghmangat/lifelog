@@ -694,6 +694,17 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
     kind ??= 'event'
   }
 
+  // `every month` is the whole monthly grammar — the day comes from the date
+  // the entry resolves to, so `rent every month 5 jan` and a bare `rent every
+  // month` on the day being viewed both say which day without more words. Cut
+  // here for the weekly rule's reason: before the date, before the amount.
+  const monthly = repeat === null ? cut(rest, /\bevery\s+month\b/i, () => true) : null
+  if (monthly) {
+    rest = monthly.rest
+    matched = true
+    kind ??= 'event'
+  }
+
   const date = takeDate(rest, now)
   if (date) {
     rest = date.rest
@@ -831,7 +842,7 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
    * guaranteed to find it.
    */
   let committedLead: number | null = null
-  if (lead !== null && resolved === 'event' && repeat === null) {
+  if (lead !== null && resolved === 'event' && repeat === null && monthly === null) {
     const applied = takeLead(rest)
     if (applied !== null) {
       rest = applied.rest
@@ -867,6 +878,7 @@ export function parse(input: string, now: Date, defaultDay?: string): ParsedEntr
   // A weekly rule wins over the yearly one: "standup weekdays" is not an
   // anniversary even if somebody calls it a birthday standup.
   if (repeat) entry.data.rrule = weeklyRule(repeat.value)
+  else if (monthly) entry.data.rrule = `FREQ=MONTHLY;BYMONTHDAY=${occurredOn.getDate()}`
   else if (resolved === 'event' && recurring) entry.data.rrule = 'FREQ=YEARLY'
 
   // Minutes, nothing summed — the same rule `data.done` and `data.rrule`

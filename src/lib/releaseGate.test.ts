@@ -162,6 +162,14 @@ describe('corpus: repeats', () => {
     expect(r?.occurredAt).toContain('19:00:00')
   })
 
+  it('reads a monthly bill as one repeating row', () => {
+    const r = p('electricity bill every month')
+    expect(r?.kind).toBe('event')
+    expect(r?.data.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=1')
+    expect(r?.title).toBe('electricity bill')
+    expect(r?.amountPaise).toBeUndefined()
+  })
+
   // An untimed occurrence today is not still ahead, so the row starts at the
   // next listed day instead — NOW is a Tuesday and `every tuesday` lands a
   // week out, while `every weekday` lands tomorrow.

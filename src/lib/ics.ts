@@ -1,5 +1,5 @@
 import { addDays, addMinutes, parseISO } from 'date-fns'
-import { ALL_DAY_HOUR, done, weeklyDays } from './events'
+import { ALL_DAY_HOUR, done, monthlyDay, weeklyDays } from './events'
 import { dayKey } from './format'
 import type { Entry } from '../types'
 
@@ -121,9 +121,14 @@ function event(entry: Entry, now: Date): string[] {
   // The rule goes into the file, so the OS calendar repeats it too rather than
   // showing one lonely occurrence.
   const weekly = weeklyDays(entry)
+  const monthDay = monthlyDay(entry)
   if (weekly !== null) {
     const codes = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
     lines.push(`RRULE:FREQ=WEEKLY;BYDAY=${weekly.map((day) => codes[day]).join(',')}`)
+  } else if (monthDay !== null) {
+    // BYMONTHDAY=31 skips the months without one by RFC 5545, which is what
+    // the app's own occurrences and alarms already mean — three layers agree.
+    lines.push(`RRULE:FREQ=MONTHLY;BYMONTHDAY=${monthDay}`)
   } else if (isYearly(entry)) {
     lines.push('RRULE:FREQ=YEARLY')
   }
@@ -152,7 +157,7 @@ export function forCalendar(entries: Entry[], now: Date): Entry[] {
     (entry) =>
       entry.kind === 'event' &&
       !done(entry) &&
-      (isYearly(entry) || weeklyDays(entry) !== null || entry.occurred_on >= today),
+      (isYearly(entry) || weeklyDays(entry) !== null || monthlyDay(entry) !== null || entry.occurred_on >= today),
   )
 }
 

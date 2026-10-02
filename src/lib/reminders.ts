@@ -1,4 +1,4 @@
-﻿import { ALL_DAY_HOUR, done, nextOccurrence, recurring, weeklyDays, withLead } from './events'
+﻿import { ALL_DAY_HOUR, done, monthlyDay, nextOccurrence, recurring, weeklyDays, withLead } from './events'
 import { isNative } from './platform'
 import type { LocalNotificationsPlugin } from '@capacitor/local-notifications'
 import type { Entry } from '../types'
@@ -251,7 +251,7 @@ function nextFiring(day: number, now: Date, hour: number, minute: number): Date 
 type Alarm = {
   id: number
   at?: Date
-  on?: { weekday: number; hour: number; minute: number }
+  on?: { weekday?: number; day?: number; hour: number; minute: number }
 }
 
 /**
@@ -346,6 +346,37 @@ export function alarms(entry: Entry, now: Date): Alarm[] {
     // itself is never expanded into one-offs.
     const next = planned.reduce((a, b) => (a.soonest <= b.soonest ? a : b)).soonest
     return [...planned.map((p) => p.alarm), ...followUps(entry, next, now)]
+  }
+
+  /**
+   * A monthly repeat on days 1–28 is one OS cron, `on: { day, hour, minute }`,
+   * held back behind its start date exactly the way the weekly crons are. Days
+   * 29–31 are not: what `on: { day: 31 }` does in February is the OS's secret,
+   * and a wrong-day ring is the one thing this app must never produce — so
+   * those arm like the yearly branch instead, a one-off at the next real
+   * occurrence (`nextOccurrence` already skips the short months) that `sync`
+   * re-arms on every launch under the same id.
+   */
+  const monthDay = monthlyDay(entry)
+  if (monthDay !== null) {
+    const at = entry.occurred_at === null ? null : new Date(entry.occurred_at)
+    const hour = at?.getHours() ?? ALL_DAY_HOUR
+    const minute = at?.getMinutes() ?? 0
+    const id = notificationId(entry.id)
+
+    const next = nextOccurrence(entry, now)
+    if (next === null) return []
+    const when = new Date(next)
+    when.setHours(hour, minute, 0, 0)
+
+    if (monthDay <= 28) {
+      const soonest = new Date(now.getFullYear(), now.getMonth(), monthDay, hour, minute)
+      if (soonest.getTime() <= now.getTime()) soonest.setMonth(soonest.getMonth() + 1)
+      const start = localDay(entry.occurred_on)
+      if (start === null || soonest >= start)
+        return [{ id, on: { day: monthDay, hour, minute } }, ...followUps(entry, soonest, now)]
+    }
+    return [{ id, at: when }, ...followUps(entry, when, now)]
   }
 
   /**
