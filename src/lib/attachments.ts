@@ -87,7 +87,19 @@ export function targetSize(
  */
 export function yieldToPaint(): Promise<void> {
   return new Promise((resolve) => {
-    requestAnimationFrame(() => setTimeout(resolve, 0))
+    let settled = false
+    const settle = () => {
+      if (settled) return
+      settled = true
+      setTimeout(resolve, 0)
+    }
+    requestAnimationFrame(settle)
+    // This WebView can stop producing frames outright after returning from
+    // the photo picker, until the next touch — seen on-device as one staged
+    // photo and the rest of the batch stranded behind a frame that never
+    // came. The gap is a courtesy to the compositor, never a wall: when no
+    // frame arrives, the deadline moves the batch on.
+    setTimeout(settle, 100)
   })
 }
 

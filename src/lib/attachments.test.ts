@@ -14,6 +14,7 @@ import {
   removeAll,
   sweepOrphans,
   targetSize,
+  yieldToPaint,
 } from './attachments'
 
 /**
@@ -23,6 +24,17 @@ import {
  */
 
 const blob = () => new Blob(['x'], { type: 'image/jpeg' })
+
+describe('yieldToPaint', () => {
+  it('resolves even when no frame ever comes', async () => {
+    // A WebView that stops producing frames until the next touch stranded a
+    // photo batch behind this await on the device — the deadline is the way
+    // out (spec 036). The stub never calls back, as that WebView never did.
+    vi.stubGlobal('requestAnimationFrame', vi.fn())
+    await expect(yieldToPaint()).resolves.toBeUndefined()
+    vi.unstubAllGlobals()
+  })
+})
 
 describe('MAX_PHOTOS_PER_ENTRY', () => {
   // Both pickers quote this number in their messages; a drift here is a lie there.

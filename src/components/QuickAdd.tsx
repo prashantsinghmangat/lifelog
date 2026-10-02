@@ -286,9 +286,13 @@ function message(failure: unknown): string {
 function predecoded(url: string): Promise<void> {
   const probe = new Image()
   probe.src = url
-  return typeof probe.decode === 'function'
-    ? probe.decode().catch(() => {})
-    : Promise.resolve()
+  if (typeof probe.decode !== 'function') return Promise.resolve()
+  // Raced against a deadline for the same reason `yieldToPaint` carries one:
+  // ordering when the decoder answers, never a wall when it does not.
+  return Promise.race([
+    probe.decode().catch(() => {}),
+    new Promise<void>((resolve) => setTimeout(resolve, 500)),
+  ])
 }
 
 /** The text as the question grammar wants it: exactly one leading `?`. */
@@ -777,12 +781,15 @@ export function QuickAdd({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          // "done" while asking, since Enter there only dismisses the
-          // keyboard — there is nothing to send, the answer is already on
-          // screen. Never "send" in Log: submitting is the Save button's job
-          // alone now, and a keyboard hinting "send" for a key that breaks
-          // the line instead is the exact mismatch this spec exists to fix.
-          enterKeyHint={asking ? 'done' : 'enter'}
+          // "done" in Ask, since Enter there only dismisses the keyboard —
+          // the answer is already on screen. Read off the *mode*, never off
+          // `asking`: flipping this on the keystroke that turned the text
+          // into a question made Chromium restart the IME's input connection
+          // mid-composition, and Samsung's keyboard dropped the letter it was
+          // composing — the first letter typed in Ask (spec 037). A `?`
+          // question in Log keeps 'enter': a stable wrong glyph over a
+          // restarted keyboard, every time.
+          enterKeyHint={mode === 'ask' ? 'done' : 'enter'}
           placeholder={mode === 'ask' ? 'What do you want to know?' : 'What happened?'}
           aria-label={mode === 'ask' ? 'What do you want to know?' : 'What happened?'}
           onChange={(event) => {
@@ -796,7 +803,10 @@ export function QuickAdd({
             // it no longer claims "send" for something Enter no longer does.
             // Explicit, because implicit form submission on an IME action key
             // is not something every Android keyboard agreed about either.
-            if (event.key === 'Enter' && asking) {
+            // The whole mode, not just a parsed question: the answer pass
+            // reads the text one deferred render behind (035), so on a fast
+            // Enter `asking` can still be false for a line that is one.
+            if (event.key === 'Enter' && (mode === 'ask' || asking)) {
               event.preventDefault()
               // A question is single-line and the answer is already on
               // screen — it updates as you type — so there is nothing to
