@@ -27,6 +27,15 @@ const ENTRY_INDEX = 'entryId'
 const MAX_DIMENSION = 1600
 const JPEG_QUALITY = 0.82
 
+/**
+ * How many photos one entry may hold. Ten is room for every receipt a day
+ * produces; past it a batch stops being proof of an entry and starts being a
+ * gallery, which is not what this store is for. Enforced by both pickers —
+ * the composer's strip and the editor's — never by the store itself, so a
+ * record already over the line (there are none, but honesty) still lists.
+ */
+export const MAX_PHOTOS_PER_ENTRY = 10
+
 /** What the Document button accepts — PDF plus the common office formats. */
 const DOCUMENT_MIME_TYPES = new Set([
   'application/pdf',
@@ -92,37 +101,96 @@ export function yieldToPaint(): Promise<void> {
  * again immediately. One retry, never a loop: a file the device genuinely
  * cannot decode must still fail quickly.
  */
-async function decode(file: File): Promise<ImageBitmap> {
+async function decode(source: Blob): Promise<ImageBitmap> {
   try {
-    return await createImageBitmap(file)
+    return await createImageBitmap(source)
   } catch {
     await new Promise((resolve) => setTimeout(resolve, 150))
-    return await createImageBitmap(file)
+    return await createImageBitmap(source)
   }
 }
 
-export async function fromFile(file: File): Promise<Blob> {
-  const bitmap = await decode(file)
-
-  const canvas = document.createElement('canvas')
-  try {
-    const { width, height } = targetSize(bitmap.width, bitmap.height)
-    canvas.width = width
-    canvas.height = height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('Canvas 2D context is not available')
-    ctx.drawImage(bitmap, 0, 0, width, height)
-  } finally {
-    // **The second of two camera photos used to be lost here.** An
-    // `ImageBitmap` holds native memory that garbage collection does not
-    // hurry to reclaim, and a 12MP photo decodes to roughly 48MB of it. Two
-    // attached together meant the second `createImageBitmap` asking a WebView
-    // heap the first one was still holding — it failed, and the entry saved
-    // with one of the two photos it was given. Released the moment it has
-    // been drawn, and in a `finally` because a throw between here and there
-    // leaks it just as effectively as forgetting to call it.
-    bitmap.close()
+/**
+ * The picked files' bytes, read now rather than when each one's turn to
+ * decode comes round. Android's picker hands back content-URI-backed `File`
+ * handles whose read grant can go stale while earlier photos in the batch are
+ * still decoding — the retry in `decode` then re-reads the same dead handle.
+ * A copy in memory cannot go stale. One `null` per unreadable file, in place,
+ * so the caller can still say which photo was lost rather than losing the
+ * whole batch to one bad handle.
+ */
+export async function snapshot(files: readonly File[]): Promise<(File | null)[]> {
+  const copies: (File | null)[] = []
+  for (const file of files) {
+    try {
+      const bytes = await file.arrayBuffer()
+      // A `File` again, not a bare `Blob`: `useAttachments.add` reads a bare
+      // blob as "already through this pipeline" — the camera's shape.
+      copies.push(new File([bytes], file.name, { type: file.type }))
+    } catch {
+      copies.push(null)
+    }
   }
+  return copies
+}
+
+/** The downscaled drawing, on a canvas the caller will encode and then zero. */
+function draw(
+  image: ImageBitmap | HTMLImageElement,
+  sourceWidth: number,
+  sourceHeight: number,
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  const { width, height } = targetSize(sourceWidth, sourceHeight)
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas 2D context is not available')
+  ctx.drawImage(image, 0, 0, width, height)
+  return canvas
+}
+
+async function rasterise(source: Blob): Promise<HTMLCanvasElement> {
+  let bitmap: ImageBitmap | null
+  try {
+    bitmap = await decode(source)
+  } catch {
+    bitmap = null
+  }
+
+  if (bitmap !== null) {
+    try {
+      return draw(bitmap, bitmap.width, bitmap.height)
+    } finally {
+      // **The second of two camera photos used to be lost here.** An
+      // `ImageBitmap` holds native memory that garbage collection does not
+      // hurry to reclaim, and a 12MP photo decodes to roughly 48MB of it. Two
+      // attached together meant the second `createImageBitmap` asking a WebView
+      // heap the first one was still holding — it failed, and the entry saved
+      // with one of the two photos it was given. Released the moment it has
+      // been drawn, and in a `finally` because a throw between here and there
+      // leaks it just as effectively as forgetting to call it.
+      bitmap.close()
+    }
+  }
+
+  // `createImageBitmap` refused twice. The `<img>` pipeline is the decoder
+  // the WebView already trusts for every page it renders, and under memory
+  // pressure it keeps working after the bitmap API has given up — the last
+  // thing to try before telling the user their photo is lost.
+  const url = URL.createObjectURL(source)
+  try {
+    const image = new Image()
+    image.src = url
+    await image.decode()
+    return draw(image, image.naturalWidth, image.naturalHeight)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+export async function fromFile(source: Blob): Promise<Blob> {
+  const canvas = await rasterise(source)
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(

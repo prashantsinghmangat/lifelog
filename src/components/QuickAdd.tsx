@@ -14,7 +14,7 @@ import { KindMark } from './KindMark'
 import { PhotoViewer } from './PhotoViewer'
 import { useDictation } from '../hooks/useDictation'
 import { expectForegroundReturn } from '../lib/applock'
-import { fromFile, put, yieldToPaint } from '../lib/attachments'
+import { MAX_PHOTOS_PER_ENTRY, fromFile, put, snapshot, yieldToPaint } from '../lib/attachments'
 import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import { clock, minutes, relativeDay, rupees } from '../lib/format'
 import { parse, parseMulti, type ParsedEntry } from '../lib/parser'
@@ -277,6 +277,20 @@ function message(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure)
 }
 
+/**
+ * Resolves once the browser holds decoded pixels for `url`, so a tile shown
+ * after it can paint on its first frame. A `decode()` that is missing (jsdom)
+ * or refuses is not a lost photo — the JPEG behind the URL just encoded fine —
+ * so the worst either may cost is a late paint, never a thrown-away tile.
+ */
+function predecoded(url: string): Promise<void> {
+  const probe = new Image()
+  probe.src = url
+  return typeof probe.decode === 'function'
+    ? probe.decode().catch(() => {})
+    : Promise.resolve()
+}
+
 /** The text as the question grammar wants it: exactly one leading `?`. */
 function asQuestion(text: string): string {
   return `? ${text.replace(/^\s*\?+\s*/, '')}`
@@ -418,14 +432,31 @@ export function QuickAdd({
   async function stage(files: FileList) {
     setPhotoProblem(null)
     const picked = [...files]
-    setPending((n) => n + picked.length)
-    for (const file of picked) {
+    const room = Math.max(0, MAX_PHOTOS_PER_ENTRY - staged.length - pending)
+    const taking = picked.slice(0, room)
+    if (taking.length < picked.length) {
+      setPhotoProblem(
+        taking.length === 0
+          ? `An entry holds ${MAX_PHOTOS_PER_ENTRY} photos.`
+          : `An entry holds ${MAX_PHOTOS_PER_ENTRY} photos — the first ${taking.length} of these were added.`,
+      )
+    }
+    if (taking.length === 0) return
+    setPending((n) => n + taking.length)
+    // Bytes before decodes: the picker's content-URI handle can lose its read
+    // grant while earlier photos in the batch are still decoding, and the
+    // decode retry then re-reads the same dead handle — see `snapshot`.
+    const copies = await snapshot(taking)
+    for (const copy of copies) {
       try {
-        const blob = await fromFile(file)
-        setStaged((held) => [
-          ...held,
-          { id: crypto.randomUUID(), blob, url: URL.createObjectURL(blob) },
-        ])
+        if (copy === null) throw new Error('its file could not be read')
+        const blob = await fromFile(copy)
+        const url = URL.createObjectURL(blob)
+        // Pixels before the tile: committed only once the browser holds the
+        // decoded image, so a thumbnail can never sit blank waiting on a
+        // paint nothing forces.
+        await predecoded(url)
+        setStaged((held) => [...held, { id: crypto.randomUUID(), blob, url }])
       } catch (failure) {
         setPhotoProblem(`Couldn't add that photo: ${message(failure)}`)
       } finally {
@@ -446,6 +477,10 @@ export function QuickAdd({
    * because backing out of the camera is a decision and not a fault.
    */
   async function shoot() {
+    if (staged.length + pending >= MAX_PHOTOS_PER_ENTRY) {
+      setPhotoProblem(`An entry holds ${MAX_PHOTOS_PER_ENTRY} photos.`)
+      return
+    }
     setPhotoProblem(null)
     expectForegroundReturn()
     const taken = await takePhoto()

@@ -14,7 +14,7 @@ import {
 import { PhotoViewer } from './PhotoViewer'
 import { Sheet } from './Sheet'
 import { useAttachments } from '../hooks/useAttachments'
-import { yieldToPaint, type Attachment } from '../lib/attachments'
+import { MAX_PHOTOS_PER_ENTRY, snapshot, yieldToPaint, type Attachment } from '../lib/attachments'
 import { expectForegroundReturn } from '../lib/applock'
 import { available as cameraAvailable, takePhoto } from '../lib/camera'
 import { shareBlob } from '../lib/deliver'
@@ -193,8 +193,10 @@ export function EntryEditor({
     void restoreAttachment(undoable)
     setUndoable(null)
   }
-  /** A camera that would not open, said where a failed photo save is already said. */
-  const [cameraProblem, setCameraProblem] = useState<string | null>(null)
+  /** A photo that could not arrive — camera refused, picker handed a dead
+   *  file, or the entry is already at its ten — said where a failed photo
+   *  save is already said. */
+  const [photoProblem, setPhotoProblem] = useState<string | null>(null)
   /** A rejected or oversized document, said next to Document rather than Camera's slot. */
   const [documentProblem, setDocumentProblem] = useState<string | null>(null)
 
@@ -213,16 +215,20 @@ export function EntryEditor({
 
   /** Cancelling says nothing: backing out of the camera is a decision, not a fault. */
   async function shoot() {
-    setCameraProblem(null)
+    if (photos.length >= MAX_PHOTOS_PER_ENTRY) {
+      setPhotoProblem(`An entry holds ${MAX_PHOTOS_PER_ENTRY} photos.`)
+      return
+    }
+    setPhotoProblem(null)
     expectForegroundReturn()
     const taken = await takePhoto()
     if (taken === 'cancelled') return
     if (taken === 'denied') {
-      setCameraProblem('lifelog needs camera permission to take a photo.')
+      setPhotoProblem('lifelog needs camera permission to take a photo.')
       return
     }
     if (taken === 'unavailable') {
-      setCameraProblem("Couldn't open the camera.")
+      setPhotoProblem("Couldn't open the camera.")
       return
     }
     await add(taken)
@@ -771,10 +777,27 @@ export function EntryEditor({
               // heap — see `attachments.ts`'s `fromFile` — so a multi-select
               // pick adds one at a time rather than firing every `add` at once,
               // with a frame between them so each thumbnail actually paints
-              // instead of waiting on the whole batch.
+              // instead of waiting on the whole batch. Bytes are copied out of
+              // the picker's handles first — see `snapshot` — because those
+              // handles can go stale before a late photo's turn comes.
               void (async () => {
-                for (const file of picked) {
-                  await add(file)
+                setPhotoProblem(null)
+                const room = Math.max(0, MAX_PHOTOS_PER_ENTRY - photos.length)
+                const taking = picked.slice(0, room)
+                if (taking.length < picked.length) {
+                  setPhotoProblem(
+                    taking.length === 0
+                      ? `An entry holds ${MAX_PHOTOS_PER_ENTRY} photos.`
+                      : `An entry holds ${MAX_PHOTOS_PER_ENTRY} photos — the first ${taking.length} of these were added.`,
+                  )
+                }
+                const copies = await snapshot(taking)
+                for (const copy of copies) {
+                  if (copy === null) {
+                    setPhotoProblem("Couldn't add that photo: its file could not be read.")
+                    continue
+                  }
+                  await add(copy)
                   await yieldToPaint()
                 }
               })()
@@ -834,9 +857,9 @@ export function EntryEditor({
               Couldn&apos;t save that photo.
             </p>
           )}
-          {cameraProblem !== null && (
+          {photoProblem !== null && (
             <p role="alert" className="mt-1.5 text-xs text-expense">
-              {cameraProblem}
+              {photoProblem}
             </p>
           )}
           {documentProblem !== null && (

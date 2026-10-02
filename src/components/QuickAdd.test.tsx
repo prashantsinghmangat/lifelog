@@ -12,8 +12,12 @@ import type { Entry } from '../types'
 // which jsdom has — the bytes are `attachments.test.ts`'s business. What these
 // tests pin is *which entry id* a staged photo is filed against.
 vi.mock('../lib/attachments', () => ({
+  MAX_PHOTOS_PER_ENTRY: 10,
   fromFile: vi.fn(async () => new Blob(['x'], { type: 'image/jpeg' })),
   put: vi.fn(async () => {}),
+  // Real one copies bytes out of the picker's handles; under test the files
+  // are already plain memory.
+  snapshot: vi.fn(async (files: File[]) => files),
   // Real one waits on an animation frame; under test it only has to settle.
   yieldToPaint: vi.fn(async () => {}),
 }))
@@ -743,6 +747,35 @@ describe('attaching a photo while composing', () => {
     // Saving files what was already processed; it does not decode again.
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1))
     expect(fromFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('stages at most ten photos and says which part of the pick was kept', async () => {
+    setup()
+    const dozen = Array.from(
+      { length: 12 },
+      (_, at) => new File(['x'], `p${at}.jpg`, { type: 'image/jpeg' }),
+    )
+    await userEvent.upload(picker(), dozen)
+
+    await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(10))
+    expect(screen.getByRole('alert').textContent).toMatch(/holds 10 photos — the first 10/)
+    // The two past the cap were never decoded, not decoded and thrown away.
+    expect(fromFile).toHaveBeenCalledTimes(10)
+  })
+
+  it('refuses the camera at ten rather than staging an eleventh', async () => {
+    setup()
+    const ten = Array.from(
+      { length: 10 },
+      (_, at) => new File(['x'], `p${at}.jpg`, { type: 'image/jpeg' }),
+    )
+    await userEvent.upload(picker(), ten)
+    await waitFor(() => expect(document.querySelectorAll('img')).toHaveLength(10))
+
+    await userEvent.click(screen.getByLabelText('Take photo'))
+    expect(screen.getByRole('alert').textContent).toMatch(/holds 10 photos\./)
+    expect(takePhoto).not.toHaveBeenCalled()
+    expect(document.querySelectorAll('img')).toHaveLength(10)
   })
 
   it('opens a staged photo full-size when its thumbnail is tapped', async () => {

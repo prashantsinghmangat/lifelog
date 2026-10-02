@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  MAX_PHOTOS_PER_ENTRY,
   acceptedDocument,
   firstPhotoBlobs,
   fromFile,
@@ -22,6 +23,13 @@ import {
  */
 
 const blob = () => new Blob(['x'], { type: 'image/jpeg' })
+
+describe('MAX_PHOTOS_PER_ENTRY', () => {
+  // Both pickers quote this number in their messages; a drift here is a lie there.
+  it('is ten', () => {
+    expect(MAX_PHOTOS_PER_ENTRY).toBe(10)
+  })
+})
 
 describe('orphansOf', () => {
   it('drops stored entry ids absent from the live set', () => {
@@ -249,12 +257,15 @@ describe('fromFile', () => {
     vi.unstubAllGlobals()
   })
 
-  it('gives up after the second attempt rather than looping', async () => {
+  it('falls back to the img-element decoder once both bitmap attempts fail', async () => {
     const decode = vi.fn<(file: File) => Promise<unknown>>().mockRejectedValue(new Error('nope'))
     vi.stubGlobal('createImageBitmap', decode)
 
+    // Node has no `Image`, so reaching for the fallback is itself the proof
+    // here: the rejection is the fallback's missing element, not the bitmap
+    // API's own 'nope' — and that API was still only asked twice, never looped.
     await expect(fromFile(new File(['x'], 'x.jpg', { type: 'image/jpeg' }))).rejects.toThrow(
-      /nope/,
+      /Image is not defined/,
     )
     expect(decode).toHaveBeenCalledTimes(2)
 
