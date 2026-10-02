@@ -278,6 +278,27 @@ describe('choosing between logging and asking', () => {
     expect(screen.getByText('₹350 · 1 entry · last today')).toBeTruthy()
   })
 
+  it('keeps the keyboard hint fixed across the first keystroke in Ask', async () => {
+    const { box } = setup({ corpus })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    // Flipping `enterkeyhint` on the keystroke that made the text a question
+    // restarted the IME mid-composition and ate the letter being composed —
+    // the hint belongs to the mode, never to the parse (spec 037).
+    expect(box.getAttribute('enterkeyhint')).toBe('done')
+    await userEvent.type(box, 'e')
+    expect(box.getAttribute('enterkeyhint')).toBe('done')
+  })
+
+  it('drops the keyboard on Enter in Ask even before the parse has caught up', async () => {
+    const { box } = setup({ corpus })
+    await userEvent.click(screen.getByRole('button', { name: 'Ask' }))
+
+    await userEvent.type(box, 'how much today{Enter}')
+    // Never a line break: in Ask, Enter only ever dismisses the keyboard.
+    expect(box.value).not.toContain('\n')
+  })
+
   it('says what the box will do', async () => {
     const { box } = setup()
     expect(box.placeholder).toBe('What happened?')
