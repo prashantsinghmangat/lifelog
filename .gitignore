@@ -53,3 +53,7 @@ PROJECT.md
 CLAUDE.md
 .claude/
 specs/
+
+# Stitch design mocks (briefs, prompts, per-screen code.html/screen.png). Source
+# reference for UI work, cloned from exactly — not part of the built app.
+design-ref/
