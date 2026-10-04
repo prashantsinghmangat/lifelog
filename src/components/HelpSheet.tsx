@@ -1,4 +1,5 @@
 import { Sheet } from './Sheet'
+import { PRODUCT } from '../lib/product'
 
 /**
  * The manual, in the app, because the syntax is the product and it is otherwise
@@ -82,10 +83,10 @@ type Props = {
 
 export function HelpSheet({ onPick, onClose }: Props) {
   return (
-    <Sheet label="How to use lifelog" onClose={onClose}>
+    <Sheet label={`How to use ${PRODUCT.name}`} onClose={onClose}>
       {(requestClose) => (
       <>
-      <h2 className="text-sm font-semibold">How to use lifelog</h2>
+      <h2 className="text-sm font-semibold">How to use {PRODUCT.name}</h2>
       <p className="mt-1 text-xs text-muted">
         One box. Type what happened and press send. Tap any example to try it.
       </p>

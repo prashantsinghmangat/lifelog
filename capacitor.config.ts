@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli'
+import { PRODUCT } from './src/lib/product'
 
 /**
  * Set CAP_DEV_URL to point the installed app at the Vite dev server instead of
@@ -17,8 +18,10 @@ import type { CapacitorConfig } from '@capacitor/cli'
 const devUrl = process.env['CAP_DEV_URL']
 
 const config: CapacitorConfig = {
+  // The id is technical identity and survives a rename: changing it is a new
+  // app on the Play Store, not a renamed one. The label is not.
   appId: 'com.prashant.lifelog',
-  appName: 'lifelog',
+  appName: PRODUCT.name,
   webDir: 'dist',
   plugins: {
     LocalNotifications: {

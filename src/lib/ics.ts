@@ -2,6 +2,7 @@ import { addDays, addMinutes, parseISO } from 'date-fns'
 import { ALL_DAY_HOUR, done, monthlyDay, weeklyDays } from './events'
 import { dayKey } from './format'
 import type { Entry } from '../types'
+import { PRODUCT } from './product'
 
 /**
  * Turns events into an iCalendar file so the operating system does the
@@ -165,10 +166,10 @@ export function toIcs(entries: Entry[], now: Date): string {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//lifelog//EN',
+    `PRODID:-//${PRODUCT.name}//EN`,
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    'X-WR-CALNAME:lifelog',
+    `X-WR-CALNAME:${PRODUCT.name}`,
     ...entries.flatMap((entry) => event(entry, now)),
     'END:VCALENDAR',
   ]

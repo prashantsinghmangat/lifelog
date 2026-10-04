@@ -1,4 +1,5 @@
 ﻿import { ALL_DAY_HOUR, done, monthlyDay, nextOccurrence, recurring, weeklyDays, withLead } from './events'
+import { PRODUCT } from './product'
 import { isNative } from './platform'
 import type { LocalNotificationsPlugin } from '@capacitor/local-notifications'
 import type { Entry } from '../types'
@@ -463,7 +464,7 @@ function notification(entry: Entry, alarm: Alarm) {
   return {
     id: alarm.id,
     title: entry.title,
-    body: 'lifelog reminder',
+    body: `${PRODUCT.name} reminder`,
     channelId: REMINDERS,
     // Every notification of a nagged entry carries the button, the base ring
     // included — ending the run from the first ring is the point of it.

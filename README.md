@@ -662,6 +662,55 @@ never run.
 Note that environment variables reach a deployed function only on the **next deploy**. Editing
 them and expecting the running function to notice is the usual first mistake.
 
+## Rebranding
+
+The public name is not final, so it lives in one file: **[`src/lib/product.ts`](src/lib/product.ts)**.
+Everything a reader sees reads from it, and everything a machine keys on deliberately does not.
+
+**To change the name**, edit `PRODUCT` and run `npm test`. The suite is the checklist — two tests
+fail on purpose until the hand-maintained files follow:
+
+| What | Where | How |
+| --- | --- | --- |
+| Name, short name, tagline, description, URLs, export-filename slug | `src/lib/product.ts` | Edit. Everything below follows from it. |
+| Browser tab, iOS home-screen title | `index.html` | Automatic — placeholders filled by `fillBrand` through Vite, in dev and in a build. |
+| PWA manifest, Capacitor app label | `vite.config.ts`, `capacitor.config.ts` | Automatic — both import `PRODUCT`. |
+| Android launcher label | `android/app/src/main/res/values/strings.xml` | **By hand.** Static XML cannot import TypeScript; `product.test.ts` fails until `app_name` and `title_activity_main` match. |
+| Privacy page | `public/privacy.html` | **By hand.** Served byte-for-byte, so the name is a literal; `product.test.ts` fails until all four mentions match. |
+| Theme, palettes, typography | `src/lib/palettes.ts` | Unrelated to the name — one table, seven palettes, `contrast.test.ts` holds `index.css` equal to it. A visual rebrand is that file. |
+| Logo, favicon, launcher and notification icons | `public/logo.svg`, `public/icon-{192,512,maskable-512}.png`, `android/app/src/main/res/mipmap-*/`, `drawable/ic_stat_lifelog.xml` | Replace the files, keep the names. `logo.svg` carries the old name in its own `aria-label` — edit it there too. `ic_stat_lifelog` is the colourless silhouette Android tints; its *filename* is referenced from `capacitor.config.ts` and is not worth renaming. |
+
+**Do not change these, whatever the new name is.** Each one is a data migration dressed as a
+rename, and `rebrand.test.tsx` fails if one moves:
+
+- `appId` `com.prashant.lifelog` and the Java package under it — a different id is a *different
+  app* on the Play Store, not a renamed one. Existing installs do not upgrade.
+- `lifelog.theme`, `.palette`, `.who`, `.lock`, `.nudges`, `.log.<userId>` — localStorage keys.
+  Renaming them loses a device's settings, its lock state and any guest log not yet synced.
+- `lifelog-attachments` — the IndexedDB database. Renaming it orphans every photo and document on
+  the device; they are stored nowhere else.
+- `lifelog-reminders-v2`, `lifelog-prompts-v1` — notification channels. A channel's settings belong
+  to the user once it exists, so a renamed channel is a *new* one at default importance and every
+  reminder on it arrives silently. See "Sound comes from the channel" in ARCHITECTURE.md; this has
+  shipped broken here before.
+- `UID:<id>@lifelog` in `ics.ts` — the identity of every event already exported to somebody's
+  calendar. Change it and a re-import duplicates instead of updating.
+- Table and column names, the `restore_entries` RPC, migration filenames, the Supabase project ref.
+- `LIFELOG_KEYSTORE` and the other signing variables. **The keystore itself must not be replaced** —
+  a new signing key cannot update an existing Play listing.
+
+**Outside this repository**, and nobody's test will catch these:
+
+- **Supabase → Authentication → Email Templates → Magic Link.** The repo's copy at
+  `supabase/templates/magic-link.html` is pasted in by hand, so editing it here changes nothing
+  that is sent. It names the product six times.
+- **Supabase → Authentication → URL Configuration**, and the sender name under Senders, if the
+  domain changes.
+- **Play Console**: store listing, app title, screenshots, the data-safety form.
+- **The domain** (`lifelog-timeline.netlify.app` today) — it is in `PRODUCT.url`, the Supabase
+  redirect allowlist, and README. Moving it is a deploy change, not a code one.
+- Any social account or external link added later.
+
 ## Bundle size
 
 **The budget is 150 KB gzipped of what a browser fetches** — the main js chunk, the CSS and the

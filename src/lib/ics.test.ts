@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { forCalendar, toIcs } from './ics'
 import type { Entry, Kind } from '../types'
+import { PRODUCT } from './product'
 
 // Tuesday, 1 September 2026, 10:00 local.
 const NOW = new Date(2026, 8, 1, 10, 0, 0)
@@ -29,6 +30,14 @@ describe('calendar structure', () => {
     expect(lines(ics)[0]).toBe('BEGIN:VCALENDAR')
     expect(ics).toContain('VERSION:2.0')
     expect(ics.trimEnd().endsWith('END:VCALENDAR')).toBe(true)
+  })
+
+  it('names the calendar after the product rather than a literal', () => {
+    // The two places a calendar app shows the source of an import. Off
+    // `PRODUCT` so a rename reaches them; the UID below deliberately is not.
+    const ics = toIcs([entry({ id: 'a' })], NOW)
+    expect(ics).toContain(`PRODID:-//${PRODUCT.name}//EN`)
+    expect(ics).toContain(`X-WR-CALNAME:${PRODUCT.name}`)
   })
 
   it('uses CRLF line endings, which the spec requires', () => {

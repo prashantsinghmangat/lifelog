@@ -2,6 +2,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { PRODUCT } from './src/lib/product.ts'
+import { fillBrand } from './src/lib/productHtml.ts'
 
 export default defineConfig({
   // The source has zero console statements of its own; this makes that
@@ -25,6 +27,10 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // No `apply`, so it runs in dev and in a build: the dev server transforms
+    // index.html through this same hook, which is what keeps one name in one
+    // place instead of a served copy and a shipped copy drifting apart.
+    { name: 'product-brand', transformIndexHtml: (html) => fillBrand(html, PRODUCT) },
     VitePWA({
       registerType: 'autoUpdate',
       // Registered from main.tsx instead of an injected script, because it must
@@ -33,9 +39,9 @@ export default defineConfig({
       // every update silently fails to arrive.
       injectRegister: null,
       manifest: {
-        name: 'lifelog',
-        short_name: 'lifelog',
-        description: 'One timeline for expenses, hours, events and notes',
+        name: PRODUCT.name,
+        short_name: PRODUCT.shortName,
+        description: PRODUCT.tagline,
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

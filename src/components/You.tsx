@@ -20,6 +20,7 @@ import { isNative } from '../lib/platform'
 import { permission, requestPermission } from '../lib/reminders'
 import { supabase } from '../lib/supabase'
 import type { Theme } from '../hooks/useTheme'
+import { PRODUCT } from '../lib/product'
 
 const THEMES: { value: Theme; label: string; icon?: ReactNode }[] = [
   { value: 'system', label: 'System', icon: <AutoIcon size={15} /> },
@@ -279,7 +280,7 @@ export function You({
           className="mt-3.5 flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-sunken text-sm font-medium text-accent transition-opacity hover:opacity-80"
         >
           <BookIcon size={18} />
-          How to use lifelog
+          How to use {PRODUCT.name}
         </button>
       </div>
 

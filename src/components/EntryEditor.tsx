@@ -43,6 +43,7 @@ import { recurringTitle } from '../lib/parser'
 import { fireAt } from '../lib/reminders'
 import type { Patch, Row } from '../hooks/useEntries'
 import type { Kind } from '../types'
+import { PRODUCT } from '../lib/product'
 
 type Props = {
   row: Row
@@ -223,7 +224,7 @@ export function EntryEditor({
     const taken = await takePhoto()
     if (taken === 'cancelled') return
     if (taken === 'denied') {
-      setPhotoProblem('lifelog needs camera permission to take a photo.')
+      setPhotoProblem(`${PRODUCT.name} needs camera permission to take a photo.`)
       return
     }
     if (taken === 'unavailable') {
@@ -338,7 +339,7 @@ export function EntryEditor({
     if (showAmount) {
       const paise = paiseFrom(amount)
       if (paise !== null && !amountFits(paise)) {
-        setProblem(`The largest amount lifelog can store is ${rupees(MAX_PAISE)}.`)
+        setProblem(`The largest amount ${PRODUCT.name} can store is ${rupees(MAX_PAISE)}.`)
         return
       }
       patch.amount_paise = paise

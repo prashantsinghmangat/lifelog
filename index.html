@@ -13,8 +13,10 @@
     <!-- iOS does not always take the home-screen icon from the manifest; without
          this it can use a screenshot of the page instead. -->
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <meta name="apple-mobile-web-app-title" content="lifelog" />
-    <title>lifelog</title>
+    <meta name="apple-mobile-web-app-title" content="%PRODUCT_SHORT_NAME%" />
+    <!-- Both filled by `fillBrand` through Vite's `transformIndexHtml`, in dev
+         and in a build alike. The name lives in `src/lib/product.ts`. -->
+    <title>%PRODUCT_NAME%</title>
   </head>
   <body>
     <div id="root"></div>

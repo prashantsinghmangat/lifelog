@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { You } from './You'
 import { PALETTES } from '../lib/palettes'
 import { isNative } from '../lib/platform'
+import { PRODUCT } from '../lib/product'
 
 // The account service is Login/App business; nothing here should reach it.
 vi.mock('../lib/supabase', () => ({
@@ -109,10 +110,10 @@ describe('the account block is metadata', () => {
 })
 
 describe('the manual lives on the account card', () => {
-  it('offers How to use lifelog there, one tap from the top', async () => {
+  it('offers the manual there, one tap from the top', async () => {
     const onHelp = vi.fn()
     setup({ onHelp })
-    await userEvent.click(screen.getByRole('button', { name: 'How to use lifelog' }))
+    await userEvent.click(screen.getByRole('button', { name: `How to use ${PRODUCT.name}` }))
     expect(onHelp).toHaveBeenCalledTimes(1)
   })
 })

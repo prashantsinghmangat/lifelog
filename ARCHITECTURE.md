@@ -938,6 +938,26 @@ back on Today whenever it matches. Found by emulating 1440px in the device's own
 the only reason it was found at all: the unit tests stub `matchMedia` to `matches: false` and the
 phone never crosses the breakpoint.
 
+**The product's name is config; everything a machine keys on is not.** The public name is not
+settled, and `lifelog` was written out in 28 places — four of them (the HTML title, the PWA
+manifest, the Capacitor label, the Android `app_name`) unreachable from runtime code. `PRODUCT` in
+`src/lib/product.ts` is now the one source, and the split it encodes is the load-bearing part: a
+rename must never touch a localStorage key, the `lifelog-attachments` database, a notification
+channel id, `appId`, or the `UID:<id>@lifelog` on every event already in somebody's calendar. Each
+of those is a data migration wearing a rename's clothes, and the channel one has shipped broken
+here before — see "Sound comes from the channel" above.
+
+Two files carry the name where TypeScript cannot reach them: `android/app/.../values/strings.xml`
+is static XML, and `public/privacy.html` is served byte-for-byte. Neither is generated. They are
+pinned by `product.test.ts` instead — the bargain `palettes.ts` strikes with `index.css` and for
+the same reason: two copies that must agree, kept in agreement by a test rather than by
+remembering. **The bug that earned the test:** `privacy.html` went live reading `LifLog`, twice. A
+case-insensitive grep for the real name never finds that, which is exactly how a misspelled brand
+survives on the one page a reader takes literally. `rebrand.test.tsx` rehearses the whole rename —
+it mocks the name to `TestBrand` and asserts the brand reached every surface *and* that no
+identifier moved, because a rename that propagates everywhere is as broken as one that propagates
+nowhere.
+
 **The toast, the control and the nav are one block in flow, and that is what retired `--dock`.**
 A toast over the control is not a cosmetic overlap — `Undo` and `Save` sat on top of each other
 once and pressing one hit the other — and the answer for a while was a constant in `index.css`

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { PRODUCT } from '../lib/product'
 
 /**
  * The lock overlay. Deliberately not a `Sheet`: a sheet dismisses on backdrop
@@ -19,14 +20,14 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
         '@aparajita/capacitor-biometric-auth'
       )
       await BiometricAuth.authenticate({
-        reason: 'Unlock lifelog',
+        reason: `Unlock ${PRODUCT.name}`,
         // The OS dialog itself falls back to the device PIN/pattern — this is
         // what makes an app-grown passcode unnecessary.
         allowDeviceCredential: true,
         // Class 2 is enough for gating UI, and `strong` would exclude face
         // unlock on devices where face is class 2, for no gain here.
         androidBiometryStrength: AndroidBiometryStrength.weak,
-        androidTitle: 'Unlock lifelog',
+        androidTitle: `Unlock ${PRODUCT.name}`,
       })
       onUnlock()
     } catch {
@@ -50,7 +51,7 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="lifelog is locked"
+      aria-label={`${PRODUCT.name} is locked`}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-surface"
     >
       <div
@@ -59,7 +60,7 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
       >
         L
       </div>
-      <p className="text-sm text-muted">lifelog is locked</p>
+      <p className="text-sm text-muted">{PRODUCT.name} is locked</p>
       <button
         type="button"
         disabled={asking}

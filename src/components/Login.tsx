@@ -1,3 +1,4 @@
+import { PRODUCT } from '../lib/product'
 import { useState, type FormEvent } from 'react'
 import { tokenFrom } from '../lib/signinLink'
 import { supabase } from '../lib/supabase'
@@ -200,7 +201,7 @@ export function Login({ onGuest, onCancel }: Props) {
           whole product is a text box that reads a sentence, and somebody who
           knows that before signing in knows what to do with the box when they
           get there. */}
-      <h1 className="text-2xl font-semibold tracking-tight">lifelog</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{PRODUCT.name}</h1>
       <p className="mt-1 mb-6 text-sm text-muted">
         Everything that happens, one line at a time.
       </p>

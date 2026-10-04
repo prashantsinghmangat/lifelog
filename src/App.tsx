@@ -17,6 +17,7 @@ import {
   SunIcon,
 } from './components/Icons'
 import { Login } from './components/Login'
+import { PRODUCT } from './lib/product'
 import { MonthGrid } from './components/MonthGrid'
 import { OnThisDay } from './components/OnThisDay'
 import { PhotoViewer } from './components/PhotoViewer'
@@ -512,7 +513,7 @@ function Day({
 
   // Names the tab, which matters once the app is installed alongside others.
   useEffect(() => {
-    document.title = `${dayLabel(day, now)} · lifelog`
+    document.title = `${dayLabel(day, now)} · ${PRODUCT.name}`
   }, [day, now])
 
   /**
@@ -875,7 +876,7 @@ function Day({
     // be asking for a step the app just took.
     const calendar =
       !isNative() && row.kind === 'event'
-        ? { label: 'Add to calendar', run: () => void addToCalendar([row], 'lifelog-event.ics') }
+        ? { label: 'Add to calendar', run: () => void addToCalendar([row], `${PRODUCT.slug}-event.ics`) }
         : undefined
 
     setToast({
@@ -939,7 +940,7 @@ function Day({
     const events = rows.filter((row) => row.kind === 'event')
     const calendar =
       !isNative() && events.length > 0
-        ? { label: 'Add to calendar', run: () => void addToCalendar(events, 'lifelog-events.ics') }
+        ? { label: 'Add to calendar', run: () => void addToCalendar(events, `${PRODUCT.slug}-events.ics`) }
         : undefined
 
     setToast({
@@ -1020,7 +1021,7 @@ function Day({
       // and it is a copy rather than a deletion.
       const { entries: all } = await fetchAll()
       const where = await save(
-        `lifelog-${dayKey(new Date())}.json`,
+        `${PRODUCT.slug}-${dayKey(new Date())}.json`,
         'application/json',
         JSON.stringify(all, null, 2),
       )
@@ -1042,7 +1043,7 @@ function Day({
         return
       }
       setProfileOpen(false)
-      await addToCalendar(wanted, 'lifelog.ics')
+      await addToCalendar(wanted, `${PRODUCT.slug}.ics`)
     } catch (failure) {
       setToast({ text: failure instanceof Error ? failure.message : 'Export failed' })
     }
@@ -1162,12 +1163,12 @@ function Day({
     <div className="mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 gap-10 px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] lg:pb-[calc(env(safe-area-inset-bottom,0px)+1.5rem)] lg:grid-cols-[17rem_minmax(0,42rem)] lg:justify-center lg:px-8 lg:pt-8">
       {/* The only h1. The sidebar wordmark below is hidden on compact, where
           display:none would take the page's heading with it. */}
-      <h1 className="sr-only">lifelog</h1>
+      <h1 className="sr-only">{PRODUCT.name}</h1>
 
       {/* Wide screens get the calendar permanently: navigation at zero taps.
           Narrow screens reach the same component through the header button. */}
       <aside className="hidden lg:flex lg:flex-col">
-        <p className="mb-6 text-[0.8125rem] font-semibold tracking-[0.02em] text-muted">lifelog</p>
+        <p className="mb-6 text-[0.8125rem] font-semibold tracking-[0.02em] text-muted">{PRODUCT.name}</p>
         <MonthGrid day={day} now={now} loadDays={fetchDays} onPick={setDay} />
 
         {/* Fills the space with something that removes interactions rather than
@@ -1780,7 +1781,7 @@ function Day({
             // called right after this, from inside its own `save()`.
           }}
           onDelete={() => deleteRow(editing)}
-          onAddToCalendar={() => void addToCalendar([editing], 'lifelog-event.ics')}
+          onAddToCalendar={() => void addToCalendar([editing], `${PRODUCT.slug}-event.ics`)}
           onClose={() => setEditing(null)}
         />
       )}

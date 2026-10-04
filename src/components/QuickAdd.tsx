@@ -1,3 +1,4 @@
+import { PRODUCT } from '../lib/product'
 import { format, parseISO } from 'date-fns'
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { AnswerCard } from './AnswerCard'
@@ -490,7 +491,7 @@ export function QuickAdd({
     const taken = await takePhoto()
     if (taken === 'cancelled') return
     if (taken === 'denied') {
-      setPhotoProblem('lifelog needs camera permission to take a photo.')
+      setPhotoProblem(`${PRODUCT.name} needs camera permission to take a photo.`)
       return
     }
     if (taken === 'unavailable') {
