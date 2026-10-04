@@ -441,7 +441,7 @@ describe('the notification channels', () => {
     vi.mocked(isNative).mockReturnValue(false)
   })
 
-  it('creates reminders as -v2 lock-screen private, deletes -v1, and leaves the prompts channel alone', async () => {
+  it('creates both channels lock-screen private and deletes both v1s (spec 047)', async () => {
     vi.mocked(isNative).mockReturnValue(true)
     checkPermissions.mockResolvedValue({ display: 'granted' })
     scheduled.mockResolvedValue(undefined)
@@ -454,12 +454,16 @@ describe('the notification channels', () => {
 
     expect(result).toBe('scheduled')
     expect(deleteChannel).toHaveBeenCalledWith({ id: 'lifelog-reminders-v1' })
+    // The prompts channel joined the migration once the recap put an amount on
+    // it: a channel cannot be edited after creation, so the id is the only fix.
+    expect(deleteChannel).toHaveBeenCalledWith({ id: 'lifelog-prompts-v1' })
 
     const created = createChannel.mock.calls.map(
       (call) => call[0] as { id: string; visibility: number },
     )
     expect(created.find((channel) => channel.id === 'lifelog-reminders-v2')?.visibility).toBe(0)
-    expect(created.find((channel) => channel.id === 'lifelog-prompts-v1')?.visibility).toBe(1)
+    expect(created.find((channel) => channel.id === 'lifelog-prompts-v2')?.visibility).toBe(0)
+    expect(created.some((channel) => channel.id === 'lifelog-prompts-v1')).toBe(false)
 
     const sent = (scheduled.mock.calls[0]?.[0] as { notifications: { channelId: string }[] })
       .notifications
@@ -546,6 +550,7 @@ describe('the daily prompts (spec 046)', () => {
     id: number
     title: string
     body: string
+    channelId: string
     schedule: { at?: Date; on?: { hour: number } }
   }
 
@@ -621,6 +626,25 @@ describe('the daily prompts (spec 046)', () => {
       notifications: [1, 2, 3, 4, 5, 6, 7].map((id) => ({ id })),
     })
     expect(scheduled).not.toHaveBeenCalled()
+  })
+
+  it('puts every prompt on the private channel, the morning one included (spec 047)', async () => {
+    await arm(new Date(2026, 9, 4, 10, 0, 0))
+
+    const sent = armed()
+    expect(sent).toHaveLength(7)
+    expect(sent.every((one) => one.channelId === 'lifelog-prompts-v2')).toBe(true)
+    expect(sent.some((one) => one.channelId === 'lifelog-prompts-v1')).toBe(false)
+  })
+
+  it('never schedules a recap carrying figures onto the public legacy channel (spec 047)', async () => {
+    await arm(new Date(2026, 9, 4, 10, 0, 0))
+
+    // The acceptance criterion, asserted on the notification that holds the
+    // amount rather than inferred from the constant it was built from.
+    const figured = armed().filter((one) => one.title === RECAP.title)
+    expect(figured).toHaveLength(1)
+    expect(figured[0]?.channelId).toBe('lifelog-prompts-v2')
   })
 
   it('reports blocked without permission, rather than silently arming nothing', async () => {

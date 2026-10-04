@@ -71,18 +71,19 @@ const NUDGE_IDS: readonly number[] = [MORNING.id, ...RECAP_IDS]
  * Reminders are on `-v2` because `-v1` was created with `visibility: 1`
  * (PUBLIC) — an explicit opt-out of Android's own lock-screen content hiding,
  * so entry titles printed on a locked phone. The same immutability rule above
- * applies: the fix is the next id, never a change to the old one. The prompts
- * channel stays on `-v1`, and spec 046 made its declared `visibility: 1` a
- * lie it did not used to be: the evening recap puts an amount and an entry
- * title in a prompt. The field is inert either way — measured, above — so what
- * redacts a prompt is the same Android per-notification default that redacts a
- * reminder, and spec 046's own controls (figures off under App Lock, and the
- * switch beside it) are what actually govern the words. A `-v2` prompts
- * channel declaring `visibility: 0` is the honest config and is its own spec:
- * a new channel id drops the sound and vibration the user chose on this one.
+ * applies: the fix is the next id, never a change to the old one.
+ *
+ * The prompts channel is on `-v2` for the same reason, one spec later. It was
+ * created `visibility: 1` on the grounds that its two titles were fixed
+ * generic strings with nothing to hide, and spec 046's evening recap made that
+ * false — an amount and tomorrow's entry title now go out on it. The field is
+ * inert either way, as measured above, so this closed no leak; what it fixes
+ * is a declared config that contradicted the content, on a channel no app can
+ * edit after the fact. The cost is real and was accepted: a new id drops the
+ * sound and vibration the user had chosen on v1.
  */
 const REMINDERS = 'lifelog-reminders-v2'
-const PROMPTS = 'lifelog-prompts-v1'
+const PROMPTS = 'lifelog-prompts-v2'
 
 let channelled = false
 
@@ -95,15 +96,18 @@ async function channels(api: LocalNotificationsPlugin): Promise<void> {
   // fine and a prompts channel that never existed is a plausible half-state,
   // and the prompts would then have gone out on Capacitor's `default` channel:
   // importance 3, no sound, which is the exact bug this pair exists to fix.
-  // The old public-visibility channel goes first: deleted, it stops appearing
+  // The old public-visibility channels go first: deleted, they stop appearing
   // in Android's settings, and a notification scheduled onto a deleted channel
   // is silently dropped — which is fine, because the launch `sync` re-schedules
-  // every wanted alarm onto the new channel anyway. That re-arm is the whole
-  // migration.
-  try {
-    await api.deleteChannel({ id: 'lifelog-reminders-v1' })
-  } catch {
-    // Never existed here, or not Android.
+  // every wanted alarm onto the new channel anyway, and `scheduleNudges`
+  // cancels and re-arms all seven prompt ids every time it runs. That re-arm is
+  // the whole migration, for the prompts as it was for the reminders.
+  for (const id of ['lifelog-reminders-v1', 'lifelog-prompts-v1']) {
+    try {
+      await api.deleteChannel({ id })
+    } catch {
+      // Never existed here, or not Android.
+    }
   }
 
   await one(api, {
@@ -127,9 +131,11 @@ async function channels(api: LocalNotificationsPlugin): Promise<void> {
     id: PROMPTS,
     name: 'Daily prompts',
     description: 'The morning and evening nudges to keep the log going',
+    // Quieter than a reminder, as v1 was: these are not something anyone asked
+    // to be interrupted by.
     importance: 3,
     vibration: false,
-    visibility: 1,
+    visibility: 0,
   })
 
   // Latched either way: channels are Android-only, and elsewhere every attempt
