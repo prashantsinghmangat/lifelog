@@ -1,4 +1,4 @@
-import { addDays, getHours, parseISO, subDays } from 'date-fns'
+﻿import { addDays, getHours, parseISO, subDays } from 'date-fns'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DayHeader } from './components/DayHeader'
 import { EntryEditor } from './components/EntryEditor'
@@ -30,6 +30,7 @@ import { WeekStrip } from './components/WeekStrip'
 import { photosOf, usePhotoThumbnails, type Photo } from './hooks/useAttachments'
 import { useEntries, type Row } from './hooks/useEntries'
 import { useNudges } from './hooks/useNudges'
+import { useRecapFigures } from './hooks/useRecapFigures'
 import { useSession } from './hooks/useSession'
 import { useSwipe } from './hooks/useSwipe'
 import { useTheme } from './hooks/useTheme'
@@ -60,6 +61,8 @@ import {
   rupees,
 } from './lib/format'
 import { light, medium } from './lib/haptics'
+import { recapBody } from './lib/recap'
+import { spanOf, totalsFor } from './lib/stats'
 import { byClock, onThisDay } from './lib/history'
 import { forget } from './lib/identity'
 import { forCalendar, toIcs } from './lib/ics'
@@ -411,6 +414,7 @@ function Day({
   onLockAfter,
 }: DayProps) {
   const { nudges, choose: chooseNudges } = useNudges()
+  const { figures: recapFigures, choose: chooseRecapFigures } = useRecapFigures(lock.on)
   const [now, setNow] = useState(() => new Date())
   const [day, setDay] = useState(() => dayKey(new Date()))
   const [editing, setEditing] = useState<Row | null>(null)
@@ -763,14 +767,6 @@ function Day({
       })
   }
 
-  // Re-armed on every launch as well as on a change, because a reinstall drops
-  // the OS alarms while `localStorage` keeps saying the prompts are on.
-  useEffect(() => {
-    void scheduleNudges(nudges).catch(() => {
-      // A prompt that could not be armed is not worth an error on screen.
-    })
-  }, [nudges])
-
   /**
    * A notification's button press, delivered whether or not the app is on
    * screen — Capacitor wakes it briefly in the background. `done` rides the
@@ -855,6 +851,48 @@ function Day({
    * and "tomorrow" honest as the evening wears on.
    */
   const upcoming = useMemo(() => ahead(all, now), [all, now])
+
+  /**
+   * The prompts, re-armed on every launch as well as on a change, because a
+   * reinstall drops the OS alarms while `localStorage` keeps saying they are on.
+   *
+   * The evening recap carries figures, so arming it is also the moment they are
+   * computed — and `pause` is the latest moment the app can still see the day,
+   * which makes backgrounding after a late entry the thing that keeps tonight's
+   * text true. Nothing re-arms on the clock tick: six nights are already armed,
+   * and a notification rebuilt every minute is a notification Android starts
+   * rate-limiting.
+   */
+  useEffect(() => {
+    const arm = () => {
+      const at = new Date()
+      void scheduleNudges(
+        nudges,
+        recapBody(totalsFor(all, spanOf('day', dayKey(at))), ahead(all, at), at, recapFigures),
+        at,
+      ).catch(() => {
+        // A prompt that could not be armed is not worth an error on screen.
+      })
+    }
+
+    arm()
+    if (!isNative()) return
+
+    let live = true
+    let off: (() => void) | null = null
+    void import('@capacitor/app').then(({ App: Native }) => {
+      if (!live) return
+      void Native.addListener('pause', arm).then((handle) => {
+        if (live) off = () => void handle.remove()
+        else void handle.remove()
+      })
+    })
+    return () => {
+      live = false
+      off?.()
+    }
+    // `all` by identity: a new array per write is exactly when the figures moved.
+  }, [nudges, recapFigures, all])
 
   /** Returns the saved row, which is what a staged photo has been waiting for. */
   function submit(parsed: ParsedEntry): Row {
@@ -1071,6 +1109,8 @@ function Day({
     onExport: () => void exportJson(),
     nudges,
     onNudges: chooseNudges,
+    recapFigures,
+    onRecapFigures: chooseRecapFigures,
     lock,
     onLockToggle,
     onLockAfter,

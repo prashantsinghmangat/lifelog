@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+﻿import { useEffect, useState, type ReactNode } from 'react'
 import {
   AutoIcon,
   BellIcon,
@@ -121,6 +121,9 @@ type Props = {
   resolved: 'light' | 'dark'
   nudges: boolean
   onNudges: (on: boolean) => void
+  /** Whether the evening recap may print figures. Defaults to the inverse of App Lock. */
+  recapFigures: boolean
+  onRecapFigures: (on: boolean) => void
   /**
    * App Lock, native only. `usable` is whether the OS has anything to verify
    * with — biometrics or a screen lock; null while the app is still asking.
@@ -158,6 +161,8 @@ export function You({
   onPalette,
   resolved,
   nudges,
+  recapFigures,
+  onRecapFigures,
   onNudges,
   lock,
   onLockToggle,
@@ -405,6 +410,41 @@ export function You({
                   </span>
                 }
                 onClick={() => onNudges(!nudges)}
+              />
+            )}
+
+            {/* The evening prompt reads the day back — a spend figure and the
+                next thing coming — and a notification is the one part of this
+                app readable without unlocking the phone. Whether Android
+                redacts it is Android's to decide and cannot be set from here,
+                so the words themselves are the only control there is. Off by
+                default once App Lock is on, since that switch already said the
+                contents are not for whoever is holding the phone. */}
+            {reminders === 'granted' && nudges && isNative() && (
+              <Row
+                role="switch"
+                aria-checked={recapFigures}
+                aria-label="Figures in the evening recap"
+                title="Figures in the evening recap"
+                detail={recapFigures ? 'Spend and hours at 9pm' : 'The 9pm prompt only asks'}
+                icon={<ClockIcon size={18} />}
+                right={
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-7 w-12 items-center rounded-full p-0.5 transition-colors ${
+                      recapFigures
+                        ? 'bg-accent'
+                        : 'bg-sunken shadow-[inset_0_0_0_1px_var(--color-edge)]'
+                    }`}
+                  >
+                    <span
+                      className={`h-6 w-6 rounded-full bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.25)] transition-transform ${
+                        recapFigures ? 'translate-x-5' : ''
+                      }`}
+                    />
+                  </span>
+                }
+                onClick={() => onRecapFigures(!recapFigures)}
               />
             )}
 

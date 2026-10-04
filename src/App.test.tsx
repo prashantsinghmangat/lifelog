@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
@@ -21,6 +21,7 @@ import {
   cancelAll,
   cancelFollowUps,
   rearm,
+  scheduleNudges,
   type RearmResult,
   type ScheduleResult,
 } from './lib/reminders'
@@ -190,6 +191,7 @@ beforeEach(() => {
   // mock: comparing two of them only means anything if neither carries a call
   // from an earlier test.
   vi.mocked(cancelAll).mockClear()
+  vi.mocked(scheduleNudges).mockClear()
   vi.mocked(supabase.auth.signOut).mockClear()
   who = { id: 'user-1', email: 'you@example.com' }
   rowsOnServer = []
@@ -1642,5 +1644,34 @@ describe('signing out', () => {
     expect(cancelled).toBeDefined()
     expect(asked).toBeDefined()
     expect(cancelled!).toBeLessThan(asked!)
+  })
+})
+
+describe('the evening recap (spec 046)', () => {
+  function lastRecap(): { title: string; body: string } {
+    const calls = vi.mocked(scheduleNudges).mock.calls
+    return calls[calls.length - 1]?.[1] as { title: string; body: string }
+  }
+
+  it("arms tonight with the day's own figures, re-read on every write", async () => {
+    const box = await open()
+    await log(box, '450 lunch')
+
+    await waitFor(() => expect(lastRecap().title).toBe('₹450 · 1 logged'))
+  })
+
+  it('prints nothing while App Lock is on — a notification needs no unlocking', async () => {
+    // Seeded rather than toggled: the switch is native-only and the lock state
+    // is read from here at mount either way.
+    localStorage.setItem(
+      'lifelog.lock',
+      JSON.stringify({ on: true, after: 60_000, pausedAt: null, pausedTrusted: false }),
+    )
+
+    const box = await open()
+    await log(box, '450 lunch')
+
+    await waitFor(() => expect(vi.mocked(scheduleNudges)).toHaveBeenCalled())
+    expect(lastRecap().title).toBe('What happened today?')
   })
 })

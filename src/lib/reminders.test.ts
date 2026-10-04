@@ -1,5 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { actionType, alarmIds, alarms, cancelAll, fireAt, notificationId, schedule } from './reminders'
+﻿import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  actionType,
+  alarmIds,
+  alarms,
+  cancelAll,
+  fireAt,
+  notificationId,
+  schedule,
+  scheduleNudges,
+} from './reminders'
+import { GENERIC } from './recap'
 import { isNative } from './platform'
 import type { Entry } from '../types'
 
@@ -528,5 +538,100 @@ describe('a monthly repeat arms (spec 041)', () => {
     expect(alarms(row, new Date(2027, 1, 10, 9, 0, 0))).toEqual([
       { id: notificationId('monthly-31'), at: new Date(2027, 2, 31, 9, 0, 0, 0) },
     ])
+  })
+})
+
+describe('the daily prompts (spec 046)', () => {
+  type Sent = {
+    id: number
+    title: string
+    body: string
+    schedule: { at?: Date; on?: { hour: number } }
+  }
+
+  afterEach(() => {
+    scheduled.mockReset()
+    cancelled.mockReset()
+    vi.mocked(isNative).mockReturnValue(false)
+  })
+
+  // The last call, not the first: `scheduled` is module-level and earlier
+  // describes in this file leave their own calls on it.
+  function armed(): Sent[] {
+    const calls = scheduled.mock.calls
+    return (calls[calls.length - 1]?.[0] as { notifications: Sent[] }).notifications
+  }
+
+  const RECAP = { title: '₹680 · 6h 20m · 8 logged', body: 'Tomorrow: gym · 7:00 pm' }
+
+  async function arm(now: Date, on = true) {
+    vi.mocked(isNative).mockReturnValue(true)
+    checkPermissions.mockResolvedValue({ display: 'granted' })
+    scheduled.mockResolvedValue(undefined)
+    return scheduleNudges(on, RECAP, now)
+  }
+
+  it('arms the morning cron plus six evenings, and never an id a row could hash onto', async () => {
+    expect(await arm(new Date(2026, 9, 4, 10, 0, 0))).toBe('scheduled')
+
+    const sent = armed()
+    expect(sent.map((one) => one.id)).toEqual([1, 2, 3, 4, 5, 6, 7])
+    expect(sent[0]?.schedule.on?.hour).toBe(9)
+    expect(sent.slice(1).every((one) => one.schedule.at instanceof Date)).toBe(true)
+  })
+
+  it("carries the figures on tonight alone — the other nights have not happened yet", async () => {
+    await arm(new Date(2026, 9, 4, 10, 0, 0))
+
+    const evenings = armed().slice(1)
+    expect(evenings[0]?.title).toBe(RECAP.title)
+    expect(evenings[0]?.body).toBe(RECAP.body)
+    expect(evenings.slice(1).every((one) => one.title === GENERIC.title)).toBe(true)
+  })
+
+  it('starts tomorrow once 9pm has gone by, since a past moment is due immediately', async () => {
+    await arm(new Date(2026, 9, 4, 22, 0, 0))
+
+    const evenings = armed().slice(1)
+    expect(evenings[0]?.schedule.at?.getDate()).toBe(5)
+    // Nothing may claim to be tonight's recap on a night already spent.
+    expect(evenings.every((one) => one.title === GENERIC.title)).toBe(true)
+  })
+
+  it('arms each evening at 9pm on its own day, six nights running', async () => {
+    await arm(new Date(2026, 9, 4, 10, 0, 0))
+
+    const at = armed()
+      .slice(1)
+      .map((one) => one.schedule.at as Date)
+    expect(at.map((moment) => moment.getDate())).toEqual([4, 5, 6, 7, 8, 9])
+    expect(at.every((moment) => moment.getHours() === 21 && moment.getMinutes() === 0)).toBe(true)
+  })
+
+  it('cancels all seven first, so a re-arm replaces rather than doubles', async () => {
+    await arm(new Date(2026, 9, 4, 10, 0, 0))
+    expect(cancelled).toHaveBeenCalledWith({
+      notifications: [1, 2, 3, 4, 5, 6, 7].map((id) => ({ id })),
+    })
+  })
+
+  it('cancels the whole window and arms nothing when the prompts are off', async () => {
+    expect(await arm(new Date(2026, 9, 4, 10, 0, 0), false)).toBe('skipped')
+    expect(cancelled).toHaveBeenCalledWith({
+      notifications: [1, 2, 3, 4, 5, 6, 7].map((id) => ({ id })),
+    })
+    expect(scheduled).not.toHaveBeenCalled()
+  })
+
+  it('reports blocked without permission, rather than silently arming nothing', async () => {
+    vi.mocked(isNative).mockReturnValue(true)
+    checkPermissions.mockResolvedValue({ display: 'denied' })
+    expect(await scheduleNudges(true, RECAP, new Date(2026, 9, 4, 10, 0, 0))).toBe('blocked')
+    expect(scheduled).not.toHaveBeenCalled()
+  })
+
+  it('never reaches for the plugin away from the native shell', async () => {
+    expect(await scheduleNudges(true, RECAP, new Date(2026, 9, 4, 10, 0, 0))).toBe('skipped')
+    expect(scheduled).not.toHaveBeenCalled()
   })
 })

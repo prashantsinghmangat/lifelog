@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -24,6 +24,7 @@ afterEach(cleanup)
 
 function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
   const onNudges = vi.fn()
+  const onRecapFigures = vi.fn()
   render(
     <You
       email="prashant@example.com"
@@ -35,6 +36,8 @@ function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
       resolved="light"
       nudges={true}
       onNudges={onNudges}
+      recapFigures={true}
+      onRecapFigures={onRecapFigures}
       lock={{ on: false, after: 60_000, usable: true }}
       onLockToggle={vi.fn()}
       onLockAfter={vi.fn()}
@@ -46,7 +49,7 @@ function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
       {...over}
     />,
   )
-  return { onNudges }
+  return { onNudges, onRecapFigures }
 }
 
 /** jsdom normalises inline hex colours to rgb(...) — match it. */
@@ -84,6 +87,31 @@ describe('daily prompts is a real switch', () => {
     expect(toggle.getAttribute('aria-checked')).toBe('true')
     await userEvent.click(toggle)
     expect(onNudges).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('figures in the evening recap (spec 046)', () => {
+  it('turns off, so the 9pm prompt stops printing an amount', async () => {
+    const { onRecapFigures } = setup({ recapFigures: true })
+    const toggle = await screen.findByRole('switch', { name: 'Figures in the evening recap' })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText('Spend and hours at 9pm')).toBeTruthy()
+    await userEvent.click(toggle)
+    expect(onRecapFigures).toHaveBeenCalledWith(false)
+  })
+
+  it('turns back on, and says which it is', async () => {
+    const { onRecapFigures } = setup({ recapFigures: false })
+    const toggle = await screen.findByRole('switch', { name: 'Figures in the evening recap' })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByText('The 9pm prompt only asks')).toBeTruthy()
+    await userEvent.click(toggle)
+    expect(onRecapFigures).toHaveBeenCalledWith(true)
+  })
+
+  it('goes with the prompts: nothing to configure once they are off', () => {
+    setup({ nudges: false })
+    expect(screen.queryByRole('switch', { name: 'Figures in the evening recap' })).toBeNull()
   })
 })
 

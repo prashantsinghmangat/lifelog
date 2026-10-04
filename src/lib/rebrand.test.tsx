@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { readFileSync } from 'node:fs'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -123,6 +123,7 @@ describe('the rename reaches no technical identifier', () => {
       ['src/lib/ics.ts', ['@lifelog']],
       ['src/hooks/useTheme.ts', ['lifelog.theme', 'lifelog.palette']],
       ['src/hooks/useNudges.ts', ['lifelog.nudges']],
+      ['src/hooks/useRecapFigures.ts', ['lifelog.recap']],
     ]
 
     for (const [file, literals] of guarded) {

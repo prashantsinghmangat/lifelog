@@ -1,5 +1,6 @@
 ﻿import { ALL_DAY_HOUR, done, monthlyDay, nextOccurrence, recurring, weeklyDays, withLead } from './events'
 import { PRODUCT } from './product'
+import { GENERIC, type Recap } from './recap'
 import { isNative } from './platform'
 import type { LocalNotificationsPlugin } from '@capacitor/local-notifications'
 import type { Entry } from '../types'
@@ -18,28 +19,41 @@ import type { Entry } from '../types'
  */
 
 /**
- * The two daily prompts, and the ids they own.
+ * The morning prompt, and the id it owns.
  *
- * These are not an entry's alarm — nothing in the log corresponds to them —
- * so they need fixed ids of their own, kept out of the range `notificationId`
- * can produce. They repeat forever from one `schedule` call: `on: { hour,
- * minute }` is a cron, not a one-off, so the phone keeps raising them with the
- * app closed and nothing on a server involved.
+ * Not an entry's alarm — nothing in the log corresponds to it — so it needs a
+ * fixed id of its own, kept out of the range `notificationId` can produce. It
+ * repeats forever from one `schedule` call: `on: { hour, minute }` is a cron,
+ * not a one-off, so the phone keeps raising it with the app closed and nothing
+ * on a server involved.
  */
-const NUDGES = [
-  {
-    id: 1,
-    hour: 9,
-    title: 'Anything to add for today?',
-    body: 'Type it once and it is out of your head.',
-  },
-  {
-    id: 2,
-    hour: 21,
-    title: 'What happened today?',
-    body: 'And anything you want waiting for tomorrow.',
-  },
-] as const
+const MORNING = {
+  id: 1,
+  hour: 9,
+  title: 'Anything to add for today?',
+  body: 'Type it once and it is out of your head.',
+} as const
+
+/**
+ * The evening recap cannot be a cron, and that is what the six ids are for.
+ *
+ * A cron fires forever from one call but carries the text it was armed with,
+ * and the recap's whole point is to carry *today's* figures — which are not
+ * known until the day has happened. So the evening is a one-off per night
+ * instead, and every arming rebuilds the window: tonight with real figures,
+ * the nights after it with the generic wording, because this device cannot
+ * yet say what will happen on them.
+ *
+ * Six of them because a one-off that is never re-armed is a prompt that stops
+ * the first day the app is not opened — which is the day it matters most. Six
+ * nights is how long the prompt survives an unopened app, and `notificationId`
+ * starts at 8, so the block is free.
+ */
+const RECAP_IDS = [2, 3, 4, 5, 6, 7] as const
+const RECAP_HOUR = 21
+
+/** Every id the prompts own, which `sync` must leave alone. */
+const NUDGE_IDS: readonly number[] = [MORNING.id, ...RECAP_IDS]
 
 /**
  * Reminders ring; the daily prompts murmur.
@@ -58,8 +72,14 @@ const NUDGES = [
  * (PUBLIC) — an explicit opt-out of Android's own lock-screen content hiding,
  * so entry titles printed on a locked phone. The same immutability rule above
  * applies: the fix is the next id, never a change to the old one. The prompts
- * channel stays on `-v1` — its two titles are fixed generic strings with
- * nothing to hide.
+ * channel stays on `-v1`, and spec 046 made its declared `visibility: 1` a
+ * lie it did not used to be: the evening recap puts an amount and an entry
+ * title in a prompt. The field is inert either way — measured, above — so what
+ * redacts a prompt is the same Android per-notification default that redacts a
+ * reminder, and spec 046's own controls (figures off under App Lock, and the
+ * switch beside it) are what actually govern the words. A `-v2` prompts
+ * channel declaring `visibility: 0` is the honest config and is its own spec:
+ * a new channel id drops the sound and vibration the user chose on this one.
  */
 const REMINDERS = 'lifelog-reminders-v2'
 const PROMPTS = 'lifelog-prompts-v1'
@@ -499,33 +519,70 @@ export async function schedule(entry: Entry, now: Date): Promise<ScheduleResult>
 }
 
 /**
- * Turns the two daily prompts on or off.
+ * Turns the daily prompts on or off, and re-arms the evening window.
  *
  * Cancelled first either way: rescheduling an existing id replaces it on
  * Android but not everywhere, and two copies of a 9am prompt is exactly the
- * kind of thing that gets notifications switched off for good.
+ * kind of thing that gets notifications switched off for good. Since the
+ * evening ids are rebuilt on every launch and every pause, that cancel is also
+ * what keeps a stale figure from outliving the day it describes.
  */
-export async function scheduleNudges(on: boolean): Promise<ScheduleResult> {
+export async function scheduleNudges(
+  on: boolean,
+  recap: Recap = GENERIC,
+  now: Date = new Date(),
+): Promise<ScheduleResult> {
   const found = await plugin()
   if (!found) return 'skipped'
 
-  await found.api.cancel({ notifications: NUDGES.map((nudge) => ({ id: nudge.id })) })
+  await found.api.cancel({ notifications: NUDGE_IDS.map((id) => ({ id })) })
   if (!on) return 'skipped'
 
   if ((await permission()) !== 'granted') return 'blocked'
 
   await channels(found.api)
   await found.api.schedule({
-    notifications: NUDGES.map((nudge) => ({
-      id: nudge.id,
-      title: nudge.title,
-      body: nudge.body,
-      channelId: PROMPTS,
-      schedule: { on: { hour: nudge.hour, minute: 0 }, allowWhileIdle: true },
-    })),
+    notifications: [
+      {
+        id: MORNING.id,
+        title: MORNING.title,
+        body: MORNING.body,
+        channelId: PROMPTS,
+        schedule: { on: { hour: MORNING.hour, minute: 0 }, allowWhileIdle: true },
+      },
+      ...nights(now).map(({ id, at, today }) => ({
+        id,
+        title: today ? recap.title : GENERIC.title,
+        body: today ? recap.body : GENERIC.body,
+        channelId: PROMPTS,
+        schedule: { at, allowWhileIdle: true },
+      })),
+    ],
   })
 
   return 'scheduled'
+}
+
+/**
+ * The evenings worth arming, soonest first.
+ *
+ * Tonight is dropped once 9pm has gone by — the OS treats a past `at` as due
+ * immediately, which would fire the recap the moment the app was opened. Only
+ * the night that is actually today may carry figures; the others are armed
+ * before the days they describe have happened.
+ */
+function nights(now: Date): { id: number; at: Date; today: boolean }[] {
+  const tonight = new Date(now)
+  tonight.setHours(RECAP_HOUR, 0, 0, 0)
+  // The OS treats a past `at` as due immediately, which would fire the recap
+  // the moment the app was opened, so a gone 9pm starts the window tomorrow.
+  const first = tonight.getTime() > now.getTime() ? 0 : 1
+
+  return RECAP_IDS.map((id, index) => {
+    const at = new Date(tonight)
+    at.setDate(at.getDate() + first + index)
+    return { id, at, today: first + index === 0 }
+  })
 }
 
 export async function cancel(entry: Entry): Promise<void> {
@@ -657,7 +714,7 @@ export async function sync(entries: Entry[], now: Date): Promise<void> {
     const pending = await found.api.getPending()
     const stale = pending.notifications
       .map((notification) => notification.id)
-      .filter((id) => !wanted.has(id) && !NUDGES.some((nudge) => nudge.id === id))
+      .filter((id) => !wanted.has(id) && !NUDGE_IDS.includes(id))
 
     if (stale.length > 0) {
       await found.api.cancel({ notifications: stale.map((id) => ({ id })) })
