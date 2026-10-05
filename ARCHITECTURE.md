@@ -1,4 +1,4 @@
-# Architecture
+﻿# Architecture
 
 Why this codebase is shaped the way it is: the reasoning behind each rule, the bug that produced
 it, and the traps that cost real time to find.
@@ -278,7 +278,12 @@ is the one claim this app must not make.
 channel is `-v2` because of what finding that out cost.** Spec 023 meant to make the reminders
 channel lock-screen private; measurement showed the plugin's `visibility` field never reaches the
 channel (every channel lands VISIBILITY_NO_OVERRIDE), and a native `setLockscreenVisibility`
-before creation was tried and reverted. What actually governs redaction is Android's own
+before creation was tried and reverted. The prompts channel joined it as `lifelog-prompts-v2` one spec later (047): it had been created
+`visibility: 1` on the grounds that its two titles were fixed generic strings with nothing to
+hide, and the recap made that false. The field is inert either way, so that migration closed no
+leak — it removed a declared config that contradicted the content, on a channel no app can edit
+after creation. The cost is real and was accepted: a new id drops the sound and vibration the user
+had chosen. What actually governs redaction is Android's own
 per-notification default (VISIBILITY_PRIVATE) plus the user's "sensitive notifications" setting —
 the same contract every app lives under, and what the v1 channel's inert `visibility: 1` never
 changed either. The migration to `lifelog-reminders-v2` stayed anyway: honest config, clean
@@ -535,12 +540,33 @@ listing what was true when the app opened, which is the one question it exists t
 `useEntries` exposes `all` (the whole local log, which this device already holds) and `ahead` reads
 that. Costs no query either way.
 
-**Two daily prompts, and they are not entries.** `9am` asks what is coming, `9pm` asks what
-happened and what is wanted for tomorrow. One `schedule` call each with `on: { hour, minute }`,
-which is a cron rather than a one-off, so the phone raises them for ever with the app closed and
-nothing on a server involved — verified on the emulator by winding the clock: the 9pm prompt
-fired and re-armed itself for the next day. They hold **ids 1 and 2**, and `notificationId` was
-moved to start at 8 so a row can never hash onto one and silently replace it. On by default,
+**Two daily prompts, and they are not entries.** `9am` asks what is coming. `9pm` used to ask what
+happened and now **reads the day back** (spec 046): the figures lead in the title and tomorrow's
+first moment follows in the body, both from rows this device already holds —
+
+```
+₹680 · 6h 20m · 8 logged
+Tomorrow: standup call · 9:49 am
+```
+
+The morning stays one `schedule` call with `on: { hour, minute }` — a cron, not a one-off, so the
+phone raises it for ever with the app closed. **The evening cannot be a cron, and that is the
+whole shape of it.** A cron fires for ever but carries the text it was armed with, and the recap's
+text *is* the day it describes, which is not known until the day has happened. So the evening is a
+**one-off per night across ids 2–7**, rebuilt on every launch and every `pause`: only the night
+that is today may carry figures, and the five after it carry the old generic wording because this
+device cannot yet say what will happen on them. Six nights is how long the prompt survives an
+unopened app, where the cron survived for ever — the trade the id block buys back. A 9pm already
+gone by starts the window tomorrow, since the OS treats a past `at` as due immediately and would
+otherwise fire the recap on the next launch. `notificationId` starts at 8, so a row can never hash
+onto one and silently replace it.
+
+**Figures are suppressed whole while App Lock is on, title and tomorrow line together.** An
+entry's title is as readable over a locked phone as an amount is, so `recapBody` returns the
+generic wording rather than half a recap. `lifelog.recap` overrides it in either direction and is
+three-state — absent means *follow App Lock*, which is the only default that is not a guess. What
+the lock screen then does is Android's, not this app's: measured on the S21 FE,
+`lock_screen_allow_private_notifications = 1` means it shows the content. On by default,
 because a log nobody is reminded to keep is a log that stops after a fortnight; the switch is in
 the You screen and states the times, because a daily notification is also the fastest way to
 get an app muted. Stored per device (`lifelog.nudges`) rather than in the log — the same account
@@ -1377,6 +1403,40 @@ never reach the web bundle and cost nothing of the budget below. The bar is unch
 package; icons are inline SVG. Comments only where the *why* is unobvious. Plain, dense, fast UI: system
 fonts, one 100ms fade on new rows, a short spring on the sheet's entrance and exit, nothing else
 animated.
+
+**An attachment can now be written somewhere that outlives the app, and it took losing them to
+build it** (spec 049). Photos and documents live in IndexedDB on one device: outside Supabase,
+outside the nightly Netlify backup, and outside Android's own, which this app opts out of with
+`allowBackup="false"`. The consequence was always that an uninstall destroys them, and on
+5 Oct 2026 a Gradle instrumented test did exactly that on the S21 FE — the entries resynced from
+Supabase inside a minute and every photo was gone for good, because nothing anywhere held a
+second copy.
+
+`Export photos & documents` writes each one, plus a manifest, into the phone's own
+`Documents/lifelog`:
+
+```
+Documents/lifelog/
+  3f2a…-receipt.pdf
+  7c91….jpg
+  manifest.json      { "file": "7c91….jpg", "entryId": "…",
+                       "occurredOn": "2026-10-01", "title": "lunch", … }
+  .nomedia
+```
+
+**Documents, not Cache, knowingly against the rule beside it in `deliver.ts`.** That rule — Cache,
+because a shared file only has to outlive the share sheet — is right for a hand-off and wrong
+here: app-private storage is deleted with the app, and surviving that is the entire point. Scoped
+storage from Android 11 means the app may only touch what it created there, which is this folder,
+needs no runtime permission, and still outlives it.
+
+**The id leads every filename** because it is the only thing certainly unique — two photos of one
+receipt both arrive as `receipt.jpg`, and a backup that silently overwrites one is the single
+failure this must not have. **The manifest is what stops the folder being anonymous**: it names
+the entry, date and title behind each file, which is also the only restore path that exists, since
+import was deliberately left to its own spec. A second export writes only what is missing. A
+`.nomedia` keeps a receipt out of the gallery. Nothing is uploaded — whatever backs up that folder
+is the reader's arrangement, and the app is never told what it is.
 
 ## Deliberately not built
 
