@@ -1,4 +1,4 @@
-import { isNative } from './platform'
+﻿import { isNative } from './platform'
 
 /**
  * Getting a generated file out of the app.
@@ -169,6 +169,71 @@ export async function shareBlob(name: string, blob: Blob): Promise<Delivered> {
   link.click()
   URL.revokeObjectURL(url)
   return 'downloaded'
+}
+
+/**
+ * Writes an attachment export into the device's own Documents, and reports it.
+ *
+ * `save` deliberately uses Cache because a shared file only has to outlive the
+ * share sheet. This is the opposite case and knowingly departs from it: an
+ * export whose whole purpose is to survive an uninstall cannot live in
+ * app-private storage, which is deleted with the app. Documents is the user's,
+ * not the app's.
+ *
+ * Scoped storage from Android 11 means the app may only touch what it created
+ * here, which is exactly this folder and needs no runtime permission — and what
+ * it creates still outlives it. Anything the platform refuses is returned as a
+ * failure rather than swallowed; the exports-did-nothing bug is the reason
+ * every path in this file reports.
+ */
+export type Written = { written: number; skipped: number; where: string }
+
+export async function writeAttachments(
+  folder: string,
+  files: readonly { name: string; blob: Blob }[],
+  extras: readonly { name: string; text: string }[],
+): Promise<Written | null> {
+  const found = await plugins()
+  if (!found) return null
+
+  await found.fs.mkdir({ path: folder, directory: found.dir.Documents, recursive: true }).catch(
+    () => undefined,
+  )
+
+  let written = 0
+  for (const file of files) {
+    await found.fs.writeFile({
+      path: `${folder}/${file.name}`,
+      data: await blobToBase64(file.blob),
+      directory: found.dir.Documents,
+    })
+    written += 1
+  }
+
+  for (const extra of extras) {
+    await found.fs.writeFile({
+      path: `${folder}/${extra.name}`,
+      data: extra.text,
+      directory: found.dir.Documents,
+      encoding: found.utf8,
+    })
+  }
+
+  return { written, skipped: 0, where: `Documents/${folder}` }
+}
+
+/** What the export folder already holds, so a second run writes only what is new. */
+export async function listWritten(folder: string): Promise<string[] | null> {
+  const found = await plugins()
+  if (!found) return null
+
+  try {
+    const found_ = await found.fs.readdir({ path: folder, directory: found.dir.Documents })
+    return found_.files.map((file) => file.name)
+  } catch {
+    // No folder yet is the first export, not an error.
+    return []
+  }
 }
 
 /** Share where the platform supports files, otherwise download. */

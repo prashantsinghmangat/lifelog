@@ -133,6 +133,8 @@ type Props = {
   onLockAfter: () => void
   onHelp: () => void
   onExport: () => void
+  /** Photos and documents onto storage that survives the app, native only. */
+  onExportAttachments: () => void
   onExportCalendar: () => void
   onSignIn: () => void
   onSignOut: () => void
@@ -169,6 +171,7 @@ export function You({
   onLockAfter,
   onHelp,
   onExport,
+  onExportAttachments,
   onExportCalendar,
   onSignIn,
   onSignOut,
@@ -524,6 +527,21 @@ export function You({
           icon={<DownloadIcon size={18} />}
           onClick={onExport}
         />
+
+        {/* The log's rows come back from the server; photos and documents have
+            never had anywhere to come back from — not the nightly backup, not
+            Export JSON, not Android's own, which this app opts out of. An
+            uninstall took every photo on the phone on 5 Oct 2026, which is why
+            this row exists. Documents rather than app storage: app storage dies
+            with the app, and surviving that is the entire point. */}
+        {isNative() && (
+          <Row
+            title="Export photos & documents"
+            detail="To Documents/lifelog on this phone"
+            icon={<DownloadIcon size={18} />}
+            onClick={onExportAttachments}
+          />
+        )}
 
         {/* The web's answer only: on the web no API can raise an alarm with
             the app closed, so the OS calendar has to; natively the reminder is

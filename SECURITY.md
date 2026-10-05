@@ -1,4 +1,4 @@
-# Security & privacy
+﻿# Security & privacy
 
 What protects the data, what deliberately does not, and how each claim was verified. Facts only —
 every item is either in the code, measured on a device, or explicitly labelled a limitation.
@@ -100,9 +100,19 @@ silently losing data. Nation-state and malware-on-device threats are out of scop
 - **Deletes are soft** (`deleted_at`); backups include soft-deleted rows so a backup cannot have
   pre-applied your deletions. Thirty daily snapshots in Netlify Blobs — deliberately not in
   Supabase, which is the thing being backed up.
-- **Photos never leave the device.** They live in IndexedDB, outside Supabase, outside the
-  nightly backup, outside Android backup. Losing the device loses the photos; the entry rows
-  survive on the server.
+- **Photos and documents never reach a server this app controls.** They live in IndexedDB,
+  outside Supabase, outside the nightly backup, outside Android backup. The entry rows survive on
+  the server; the attachments have no second copy anywhere.
+- **Uninstalling the app destroys them, and that is not theoretical** (spec 049). On 5 Oct 2026 a
+  Gradle instrumented test uninstalled lifelog on the S21 FE: the entries resynced from Supabase
+  within a minute and **every photo was lost permanently**, because `allowBackup="false"` means
+  not even Google held a copy. `Export photos & documents` in You is the answer — it writes every
+  attachment, plus a manifest naming the entry each belongs to, into the phone's own
+  `Documents/lifelog`, which survives an uninstall. **Attachments can therefore now leave the
+  app's private store, at the reader's request and only then.** Nothing is uploaded: whatever
+  backs up that folder is the reader's own arrangement, and this app is not told what it is. A
+  `.nomedia` keeps the folder out of the gallery, so a receipt is not swept into a photo backup
+  nobody asked for.
 - **A guest log lives on one device and nothing backs it up.** The honest trade for opening
   straight into the text box; the You screen says so. Export JSON is its only copy.
 

@@ -1,8 +1,9 @@
-import 'fake-indexeddb/auto'
+﻿import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   MAX_PHOTOS_PER_ENTRY,
   acceptedDocument,
+  all,
   firstPhotoBlobs,
   fromFile,
   hasPhotoMap,
@@ -332,5 +333,36 @@ describe('failure is never silent', () => {
     } finally {
       globalThis.indexedDB = real
     }
+  })
+})
+
+describe('all (spec 049)', () => {
+  it('returns photos and documents together, which nothing else in here does', async () => {
+    const photo = await put('entry-all-1', blob())
+    const doc = await putDocument(
+      'entry-all-2',
+      new File(['pdf'], 'policy.pdf', { type: 'application/pdf' }),
+    )
+
+    const everything = await all()
+    const ids = everything.map((one) => one.id)
+    expect(ids).toContain(photo.id)
+    expect(ids).toContain(doc.id)
+    // Two entries, so `list` could never have produced this in one call.
+    expect(new Set(everything.map((one) => one.entryId)).size).toBeGreaterThan(1)
+  })
+
+  it('drops what was removed, so an export cannot resurrect a deleted photo', async () => {
+    const photo = await put('entry-all-3', blob())
+    await remove(photo.id)
+
+    const everything = await all()
+    expect(everything.map((one) => one.id)).not.toContain(photo.id)
+  })
+
+  it('comes back oldest first, the order list already promises', async () => {
+    const everything = await all()
+    const stamps = everything.map((one) => one.createdAt)
+    expect([...stamps].sort((a, b) => a.localeCompare(b))).toEqual(stamps)
   })
 })

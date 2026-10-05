@@ -15,6 +15,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { back } from './lib/back'
 import { dayKey } from './lib/format'
+import { all as allAttachments } from './lib/attachments'
+import { listWritten, writeAttachments } from './lib/deliver'
+import { isNative } from './lib/platform'
 import { load } from './lib/store'
 import { supabase } from './lib/supabase'
 import {
@@ -138,6 +141,49 @@ vi.mock('./hooks/useSession', async () => {
       who = next
       bump()
     },
+  }
+})
+
+// Flipping `isNative` on sends App down its native effects, whose Capacitor
+// proxies reject with UNIMPLEMENTED in jsdom — an unhandled rejection that
+// fails whichever test happens to be running. Stubbed to nothing: the back
+// button, the privacy screen and the app lock have their own tests.
+vi.mock('@capacitor/app', () => ({
+  App: { addListener: async () => ({ remove: () => undefined }) },
+}))
+// Registered through `registerPlugin`, so it has no web implementation at all
+// and every call rejects UNIMPLEMENTED once `isNative` is on.
+vi.mock('./lib/statusbar', () => ({ syncStatusBar: () => undefined }))
+
+vi.mock('@capacitor/haptics', () => ({
+  Haptics: { impact: async () => undefined },
+  ImpactStyle: { Light: 'LIGHT', Medium: 'MEDIUM' },
+}))
+vi.mock('@capacitor/privacy-screen', () => ({
+  PrivacyScreen: { enable: async () => undefined, disable: async () => undefined },
+}))
+
+// Native-only paths need a switch; false is what jsdom reports anyway, so
+// every existing test sees exactly what it saw before.
+vi.mock('./lib/platform', () => ({ isNative: vi.fn(() => false) }))
+
+// Only `all` is faked: the store itself has its own IndexedDB tests, and
+// `sweepOrphans` must keep running for real here as it always has.
+vi.mock('./lib/attachments', async () => {
+  const real = await vi.importActual<typeof import('./lib/attachments')>('./lib/attachments')
+  return { ...real, all: vi.fn(async () => []) }
+})
+
+vi.mock('./lib/deliver', async () => {
+  const real = await vi.importActual<typeof import('./lib/deliver')>('./lib/deliver')
+  return {
+    ...real,
+    listWritten: vi.fn(async () => [] as string[]),
+    writeAttachments: vi.fn(async (folder: string, files: { name: string }[]) => ({
+      written: files.length,
+      skipped: 0,
+      where: `Documents/${folder}`,
+    })),
   }
 })
 
@@ -1673,5 +1719,95 @@ describe('the evening recap (spec 046)', () => {
 
     await waitFor(() => expect(vi.mocked(scheduleNudges)).toHaveBeenCalled())
     expect(lastRecap().title).toBe('What happened today?')
+  })
+})
+
+/**
+ * Spec 049. The log's rows come back from Supabase; photos and documents never
+ * had anywhere to come back from, and an uninstall proved it on 5 Oct 2026.
+ */
+describe('taking the photos and documents somewhere that outlives the app', () => {
+  beforeEach(() => {
+    // Counted per test, not per file: the sync case asserts a *lack* of writes.
+    vi.mocked(writeAttachments).mockClear()
+    vi.mocked(listWritten).mockClear()
+  })
+
+  afterEach(() => {
+    vi.mocked(isNative).mockReturnValue(false)
+  })
+
+  async function openYou() {
+    vi.mocked(isNative).mockReturnValue(true)
+    await open()
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
+  }
+
+  it('says how many were written and where, rather than appearing to do nothing', async () => {
+    vi.mocked(allAttachments).mockResolvedValueOnce([
+      {
+        id: 'att-1',
+        entryId: 'entry-1',
+        blob: new Blob(['x'], { type: 'image/jpeg' }),
+        createdAt: '2026-10-01T10:00:00.000Z',
+      },
+    ])
+
+    await openYou()
+    await userEvent.click(screen.getByRole('button', { name: /Export photos & documents/ }))
+
+    await waitFor(() =>
+      expect(screen.getByText('1 of 1 written to Documents/lifelog')).toBeTruthy(),
+    )
+  })
+
+  it('says so when there is nothing to export, instead of writing an empty folder', async () => {
+    vi.mocked(allAttachments).mockResolvedValueOnce([])
+
+    await openYou()
+    await userEvent.click(screen.getByRole('button', { name: /Export photos & documents/ }))
+
+    await waitFor(() =>
+      expect(screen.getByText('No photos or documents to export')).toBeTruthy(),
+    )
+    expect(vi.mocked(writeAttachments)).not.toHaveBeenCalled()
+  })
+
+  it('reports the reason when the platform refuses, rather than claiming success', async () => {
+    vi.mocked(allAttachments).mockResolvedValueOnce([
+      {
+        id: 'att-2',
+        entryId: 'entry-1',
+        blob: new Blob(['x'], { type: 'image/jpeg' }),
+        createdAt: '2026-10-01T10:00:00.000Z',
+      },
+    ])
+    vi.mocked(writeAttachments).mockRejectedValueOnce(new Error('Permission denied'))
+
+    await openYou()
+    await userEvent.click(screen.getByRole('button', { name: /Export photos & documents/ }))
+
+    await waitFor(() => expect(screen.getByText('Permission denied')).toBeTruthy())
+  })
+
+  it('does not rewrite what is already there, so a second run is a sync', async () => {
+    vi.mocked(allAttachments).mockResolvedValueOnce([
+      {
+        id: 'att-3',
+        entryId: 'entry-1',
+        blob: new Blob(['x'], { type: 'image/jpeg' }),
+        createdAt: '2026-10-01T10:00:00.000Z',
+      },
+    ])
+    vi.mocked(listWritten).mockResolvedValueOnce(['att-3.jpg'])
+
+    await openYou()
+    await userEvent.click(screen.getByRole('button', { name: /Export photos & documents/ }))
+
+    await waitFor(() => expect(screen.getByText('Already in Documents/lifelog')).toBeTruthy())
   })
 })

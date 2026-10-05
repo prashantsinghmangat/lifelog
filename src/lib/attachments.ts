@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Photos attached to an entry, kept entirely on this device.
  *
  * A dedicated IndexedDB store, indexed by `entryId` rather than keyed by it —
@@ -333,6 +333,29 @@ export function list(entryId: string): Promise<Attachment[]> {
         request.onerror = () => reject(request.error ?? new Error('Failed to list attachments'))
         tx.oncomplete = () => resolve(found.sort((a, b) => a.createdAt.localeCompare(b.createdAt)))
         tx.onerror = () => reject(tx.error ?? new Error('Failed to list attachments'))
+      }),
+  )
+}
+
+/**
+ * Every attachment on this device, oldest first.
+ *
+ * `list` is per entry and `orphansOf` works from a set of ids, so nothing has
+ * needed the whole store until something wanted to copy it somewhere safe.
+ */
+export function all(): Promise<Attachment[]> {
+  return openDb().then(
+    (db) =>
+      new Promise<Attachment[]>((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readonly')
+        const request = tx.objectStore(STORE).getAll()
+        let found: Attachment[] = []
+        request.onsuccess = () => {
+          found = request.result as Attachment[]
+        }
+        request.onerror = () => reject(request.error ?? new Error('Failed to read attachments'))
+        tx.oncomplete = () => resolve(found.sort((a, b) => a.createdAt.localeCompare(b.createdAt)))
+        tx.onerror = () => reject(tx.error ?? new Error('Failed to read attachments'))
       }),
   )
 }

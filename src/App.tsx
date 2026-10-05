@@ -46,9 +46,9 @@ import {
   unlocked,
   type LockState,
 } from './lib/applock'
-import { sweepOrphans } from './lib/attachments'
+import { all as allAttachments, sweepOrphans } from './lib/attachments'
 import { arm as armBack, onHome, setLocked as setBackLocked } from './lib/back'
-import { save, shareOrDownload } from './lib/deliver'
+import { listWritten, save, shareOrDownload, writeAttachments } from './lib/deliver'
 import { nextFireAt, passed, stillAhead } from './lib/events'
 import {
   clock,
@@ -60,6 +60,7 @@ import {
   rowValue,
   rupees,
 } from './lib/format'
+import { EXPORT_FOLDER, MANIFEST, NOMEDIA, manifestJson, planExport } from './lib/attachmentExport'
 import { light, medium } from './lib/haptics'
 import { recapBody } from './lib/recap'
 import { spanOf, totalsFor } from './lib/stats'
@@ -1072,6 +1073,56 @@ function Day({
     }
   }
 
+  /**
+   * The attachments, onto storage that outlives the app.
+   *
+   * Nothing is uploaded: the files land in the device's own Documents and
+   * whatever covers that folder is the reader's own arrangement, which is the
+   * same shape the log's own export has always had.
+   */
+  async function exportAttachments() {
+    try {
+      const [stored, present] = await Promise.all([allAttachments(), listWritten(EXPORT_FOLDER)])
+      if (present === null) {
+        setToast({ text: 'Exporting files needs the Android app' })
+        return
+      }
+      if (stored.length === 0) {
+        setToast({ text: 'No photos or documents to export' })
+        return
+      }
+
+      const { entries: rows } = await fetchAll()
+      const plan = planExport(stored, present, rows)
+      const result = await writeAttachments(
+        EXPORT_FOLDER,
+        plan.write.map((file) => ({ name: file.name, blob: file.attachment.blob })),
+        [
+          { name: MANIFEST, text: manifestJson(plan.manifest, new Date()) },
+          // Written every time: an empty file is how Android is told to keep
+          // the folder out of the gallery, and it costs nothing to re-assert.
+          { name: NOMEDIA, text: '' },
+        ],
+      )
+      if (result === null) {
+        setToast({ text: 'Exporting files needs the Android app' })
+        return
+      }
+
+      setProfileOpen(false)
+      const already = plan.manifest.length - result.written
+      setToast({
+        text:
+          result.written === 0
+            ? `Already in ${result.where}`
+            : `${result.written} of ${plan.manifest.length} written to ${result.where}` +
+              (already > 0 ? ` · ${already} already there` : ''),
+      })
+    } catch (failure) {
+      setToast({ text: failure instanceof Error ? failure.message : 'Could not export files' })
+    }
+  }
+
   async function exportCalendar() {
     try {
       const { entries: all } = await fetchAll()
@@ -1107,6 +1158,7 @@ function Day({
     onSignIn,
     onHelp: () => setHelpOpen(true),
     onExport: () => void exportJson(),
+    onExportAttachments: () => void exportAttachments(),
     nudges,
     onNudges: chooseNudges,
     recapFigures,

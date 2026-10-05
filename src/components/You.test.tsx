@@ -25,6 +25,7 @@ afterEach(cleanup)
 function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
   const onNudges = vi.fn()
   const onRecapFigures = vi.fn()
+  const onExportAttachments = vi.fn()
   render(
     <You
       email="prashant@example.com"
@@ -43,13 +44,14 @@ function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
       onLockAfter={vi.fn()}
       onHelp={vi.fn()}
       onExport={vi.fn()}
+      onExportAttachments={onExportAttachments}
       onExportCalendar={vi.fn()}
       onSignIn={vi.fn()}
       onSignOut={vi.fn()}
       {...over}
     />,
   )
-  return { onNudges, onRecapFigures }
+  return { onNudges, onRecapFigures, onExportAttachments }
 }
 
 /** jsdom normalises inline hex colours to rgb(...) — match it. */
@@ -120,6 +122,28 @@ describe('passive status reads as a row, not a headline', () => {
     setup()
     await waitFor(() => expect(screen.getByText('Allowed')).toBeTruthy())
     expect(screen.getByText('Notifications')).toBeTruthy()
+  })
+})
+
+describe('exporting photos and documents (spec 049)', () => {
+  afterEach(() => {
+    vi.mocked(isNative).mockReturnValue(true)
+  })
+
+  it('offers the row natively, where there is a filesystem to write to', async () => {
+    const { onExportAttachments } = setup()
+    const row = screen.getByRole('button', { name: /Export photos & documents/ })
+    expect(screen.getByText('To Documents/lifelog on this phone')).toBeTruthy()
+    await userEvent.click(row)
+    expect(onExportAttachments).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides it on the web, which has no Documents to survive into', () => {
+    vi.mocked(isNative).mockReturnValue(false)
+    setup()
+    expect(screen.queryByRole('button', { name: /Export photos & documents/ })).toBeNull()
+    // The log's own export is not native-only and must not have gone with it.
+    expect(screen.getByRole('button', { name: /Export a copy/ })).toBeTruthy()
   })
 })
 
