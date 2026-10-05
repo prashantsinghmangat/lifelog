@@ -1,0 +1,27 @@
+# Deploy config for the marketing site when `website/` is the publish directory.
+# The app's own deploy config lives in the repo root netlify.toml — this file is
+# only read when the site's base directory is set to `website`.
+
+[build]
+  publish = "."
+  command = "node tools/make-icons.mjs"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    Content-Security-Policy = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+
+# Fingerprint-free assets, so keep the cache short enough to re-deploy safely.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800, must-revalidate"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

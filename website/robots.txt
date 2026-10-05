@@ -1,0 +1,5 @@
+# LifeLog marketing site
+User-agent: *
+Allow: /
+
+Sitemap: https://lifelog-timeline.netlify.app/sitemap.xml

@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<!-- ===================== Primary SEO ===================== -->
+<title>LifeLog — Your life doesn't need AI. It needs a memory.</title>
+<meta name="description" content="LifeLog is a private, single-user life log. Expenses, work hours, events and notes go into one text box in under five seconds, and stay in one searchable place. No AI, no ads, no streaks. Android and web.">
+<link rel="canonical" href="https://lifelog-timeline.netlify.app/">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+<meta name="author" content="LifeLog">
+<meta name="keywords" content="life log, personal ledger, expense tracker, time tracking, daily journal, private notes app, no-AI app, Android life tracker">
+<meta name="theme-color" content="#f4fbf7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1412" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light">
+
+<!-- ===================== Open Graph ===================== -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="LifeLog">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://lifelog-timeline.netlify.app/">
+<meta property="og:title" content="LifeLog — Your life doesn't need AI. It needs a memory.">
+<meta property="og:description" content="One quiet place for what you spent, where your time went, what you did, and the moments worth remembering. Logging takes under five seconds.">
+<meta property="og:image" content="https://lifelog-timeline.netlify.app/assets/img/og-cover.svg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="LifeLog — a single day of entries held in one quiet stream.">
+
+<!-- ===================== Twitter / X ===================== -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="LifeLog — Your life doesn't need AI. It needs a memory.">
+<meta name="twitter:description" content="One quiet place for what you spent, where your time went, what you did, and the moments worth remembering.">
+<meta name="twitter:image" content="https://lifelog-timeline.netlify.app/assets/img/og-cover.svg">
+<meta name="twitter:image:alt" content="LifeLog — a single day of entries held in one quiet stream.">
+
+<!-- ===================== Icons & manifest ===================== -->
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+
+<link rel="stylesheet" href="assets/css/styles.css">
+
+<!-- ===================== Structured data ===================== -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://lifelog-timeline.netlify.app/#website",
+      "url": "https://lifelog-timeline.netlify.app/",
+      "name": "LifeLog",
+      "description": "A private, single-user life log for expenses, work hours, events and notes.",
+      "inLanguage": "en"
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://lifelog-timeline.netlify.app/#app",
+      "name": "LifeLog",
+      "applicationCategory": "LifestyleApplication",
+      "operatingSystem": "Android, Web",
+      "url": "https://lifelog-timeline.netlify.app/",
+      "description": "LifeLog gives everything that happened today one quiet place to live: what you spent, where your time went, what you did, and the moments worth remembering. One table, one screen, one text box.",
+      "featureList": [
+        "Natural-language capture in under five seconds",
+        "Expenses, time logs, events and notes in one chronological stream",
+        "9 PM daily recap notification",
+        "One-click JSON and CSV export",
+        "Biometric app lock on Android",
+        "No AI training, no ads, no trackers, no streaks"
+      ],
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://lifelog-timeline.netlify.app/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Does LifeLog use AI to read my entries?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Entries are parsed by plain, deterministic rules that run on your device, and retrieved with ordinary database queries. Nothing you write is sent to a model or used as training data."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How long does it take to log something?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Under five seconds. You type one natural line — ₹350 lunch, 2h client deck, dentist 4pm — and press enter. There is no project picker, no category tree and no timer to remember to stop."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What happens if I stop logging for a week?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Nothing. LifeLog has no streaks, no scores and no guilt notifications. You pick it back up whenever you want and the record carries on."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Where is my data stored and can I get it out?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Your entries live in an authenticated Postgres database with row-level security, isolated to your account. You can export the whole archive as JSON or CSV at any time, with no lock-in."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which platforms does LifeLog run on?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Android, as an installable app, and any modern browser as a web app. Android is the platform the app is built and tested for first."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+
+<!-- Without JS the reveal animations never fire, so show everything outright. -->
+<noscript><style>.reveal{opacity:1;transform:none}.nav-toggle{display:none}</style></noscript>
+</head>
+
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<!-- ======================================================================
+     Header
+     ====================================================================== -->
+<header class="site-header">
+  <div class="wrap site-header__inner">
+    <a class="brand" href="#top" aria-label="LifeLog — home">
+      <span class="brand__mark" aria-hidden="true">L</span>
+      <span>LifeLog</span>
+    </a>
+
+    <nav class="nav" aria-label="Primary">
+      <a href="#one-day">One day</a>
+      <a href="#sandbox">Try it</a>
+      <a href="#recap">9 PM recap</a>
+      <a href="#manifesto">Philosophy</a>
+      <a href="#privacy">Privacy</a>
+    </nav>
+
+    <div class="header-actions">
+      <a class="btn btn--primary btn--sm" href="https://lifelog-timeline.netlify.app/">Try LifeLog</a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu">
+        <svg class="icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Primary (mobile)" hidden>
+    <a href="#one-day">One day</a>
+    <a href="#sandbox">Try it</a>
+    <a href="#recap">9 PM recap</a>
+    <a href="#manifesto">Philosophy</a>
+    <a href="#privacy">Privacy</a>
+    <a href="#faq">Questions</a>
+    <a class="btn btn--primary" href="https://lifelog-timeline.netlify.app/">Try LifeLog</a>
+  </nav>
+</header>
+
+<main id="main">
+
+  <!-- ====================================================================
+       1. Hero
+       ==================================================================== -->
+  <section class="hero" id="top">
+    <div class="wrap hero__grid">
+      <div class="hero__copy">
+        <p class="pill reveal">
+          <span class="dot dot--pulse" aria-hidden="true"></span>
+          Private personal ledger · Android &amp; web
+        </p>
+
+        <h1 class="display reveal">
+          Your life doesn't need <em>AI.</em><br>
+          <span class="accent">It needs a memory.</span>
+        </h1>
+
+        <p class="lede reveal">
+          LifeLog gives everything that happened today one quiet place to live — what you
+          spent, where your time went, what you did, and the moments worth remembering.
+        </p>
+
+        <div class="hero__cta reveal">
+          <a class="btn btn--primary" href="https://lifelog-timeline.netlify.app/">
+            Try LifeLog
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </a>
+          <a class="btn btn--ghost" href="#sandbox">See it in action</a>
+        </div>
+
+        <p class="value-row reveal">
+          <span>No AI</span><span class="sep">·</span>
+          <span>No ads</span><span class="sep">·</span>
+          <span>No streaks</span><span class="sep">·</span>
+          <span>No noise</span>
+        </p>
+      </div>
+
+      <div class="phone-stage reveal">
+        <!-- A faithful still of the app's Today screen, built from live markup
+             rather than a screenshot so it stays crisp and readable. -->
+        <div class="phone" role="img" aria-label="The LifeLog Today screen on a phone: Thursday 1 October, a horizon balance of ₹350 spent, 2h 15m focus and 3 events, three logged entries, and a capture box reading 'What happened?'">
+          <div class="phone__screen" aria-hidden="true">
+            <div class="phone__status"><span>12:05</span><span>100%</span></div>
+
+            <div class="phone__day">
+              <div>
+                <h3>Thursday, 1</h3>
+                <p class="faint" style="font-size:0.75rem">October</p>
+              </div>
+              <span class="phone__avatar">P</span>
+            </div>
+
+            <div class="mini-card">
+              <div class="mini-card__head"><span>Horizon balance</span><span>4 logs</span></div>
+              <div class="ratio-bar">
+                <span style="width:30%;background:#b0452c"></span>
+                <span style="width:45%;background:#136b60"></span>
+                <span style="width:25%;background:#5a41b5"></span>
+              </div>
+              <dl class="metric-grid">
+                <div><dt>Spent</dt><dd class="is-expense">₹350</dd></div>
+                <div><dt>Focus</dt><dd class="is-time">2h 15m</dd></div>
+                <div><dt>Schedule</dt><dd class="is-event">3 events</dd></div>
+              </dl>
+            </div>
+
+            <div class="mini-row">
+              <span class="mini-row__label"><span class="dot dot--event"></span><span>standup call</span></span>
+              <span class="mini-row__value">9:49 am</span>
+            </div>
+            <div class="mini-row">
+              <span class="mini-row__label"><span class="dot dot--expense"></span><span>lunch with team</span></span>
+              <span class="mini-row__value is-expense">₹350</span>
+            </div>
+            <div class="mini-row">
+              <span class="mini-row__label"><span class="dot dot--time"></span><span>deep work · prototype</span></span>
+              <span class="mini-row__value is-time">2h 15m</span>
+            </div>
+
+            <div class="phone__capture">
+              <span>What happened?</span>
+              <span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       2. One ordinary day
+       ==================================================================== -->
+  <section class="section" id="one-day">
+    <div class="wrap">
+      <div class="section-head section-head--center reveal">
+        <p class="eyebrow">Chronological rhythm</p>
+        <h2 class="h2">Your life is already happening.</h2>
+        <p class="lede">
+          You don't need a tracking ritual. One line records it. Here is an ordinary
+          Thursday, unfolding quietly into a complete day.
+        </p>
+      </div>
+
+      <ol class="stream" style="margin-top:3rem">
+        <li class="stream__item reveal">
+          <span class="stream__node" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div class="stream__card">
+            <div>
+              <p class="stream__time">8:12 AM</p>
+              <p class="stream__title">Started deep work</p>
+              <p class="stream__desc">Designing the core state architecture</p>
+            </div>
+            <span class="tag tag--time">Focus</span>
+          </div>
+        </li>
+        <li class="stream__item reveal">
+          <span class="stream__node" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div class="stream__card">
+            <div>
+              <p class="stream__time">12:40 PM</p>
+              <p class="stream__title">₹320 lunch with the team</p>
+              <p class="stream__desc">South Indian thali around the corner</p>
+            </div>
+            <span class="tag tag--expense">₹320</span>
+          </div>
+        </li>
+        <li class="stream__item reveal">
+          <span class="stream__node" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div class="stream__card">
+            <div>
+              <p class="stream__time">3:15 PM</p>
+              <p class="stream__title">Client sprint sync</p>
+              <p class="stream__desc">Walkthrough on milestone 2 deliverables</p>
+            </div>
+            <span class="tag tag--event">Event</span>
+          </div>
+        </li>
+        <li class="stream__item reveal">
+          <span class="stream__node" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div class="stream__card">
+            <div>
+              <p class="stream__time">6:20 PM</p>
+              <p class="stream__title">Closed the day at 6h 15m</p>
+              <p class="stream__desc">Open pull requests merged, notes written up</p>
+            </div>
+            <span class="tag tag--time">6h 15m</span>
+          </div>
+        </li>
+        <li class="stream__item reveal">
+          <span class="stream__node" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div class="stream__card">
+            <div>
+              <p class="stream__time">7:30 PM</p>
+              <p class="stream__title">Evening run</p>
+              <p class="stream__desc">5k neighbourhood loop in cool air</p>
+            </div>
+            <span class="tag tag--accent">Health</span>
+          </div>
+        </li>
+        <li class="stream__item reveal">
+          <span class="stream__node" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+          <div class="stream__card">
+            <div>
+              <p class="stream__time">10:42 PM</p>
+              <p class="stream__title">Quiet film with family</p>
+              <p class="stream__desc">Hot ginger tea, lights low</p>
+            </div>
+            <span class="tag tag--note">Note</span>
+          </div>
+        </li>
+      </ol>
+
+      <div class="stream" style="gap:0">
+        <div class="stream__summary reveal">
+          <div>
+            <p class="eyebrow" style="color:var(--accent-soft)">Daily consolidation</p>
+            <h3 class="h3">Today, remembered.</h3>
+            <p>Every fragment gathered into one quiet, searchable archive — with no overhead and nothing to tidy up afterwards.</p>
+          </div>
+          <span class="chip">₹320 · 6h 15m · 3 events</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       3. Interactive sandbox
+       ==================================================================== -->
+  <section class="section section--raised" id="sandbox">
+    <div class="wrap">
+      <div class="section-head section-head--center reveal">
+        <p class="eyebrow">Live demo</p>
+        <h2 class="h2">Try it. One line is enough.</h2>
+        <p class="lede">
+          Tap a starter below or type your own. Watch a raw line become a structured
+          entry — no form, no category picker, nothing to save.
+        </p>
+      </div>
+
+      <div class="sandbox reveal" style="margin-top:2.5rem">
+        <div class="sandbox__panel">
+          <form class="sandbox__form" id="sandbox-form" novalidate>
+            <label class="visually-hidden" for="sandbox-input">What happened today?</label>
+            <input class="sandbox__input" id="sandbox-input" name="entry" type="text"
+                   placeholder="What happened today? e.g. ₹450 dinner with Sarah"
+                   autocomplete="off">
+            <button class="btn btn--primary" type="submit">
+              Log
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </form>
+
+          <div class="chips">
+            <span class="chips__label" id="chips-label">Starters:</span>
+            <button class="chip-btn" type="button">₹450 dinner with Sarah</button>
+            <button class="chip-btn" type="button">2h deep work on the client proposal</button>
+            <button class="chip-btn" type="button">Dentist appointment tomorrow 4pm</button>
+            <button class="chip-btn" type="button">Quiet evening walk in the rain</button>
+          </div>
+
+          <div>
+            <div class="sandbox__meta">
+              <strong>Simulated day stream · <span id="sandbox-count">4 entries</span></strong>
+              <span class="ok">Saved in 0.2s · no forms · no setup</span>
+            </div>
+
+            <ul class="sandbox__list" id="sandbox-list" aria-live="polite" aria-label="Simulated day stream" style="margin-top:0.75rem">
+              <li class="entry">
+                <span class="entry__main">
+                  <span class="dot dot--expense" aria-hidden="true"></span>
+                  <span>
+                    <span class="entry__text">350 lunch with team</span>
+                    <span class="entry__time" style="display:block">1:15 pm · expense</span>
+                  </span>
+                </span>
+                <span class="entry__amount">₹350</span>
+              </li>
+              <li class="entry">
+                <span class="entry__main">
+                  <span class="dot dot--time" aria-hidden="true"></span>
+                  <span>
+                    <span class="entry__text">2h deep work on client pitch deck</span>
+                    <span class="entry__time" style="display:block">2:30 pm · time</span>
+                  </span>
+                </span>
+                <span class="entry__amount">2h 00m</span>
+              </li>
+              <li class="entry">
+                <span class="entry__main">
+                  <span class="dot dot--event" aria-hidden="true"></span>
+                  <span>
+                    <span class="entry__text">Dentist appointment (Dr. Rao)</span>
+                    <span class="entry__time" style="display:block">Tomorrow 4:00 pm · event</span>
+                  </span>
+                </span>
+                <span class="entry__amount">Scheduled</span>
+              </li>
+              <li class="entry">
+                <span class="entry__main">
+                  <span class="dot dot--note" aria-hidden="true"></span>
+                  <span>
+                    <span class="entry__text">Quiet evening walk in the drizzling rain</span>
+                    <span class="entry__time" style="display:block">7:40 pm · note</span>
+                  </span>
+                </span>
+                <span class="entry__amount">Held</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="contrast">
+            <p class="contrast__row is-old"><b>✕ Elsewhere:</b> <span>project → folder → tag → amount → currency → save</span></p>
+            <p class="contrast__row is-new"><b>✓ LifeLog:</b> <span>type one line → done</span></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       4. The 9 PM recap
+       ==================================================================== -->
+  <section class="section dark-section" id="recap">
+    <div class="wrap">
+      <div class="section-head section-head--center reveal">
+        <p class="pill"><span class="dot dot--pulse" aria-hidden="true"></span> The 9:00 PM arrival</p>
+        <h2 class="h2">At the end of the day, LifeLog gives something back.</h2>
+        <p class="lede">
+          No red badge, no manufactured urgency. Just a quiet summary waiting on your
+          lock screen, so you can close your eyes knowing the day was held.
+        </p>
+      </div>
+
+      <div class="lockscreen reveal">
+        <div class="lockscreen__head">
+          <span class="who">
+            <span class="lockscreen__mark" aria-hidden="true">L</span>
+            <strong>LifeLog</strong>
+            <span>· 9:00 PM</span>
+          </span>
+          <span class="mono" style="font-size:0.625rem">Lock screen</span>
+        </div>
+        <p class="lockscreen__title">Today is held.</p>
+        <p class="lockscreen__body">
+          ₹320 spent · 6h 15m focus logged · 3 events done.
+          Tomorrow begins at 9:49 am with standup call.
+        </p>
+        <p class="lockscreen__foot"><span>Tap to glance</span><span>Sleep deeply</span></p>
+      </div>
+
+      <p class="quote reveal">“Closes the open loops of unrecorded work, so the evening belongs to you.”</p>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       5. A year later
+       ==================================================================== -->
+  <section class="section" id="flashback">
+    <div class="wrap">
+      <div class="section-head section-head--center reveal">
+        <p class="eyebrow">The compounding chronicle</p>
+        <h2 class="h2">What will you remember a year from now?</h2>
+        <p class="lede">
+          Nothing you write down feels historic on the day. Ordinary days compound
+          quietly into the only autobiography you will ever have.
+        </p>
+      </div>
+
+      <div class="flashback">
+        <article class="card flash-card reveal">
+          <div>
+            <header class="flash-card__head">
+              <span class="date">4 October 2026</span>
+              <span>Recorded in real time</span>
+            </header>
+            <p class="eyebrow" style="margin-top:1rem">Five ordinary lines</p>
+            <ul class="flash-lines">
+              <li><span>₹350 dinner with the team</span><span>1:20 PM</span></li>
+              <li><span>4h 20m work on the prototype</span><span>Focus</span></li>
+              <li><span>Gym</span><span>7:10 PM</span></li>
+              <li><span>Replacement headphones</span><span>Expense</span></li>
+              <li><span>Called Dad on the walk home</span><span>9:15 PM</span></li>
+            </ul>
+          </div>
+          <p class="note-line">Nothing seemed historic at the time. Just quiet living.</p>
+        </article>
+
+        <article class="card flash-card flash-card--later reveal">
+          <span class="flash-card__badge">+365 days</span>
+          <div>
+            <header class="flash-card__head">
+              <span class="date" style="color:var(--accent)">4 October 2027</span>
+              <span style="color:var(--focus);font-weight:600">Flashback recall</span>
+            </header>
+            <h3 class="h3" style="margin-top:1rem">You were here before</h3>
+            <div class="recall">
+              <p class="recall__query">? what was I doing this day last year</p>
+              <p>
+                <strong style="color:var(--accent)">Exactly one year ago today:</strong><br>
+                you logged 4h 20m building the foundation, had dinner with your team
+                (₹350), and called your dad on the walk home.
+              </p>
+              <p class="recall__tally"><span>1,420 entries captured</span><span>0 memories lost</span></p>
+            </div>
+          </div>
+          <p class="note-line note-line--accent">“A year from now, you'll be deeply glad you wrote it down.”</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       6. Manifesto
+       ==================================================================== -->
+  <section class="section section--sunken" id="manifesto">
+    <div class="wrap">
+      <div class="section-head section-head--center reveal">
+        <p class="eyebrow">Manifesto</p>
+        <h2 class="h2">Your life doesn't need another AI.</h2>
+        <p class="lede">
+          It doesn't need to analyse you. It doesn't need to optimise you. It doesn't
+          need to become a training set. It just needs somewhere quiet to stay.
+        </p>
+      </div>
+
+      <div class="pillars">
+        <article class="card pillar reveal">
+          <span class="pillar__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+          <h3>No model trains on your life</h3>
+          <p>Your entries belong to you. Receipts, schedules and private thoughts are never fed to a machine-learning dataset.</p>
+        </article>
+        <article class="card pillar reveal">
+          <span class="pillar__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+          <h3>No streaks, no guilt</h3>
+          <p>Take a week off and nothing breaks. LifeLog never scores your days or manufactures pressure to keep a number alive.</p>
+        </article>
+        <article class="card pillar reveal">
+          <span class="pillar__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+          <h3>No noise</h3>
+          <p>One capture box holds everything. No nested folders, no tag trees, no schema to maintain before you can write a line.</p>
+        </article>
+        <article class="card pillar reveal">
+          <span class="pillar__icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+          <h3>No ads, no profiling</h3>
+          <p>Your log is not an advertising profile. Nothing is sold, and no sponsored row will ever appear in your day.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       7. Privacy & architecture
+       ==================================================================== -->
+  <section class="section section--raised" id="privacy">
+    <div class="wrap trust">
+      <div class="reveal">
+        <p class="eyebrow">Trust &amp; architecture</p>
+        <h2 class="h2" style="margin-top:0.5rem">Your data stays yours.</h2>
+        <p class="lede" style="margin-top:0.75rem">
+          No claims about local-only magic that isn't there. LifeLog syncs through an
+          authenticated Postgres database with row-level security, isolated to your
+          account, and exportable in open formats whenever you want it back.
+        </p>
+
+        <div class="trust__list">
+          <div class="trust__item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+            <div>
+              <h3>Strict account isolation</h3>
+              <p>Row-level security means only your authenticated session can read or write your rows — enforced at the database, not in the app.</p>
+            </div>
+          </div>
+          <div class="trust__item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>
+            <div>
+              <h3>One-click open export</h3>
+              <p>JSON and CSV of the whole archive, any time. No proprietary format, no lock-in, nothing you can't take with you.</p>
+            </div>
+          </div>
+          <div class="trust__item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg>
+            <div>
+              <h3>Biometric app lock</h3>
+              <p>Native fingerprint and face unlock on Android keeps a borrowed phone from becoming an open diary.</p>
+            </div>
+          </div>
+          <div class="trust__item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 6.2A9.9 9.9 0 0112 6c5 0 9 6 9 6a15.6 15.6 0 01-3 3.4M6.6 6.6A15.8 15.8 0 003 12s4 6 9 6a9.6 9.6 0 004.3-1"/></svg>
+            <div>
+              <h3>No trackers, no ad networks</h3>
+              <p>No third-party analytics SDK watching how you use the app, and no telemetry leaving the device about what you log.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="code-card reveal">
+        <div class="code-card__head">
+          <span class="code-card__lights" aria-hidden="true">
+            <i style="background:#b0452c"></i><i style="background:#c89b3c"></i><i style="background:#136b60"></i>
+          </span>
+          <span>data_policy.json</span>
+        </div>
+<pre><code>{
+  "account_isolation":      "authenticated_only",
+  "row_level_security":     true,
+  "export_format":          ["JSON", "CSV"],
+  "ai_model_training":      false,
+  "third_party_analytics":  false,
+  "ad_networks":            false,
+  "biometric_app_lock":     true
+}</code></pre>
+        <div class="code-card__foot">
+          <span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+            Privacy guarantee active
+          </span>
+          <span>Strict &amp; verified</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       8. FAQ (feeds the FAQPage structured data above)
+       ==================================================================== -->
+  <section class="section" id="faq">
+    <div class="wrap">
+      <div class="section-head section-head--center reveal">
+        <p class="eyebrow">Questions</p>
+        <h2 class="h2">The things people ask first.</h2>
+      </div>
+
+      <div class="faq">
+        <details class="reveal">
+          <summary>Does LifeLog use AI to read my entries?</summary>
+          <p>No. Entries are parsed by plain, deterministic rules that run on your device, and retrieved with ordinary database queries. Nothing you write is sent to a model or used as training data.</p>
+        </details>
+        <details class="reveal">
+          <summary>How long does it take to log something?</summary>
+          <p>Under five seconds. You type one natural line — ₹350 lunch, 2h client deck, dentist 4pm — and press enter. There is no project picker, no category tree and no timer to remember to stop.</p>
+        </details>
+        <details class="reveal">
+          <summary>What happens if I stop logging for a week?</summary>
+          <p>Nothing. LifeLog has no streaks, no scores and no guilt notifications. You pick it back up whenever you want and the record carries on.</p>
+        </details>
+        <details class="reveal">
+          <summary>Where is my data stored, and can I get it out?</summary>
+          <p>Your entries live in an authenticated Postgres database with row-level security, isolated to your account. You can export the whole archive as JSON or CSV at any time, with no lock-in.</p>
+        </details>
+        <details class="reveal">
+          <summary>Which platforms does LifeLog run on?</summary>
+          <p>Android, as an installable app, and any modern browser as a web app. Android is the platform the app is built and tested for first.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================================================================
+       9. Closing
+       ==================================================================== -->
+  <section class="section section--sunken">
+    <div class="wrap wrap--narrow closing">
+      <h2 class="display reveal">
+        Start remembering.<br>
+        <em class="accent">Your life is already happening.</em>
+      </h2>
+      <p class="lede reveal">Give it somewhere quiet to stay.</p>
+      <div class="closing__cta reveal">
+        <a class="btn btn--primary" href="https://lifelog-timeline.netlify.app/">
+          Try LifeLog
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+      <p class="value-row reveal">
+        <span>Free to start</span><span class="sep">·</span>
+        <span>No credit card</span><span class="sep">·</span>
+        <span>Android &amp; web</span>
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<!-- ======================================================================
+     Footer
+     ====================================================================== -->
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="site-footer__grid">
+      <div>
+        <a class="brand" href="#top">
+          <span class="brand__mark" aria-hidden="true">L</span>
+          <span>LifeLog</span>
+        </a>
+        <p style="margin-top:0.75rem;max-width:22rem">
+          One table, one screen, one text box. Everything that happened today, held in
+          a place you can search a year from now.
+        </p>
+      </div>
+
+      <nav aria-labelledby="footer-explore">
+        <h2 id="footer-explore">Explore</h2>
+        <ul>
+          <li><a href="#one-day">One ordinary day</a></li>
+          <li><a href="#sandbox">Try the capture box</a></li>
+          <li><a href="#recap">The 9 PM recap</a></li>
+          <li><a href="#manifesto">Philosophy</a></li>
+          <li><a href="#faq">Questions</a></li>
+        </ul>
+      </nav>
+
+      <nav aria-labelledby="footer-trust">
+        <h2 id="footer-trust">Trust</h2>
+        <ul>
+          <li><a href="#privacy">Privacy &amp; architecture</a></li>
+          <li><a href="#privacy">Export your archive</a></li>
+          <li><a href="#manifesto">No ads, no profiling</a></li>
+          <li><a href="https://lifelog-timeline.netlify.app/">Open the app</a></li>
+        </ul>
+      </nav>
+    </div>
+
+    <div class="site-footer__bottom">
+      <p>© <span id="year">2026</span> LifeLog. Built with clarity and restraint.</p>
+      <p>Your life. Remembered.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>
