@@ -18,6 +18,7 @@ import { dayKey } from './lib/format'
 import { all as allAttachments } from './lib/attachments'
 import { listWritten, writeAttachments } from './lib/deliver'
 import { isNative } from './lib/platform'
+import { takeShared } from './lib/shareTarget'
 import { load } from './lib/store'
 import { supabase } from './lib/supabase'
 import {
@@ -154,6 +155,7 @@ vi.mock('@capacitor/app', () => ({
 // Registered through `registerPlugin`, so it has no web implementation at all
 // and every call rejects UNIMPLEMENTED once `isNative` is on.
 vi.mock('./lib/statusbar', () => ({ syncStatusBar: () => undefined }))
+vi.mock('./lib/shareTarget', () => ({ takeShared: vi.fn(async () => null) }))
 
 vi.mock('@capacitor/haptics', () => ({
   Haptics: { impact: async () => undefined },
@@ -1809,5 +1811,44 @@ describe('taking the photos and documents somewhere that outlives the app', () =
     await userEvent.click(screen.getByRole('button', { name: /Export photos & documents/ }))
 
     await waitFor(() => expect(screen.getByText('Already in Documents/lifelog')).toBeTruthy())
+  })
+})
+
+/**
+ * Spec 050. The five seconds are measured from the box; what is not five
+ * seconds is leaving the app the number is already in and retyping it.
+ */
+describe('text shared in from another app', () => {
+  afterEach(() => {
+    vi.mocked(takeShared).mockResolvedValue(null)
+  })
+
+  it('lands in the box parsed, and writes nothing until the button is pressed', async () => {
+    vi.mocked(takeShared).mockResolvedValueOnce('450 lunch')
+
+    const box = await open()
+    await waitFor(() => expect((box as HTMLTextAreaElement).value).toBe('450 lunch'))
+
+    // The preview is the proof the parser read it; the absence of a row is the
+    // proof a share cannot save on its own.
+    await waitFor(() => expect(screen.getAllByText(/₹450/).length).toBeGreaterThan(0))
+    // The title is in the textarea's value, not the document, until a row
+    // exists — so this is the proof a share wrote nothing by itself.
+    expect(screen.queryByText('lunch')).toBeNull()
+
+    await userEvent.click(screen.getByLabelText('Save entry'))
+    await waitFor(() => expect(screen.getByText('lunch')).toBeTruthy())
+  })
+
+  it('does not prefill again when nothing new was shared', async () => {
+    const box = await open()
+    await waitFor(() => expect((box as HTMLTextAreaElement).value).toBe(''))
+    expect(vi.mocked(takeShared)).toHaveBeenCalled()
+  })
+
+  it('replaces what is in the box rather than appending to it', async () => {
+    vi.mocked(takeShared).mockResolvedValueOnce('450 lunch')
+    const box = await open()
+    await waitFor(() => expect((box as HTMLTextAreaElement).value).toBe('450 lunch'))
   })
 })

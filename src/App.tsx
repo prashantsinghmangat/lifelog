@@ -63,6 +63,7 @@ import {
 import { EXPORT_FOLDER, MANIFEST, NOMEDIA, manifestJson, planExport } from './lib/attachmentExport'
 import { light, medium } from './lib/haptics'
 import { recapBody } from './lib/recap'
+import { takeShared } from './lib/shareTarget'
 import { spanOf, totalsFor } from './lib/stats'
 import { byClock, onThisDay } from './lib/history'
 import { forget } from './lib/identity'
@@ -375,6 +376,7 @@ export default function App() {
         resolved={resolved}
         onSignIn={() => setAsked(true)}
         lock={{ on: lock.on, after: lock.after, usable: lockUsable }}
+        locked={locked}
         onLockToggle={toggleLock}
         onLockAfter={cycleLockAfter}
       />
@@ -396,6 +398,8 @@ type DayProps = {
   onSignIn: () => void
   /** The app lock, owned by App so the overlay can cover the identity gate. */
   lock: { on: boolean; after: number; usable: boolean | null }
+  /** Whether the lock is currently covering this screen, so a share can wait for the unlock. */
+  locked: boolean
   onLockToggle: () => void
   onLockAfter: () => void
 }
@@ -411,6 +415,7 @@ function Day({
   resolved,
   onSignIn,
   lock,
+  locked,
   onLockToggle,
   onLockAfter,
 }: DayProps) {
@@ -851,6 +856,44 @@ function Day({
    * Cheap enough to recompute on the clock tick, which is what keeps "today"
    * and "tomorrow" honest as the evening wears on.
    */
+  /**
+   * Text shared in from another app, into the box the manual's examples use.
+   *
+   * Taken on launch and on every resume, because a share can start the app or
+   * arrive while it is already open, and the native side only hands each one
+   * over once. Held back while the lock is up: the overlay is the thing
+   * covering the log, and a share is not a way around it — the take simply
+   * waits for `locked` to go false, which is the unlock.
+   */
+  useEffect(() => {
+    if (locked) return
+
+    let live = true
+    const pull = () => {
+      void takeShared().then((text) => {
+        // Filled, not submitted. The parser's preview still has to be read and
+        // the button still has to be pressed; a share may not write a row.
+        if (live && text !== null) setPrefill(text)
+      })
+    }
+
+    pull()
+    if (!isNative()) return
+
+    let off: (() => void) | null = null
+    void import('@capacitor/app').then(({ App: Native }) => {
+      if (!live) return
+      void Native.addListener('resume', pull).then((handle) => {
+        if (live) off = () => void handle.remove()
+        else void handle.remove()
+      })
+    })
+    return () => {
+      live = false
+      off?.()
+    }
+  }, [locked])
+
   const upcoming = useMemo(() => ahead(all, now), [all, now])
 
   /**
