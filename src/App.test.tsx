@@ -50,7 +50,7 @@ let cancelThrows = false
 /** Every request rejects, which is what no network actually looks like. */
 let unreachable = false
 /** What `onAction` registered, so a test can press a notification's button. */
-let nagHandler: ((action: 'done' | 'got_it', id: number) => void) | null = null
+let nagHandler: ((action: 'done' | 'got_it' | 'capture', id: number) => void) | null = null
 
 function builder() {
   let writing = false
@@ -156,6 +156,9 @@ vi.mock('@capacitor/app', () => ({
 // and every call rejects UNIMPLEMENTED once `isNative` is on.
 vi.mock('./lib/statusbar', () => ({ syncStatusBar: () => undefined }))
 vi.mock('./lib/shareTarget', () => ({ takeShared: vi.fn(async () => null) }))
+vi.mock('./hooks/useCaptureNotification', async () => {
+  return await vi.importActual('./hooks/useCaptureNotification')
+})
 
 vi.mock('@capacitor/haptics', () => ({
   Haptics: { impact: async () => undefined },
@@ -207,6 +210,7 @@ vi.mock('./lib/reminders', () => ({
   // follows tears the plugin bridge down mid-cancel.
   cancelAll: vi.fn(async () => undefined),
   scheduleNudges: vi.fn(async () => 'scheduled'),
+  showCapture: vi.fn(async () => 'scheduled'),
   permission: vi.fn(async () => 'granted'),
   requestPermission: vi.fn(async () => true),
   // The digits of the row id, so a test can press a button by number without
@@ -226,7 +230,7 @@ vi.mock('./lib/reminders', () => ({
         : null,
   ),
   cancelFollowUps: vi.fn(async () => undefined),
-  onAction: vi.fn(async (handle: (action: 'done' | 'got_it', id: number) => void) => {
+  onAction: vi.fn(async (handle: (action: 'done' | 'got_it' | 'capture', id: number) => void) => {
     nagHandler = handle
   }),
 }))
@@ -1850,5 +1854,41 @@ describe('text shared in from another app', () => {
     vi.mocked(takeShared).mockResolvedValueOnce('450 lunch')
     const box = await open()
     await waitFor(() => expect((box as HTMLTextAreaElement).value).toBe('450 lunch'))
+  })
+})
+
+/**
+ * Spec 051. The row in the shade is only worth its permanence if the tap lands
+ * in the box — anything less is a slower launcher icon.
+ */
+describe('tapping the capture row', () => {
+  it('lands on Today with the box focused', async () => {
+    await open()
+    act(() => nagHandler?.('capture', 0))
+
+    await waitFor(() => expect(document.activeElement?.id).toBe('quick-add'))
+  })
+
+  it('comes home from another destination first, since the box is not on You', async () => {
+    await open()
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Destinations' })).getByRole('button', {
+        name: 'You',
+      }),
+    )
+    expect(screen.queryByLabelText('What happened?')).toBeNull()
+
+    act(() => nagHandler?.('capture', 0))
+
+    await waitFor(() => expect(screen.getByLabelText('What happened?')).toBeTruthy())
+    await waitFor(() => expect(document.activeElement?.id).toBe('quick-add'))
+  })
+
+  it('writes nothing by itself — it only opens the box', async () => {
+    const box = await open()
+    act(() => nagHandler?.('capture', 0))
+
+    await waitFor(() => expect(document.activeElement?.id).toBe('quick-add'))
+    expect((box as HTMLTextAreaElement).value).toBe('')
   })
 })

@@ -124,6 +124,9 @@ type Props = {
   /** Whether the evening recap may print figures. Defaults to the inverse of App Lock. */
   recapFigures: boolean
   onRecapFigures: (on: boolean) => void
+  /** The permanent capture row in the shade, native only and off by default. */
+  capture: boolean
+  onCapture: (on: boolean) => void
   /**
    * App Lock, native only. `usable` is whether the OS has anything to verify
    * with — biometrics or a screen lock; null while the app is still asking.
@@ -165,6 +168,8 @@ export function You({
   nudges,
   recapFigures,
   onRecapFigures,
+  capture,
+  onCapture,
   onNudges,
   lock,
   onLockToggle,
@@ -448,6 +453,38 @@ export function You({
                   </span>
                 }
                 onClick={() => onRecapFigures(!recapFigures)}
+              />
+            )}
+
+            {/* Nobody thinks "I will open my life logging app" — they think "I
+                need to remember this". This is that thought's one tap. Off
+                until asked for: a row that never leaves the shade is the
+                fastest way to get every notification this app sends muted. */}
+            {reminders === 'granted' && isNative() && (
+              <Row
+                role="switch"
+                aria-checked={capture}
+                aria-label="Quick capture row"
+                title="Quick capture row"
+                detail={capture ? 'Always in your notifications' : 'A permanent shortcut to the box'}
+                icon={<BellIcon size={18} />}
+                right={
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-7 w-12 items-center rounded-full p-0.5 transition-colors ${
+                      capture
+                        ? 'bg-accent'
+                        : 'bg-sunken shadow-[inset_0_0_0_1px_var(--color-edge)]'
+                    }`}
+                  >
+                    <span
+                      className={`h-6 w-6 rounded-full bg-raised shadow-[0_1px_2px_rgb(0_0_0/0.25)] transition-transform ${
+                        capture ? 'translate-x-5' : ''
+                      }`}
+                    />
+                  </span>
+                }
+                onClick={() => onCapture(!capture)}
               />
             )}
 

@@ -119,11 +119,12 @@ describe('the rename reaches no technical identifier', () => {
       ['src/lib/applock.ts', ['lifelog.lock']],
       ['src/lib/attachments.ts', ['lifelog-attachments']],
       ['src/lib/openSettings.ts', ['lifelog-reminders-v2']],
-      ['src/lib/reminders.ts', ['lifelog-reminders-v2', 'lifelog-prompts-v2']],
+      ['src/lib/reminders.ts', ['lifelog-reminders-v2', 'lifelog-prompts-v2', 'lifelog-capture-v1']],
       ['src/lib/ics.ts', ['@lifelog']],
       ['src/hooks/useTheme.ts', ['lifelog.theme', 'lifelog.palette']],
       ['src/hooks/useNudges.ts', ['lifelog.nudges']],
       ['src/hooks/useRecapFigures.ts', ['lifelog.recap']],
+      ['src/hooks/useCaptureNotification.ts', ['lifelog.capture']],
     ]
 
     for (const [file, literals] of guarded) {

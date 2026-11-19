@@ -52,8 +52,26 @@ const MORNING = {
 const RECAP_IDS = [2, 3, 4, 5, 6, 7] as const
 const RECAP_HOUR = 21
 
-/** Every id the prompts own, which `sync` must leave alone. */
+/**
+ * The capture notification's id, and the one place a zero is load-bearing.
+ *
+ * Below the prompts' 1–7 and below `notificationId`'s floor of 8, so it
+ * collides with nothing and no id scheme had to move to make room — which
+ * would have meant re-arming every alarm on the device for a cosmetic gain.
+ */
+const CAPTURE = 0
+
+/**
+ * The prompts' own ids — what `scheduleNudges` cancels before it re-arms.
+ *
+ * The capture row is deliberately *not* here: it has its own switch, and
+ * folding it in would mean turning the daily prompts off took the shortcut
+ * with them.
+ */
 const NUDGE_IDS: readonly number[] = [MORNING.id, ...RECAP_IDS]
+
+/** Everything this app owns outright, which `sync`'s stale sweep must leave alone. */
+const OWNED_IDS: readonly number[] = [CAPTURE, ...NUDGE_IDS]
 
 /**
  * Reminders ring; the daily prompts murmur.
@@ -84,6 +102,7 @@ const NUDGE_IDS: readonly number[] = [MORNING.id, ...RECAP_IDS]
  */
 const REMINDERS = 'lifelog-reminders-v2'
 const PROMPTS = 'lifelog-prompts-v2'
+const CAPTURE_CHANNEL = 'lifelog-capture-v1'
 
 let channelled = false
 
@@ -125,6 +144,17 @@ async function channels(api: LocalNotificationsPlugin): Promise<void> {
     // screen the OS redacts them whenever the user's own "sensitive
     // notifications" setting says to. v1's `visibility: 1` was equally inert —
     // the v2 move is kept for the honest config and the clean slate.
+    visibility: 0,
+  })
+  await one(api, {
+    id: CAPTURE_CHANNEL,
+    name: 'Quick capture',
+    description: 'The permanent row that opens the box',
+    // 2 is IMPORTANCE_LOW: on screen, and silent. This one is re-posted on
+    // every launch, and at the prompts' importance 3 that would be a chime
+    // every time the app is opened.
+    importance: 2,
+    vibration: false,
     visibility: 0,
   })
   await one(api, {
@@ -570,6 +600,46 @@ export async function scheduleNudges(
 }
 
 /**
+ * The permanent row in the shade that opens the box, or its removal.
+ *
+ * Nobody thinks "I will open my life logging app"; they think "I need to
+ * remember this". This is that thought's one tap. It carries no log content —
+ * two fixed strings — so unlike the recap there is nothing on it to suppress
+ * behind App Lock.
+ *
+ * Posted rather than scheduled: `at` in the past is what "now" means to this
+ * plugin, and `ongoing` is what keeps it there afterwards.
+ */
+export async function showCapture(on: boolean, now: Date = new Date()): Promise<ScheduleResult> {
+  const found = await plugin()
+  if (!found) return 'skipped'
+
+  await found.api.cancel({ notifications: [{ id: CAPTURE }] })
+  if (!on) return 'skipped'
+
+  if ((await permission()) !== 'granted') return 'blocked'
+
+  await channels(found.api)
+  await found.api.schedule({
+    notifications: [
+      {
+        id: CAPTURE,
+        title: 'Remember something?',
+        body: 'Tap to log it.',
+        channelId: CAPTURE_CHANNEL,
+        // Cannot be swiped away, and a tap does not consume it — the whole
+        // point is that it is still there the next time something happens.
+        ongoing: true,
+        autoCancel: false,
+        schedule: { at: new Date(now.getTime() + 1_000), allowWhileIdle: true },
+      },
+    ],
+  })
+
+  return 'scheduled'
+}
+
+/**
  * The evenings worth arming, soonest first.
  *
  * Tonight is dropped once 9pm has gone by — the OS treats a past `at` as due
@@ -637,13 +707,16 @@ export async function cancelAll(): Promise<void> {
  * so the handler must not assume anything is on screen.
  */
 export async function onAction(
-  handle: (action: 'done' | 'got_it', id: number) => void,
+  handle: (action: 'done' | 'got_it' | 'capture', id: number) => void,
 ): Promise<void> {
   const found = await plugin()
   if (!found) return
   await found.api.addListener('localNotificationActionPerformed', (fired) => {
     const action = fired.actionId
     if (action === 'done' || action === 'got_it') handle(action, fired.notification.id)
+    // Android reports a tap on the body itself as `tap`. The capture row has
+    // no buttons, so this is the only thing it can ever send.
+    if (action === 'tap' && fired.notification.id === CAPTURE) handle('capture', CAPTURE)
   })
 }
 
@@ -720,7 +793,7 @@ export async function sync(entries: Entry[], now: Date): Promise<void> {
     const pending = await found.api.getPending()
     const stale = pending.notifications
       .map((notification) => notification.id)
-      .filter((id) => !wanted.has(id) && !NUDGE_IDS.includes(id))
+      .filter((id) => !wanted.has(id) && !OWNED_IDS.includes(id))
 
     if (stale.length > 0) {
       await found.api.cancel({ notifications: stale.map((id) => ({ id })) })

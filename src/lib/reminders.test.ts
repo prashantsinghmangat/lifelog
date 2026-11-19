@@ -8,6 +8,7 @@ import {
   notificationId,
   schedule,
   scheduleNudges,
+  showCapture,
 } from './reminders'
 import { GENERIC } from './recap'
 import { isNative } from './platform'
@@ -463,6 +464,13 @@ describe('the notification channels', () => {
     )
     expect(created.find((channel) => channel.id === 'lifelog-reminders-v2')?.visibility).toBe(0)
     expect(created.find((channel) => channel.id === 'lifelog-prompts-v2')?.visibility).toBe(0)
+    // The capture row is silent by construction: it is re-posted on every
+    // launch, and at the prompts' importance 3 that is a chime each time.
+    const capture = created.find((channel) => channel.id === 'lifelog-capture-v1') as
+      | { importance: number; vibration: boolean }
+      | undefined
+    expect(capture?.importance).toBe(2)
+    expect(capture?.vibration).toBe(false)
     expect(created.some((channel) => channel.id === 'lifelog-prompts-v1')).toBe(false)
 
     const sent = (scheduled.mock.calls[0]?.[0] as { notifications: { channelId: string }[] })
@@ -657,5 +665,89 @@ describe('the daily prompts (spec 046)', () => {
   it('never reaches for the plugin away from the native shell', async () => {
     expect(await scheduleNudges(true, RECAP, new Date(2026, 9, 4, 10, 0, 0))).toBe('skipped')
     expect(scheduled).not.toHaveBeenCalled()
+  })
+})
+
+describe('the capture row (spec 051)', () => {
+  type Posted = {
+    id: number
+    title: string
+    channelId: string
+    ongoing?: boolean
+    autoCancel?: boolean
+  }
+
+  afterEach(() => {
+    scheduled.mockReset()
+    cancelled.mockReset()
+    createChannel.mockReset()
+    vi.mocked(isNative).mockReturnValue(false)
+  })
+
+  function posted(): Posted[] {
+    const calls = scheduled.mock.calls
+    return (calls[calls.length - 1]?.[0] as { notifications: Posted[] }).notifications
+  }
+
+  async function show(on: boolean) {
+    vi.mocked(isNative).mockReturnValue(true)
+    checkPermissions.mockResolvedValue({ display: 'granted' })
+    scheduled.mockResolvedValue(undefined)
+    return showCapture(on, new Date(2026, 9, 5, 10, 0, 0))
+  }
+
+  it('posts one row that cannot be swiped away and is not consumed by a tap', async () => {
+    expect(await show(true)).toBe('scheduled')
+
+    const row = posted()
+    expect(row).toHaveLength(1)
+    expect(row[0]?.id).toBe(0)
+    expect(row[0]?.ongoing).toBe(true)
+    expect(row[0]?.autoCancel).toBe(false)
+    expect(row[0]?.title).toBe('Remember something?')
+  })
+
+  it('rides its own channel, not the prompts one', async () => {
+    await show(true)
+    // The channel's own settings are asserted where `channelled` has not yet
+    // latched — see the channels describe above.
+    expect(posted()[0]?.channelId).toBe('lifelog-capture-v1')
+  })
+
+  it('is left alone when the daily prompts are switched off', async () => {
+    vi.mocked(isNative).mockReturnValue(true)
+    checkPermissions.mockResolvedValue({ display: 'granted' })
+    await scheduleNudges(false, undefined, new Date(2026, 9, 5, 10, 0, 0))
+
+    const swept = cancelled.mock.calls.flatMap(
+      (call) => (call[0] as { notifications: { id: number }[] }).notifications,
+    )
+    expect(swept.map((one) => one.id)).not.toContain(0)
+  })
+
+  it('cancels and posts nothing when switched off', async () => {
+    expect(await show(false)).toBe('skipped')
+    expect(cancelled).toHaveBeenCalledWith({ notifications: [{ id: 0 }] })
+    expect(scheduled).not.toHaveBeenCalled()
+  })
+
+  it('reports blocked without permission rather than silently posting nothing', async () => {
+    vi.mocked(isNative).mockReturnValue(true)
+    checkPermissions.mockResolvedValue({ display: 'denied' })
+    expect(await showCapture(true)).toBe('blocked')
+    expect(scheduled).not.toHaveBeenCalled()
+  })
+
+  it('never reaches for the plugin away from the native shell', async () => {
+    expect(await showCapture(true)).toBe('skipped')
+    expect(scheduled).not.toHaveBeenCalled()
+  })
+
+  it('owns an id no row can ever hash onto', () => {
+    // The floor is 8, so zero is unreachable by construction — this is the
+    // guard against someone lowering it and silently replacing the row.
+    for (const seed of ['a', 'row-1', crypto.randomUUID(), crypto.randomUUID()]) {
+      expect(notificationId(seed)).toBeGreaterThanOrEqual(8)
+    }
   })
 })

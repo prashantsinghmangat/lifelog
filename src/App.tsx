@@ -29,6 +29,7 @@ import { Toast, type ToastState } from './components/Toast'
 import { WeekStrip } from './components/WeekStrip'
 import { photosOf, usePhotoThumbnails, type Photo } from './hooks/useAttachments'
 import { useEntries, type Row } from './hooks/useEntries'
+import { useCaptureNotification } from './hooks/useCaptureNotification'
 import { useNudges } from './hooks/useNudges'
 import { useRecapFigures } from './hooks/useRecapFigures'
 import { useSession } from './hooks/useSession'
@@ -81,6 +82,7 @@ import {
   requestPermission,
   schedule as scheduleReminder,
   scheduleNudges,
+  showCapture,
   sync,
 } from './lib/reminders'
 import { sessionStorageKey, supabase } from './lib/supabase'
@@ -421,6 +423,7 @@ function Day({
 }: DayProps) {
   const { nudges, choose: chooseNudges } = useNudges()
   const { figures: recapFigures, choose: chooseRecapFigures } = useRecapFigures(lock.on)
+  const { capture, choose: chooseCapture } = useCaptureNotification()
   const [now, setNow] = useState(() => new Date())
   const [day, setDay] = useState(() => dayKey(new Date()))
   const [editing, setEditing] = useState<Row | null>(null)
@@ -781,7 +784,25 @@ function Day({
    * `got_it` is pure alarm cancellation and touches no row state, which is
    * what keeps a repeat's future occurrences ringing.
    */
-  function nagAction(action: 'done' | 'got_it', id: number) {
+  function nagAction(action: 'done' | 'got_it' | 'capture', id: number) {
+    // The capture row's only job: be the box. Today first, because the box is
+    // not on You, then focus — and focus twice across two frames, since a cold
+    // start is still laying the field out when the first one lands.
+    if (action === 'capture') {
+      setView('today')
+      const box = () => document.getElementById('quick-add') as HTMLTextAreaElement | null
+      box()?.focus()
+      requestAnimationFrame(() => {
+        const field = box()
+        field?.focus()
+        // Moving the caret is what some WebView versions treat as the real
+        // intent to edit, and an IME that never appears makes this a slower
+        // launcher icon.
+        field?.setSelectionRange(field.value.length, field.value.length)
+      })
+      return
+    }
+
     const row = all.find((entry) => alarmIds(entry).includes(id))
     if (row === undefined) return
     if (action === 'got_it') {
@@ -893,6 +914,14 @@ function Day({
       off?.()
     }
   }, [locked])
+
+  // Re-posted on launch and on the switch, because a reboot, a reinstall or an
+  // update drops it — the same reason the prompts are re-armed every launch.
+  useEffect(() => {
+    void showCapture(capture).catch(() => {
+      // A shortcut that could not be posted is not worth an error on screen.
+    })
+  }, [capture])
 
   const upcoming = useMemo(() => ahead(all, now), [all, now])
 
@@ -1206,6 +1235,8 @@ function Day({
     onNudges: chooseNudges,
     recapFigures,
     onRecapFigures: chooseRecapFigures,
+    capture,
+    onCapture: chooseCapture,
     lock,
     onLockToggle,
     onLockAfter,

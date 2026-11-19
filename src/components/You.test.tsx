@@ -26,6 +26,7 @@ function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
   const onNudges = vi.fn()
   const onRecapFigures = vi.fn()
   const onExportAttachments = vi.fn()
+  const onCapture = vi.fn()
   render(
     <You
       email="prashant@example.com"
@@ -39,6 +40,8 @@ function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
       onNudges={onNudges}
       recapFigures={true}
       onRecapFigures={onRecapFigures}
+      capture={false}
+      onCapture={onCapture}
       lock={{ on: false, after: 60_000, usable: true }}
       onLockToggle={vi.fn()}
       onLockAfter={vi.fn()}
@@ -51,7 +54,7 @@ function setup(over: Partial<Parameters<typeof You>[0]> = {}) {
       {...over}
     />,
   )
-  return { onNudges, onRecapFigures, onExportAttachments }
+  return { onNudges, onRecapFigures, onExportAttachments, onCapture }
 }
 
 /** jsdom normalises inline hex colours to rgb(...) — match it. */
@@ -114,6 +117,36 @@ describe('figures in the evening recap (spec 046)', () => {
   it('goes with the prompts: nothing to configure once they are off', () => {
     setup({ nudges: false })
     expect(screen.queryByRole('switch', { name: 'Figures in the evening recap' })).toBeNull()
+  })
+})
+
+describe('the quick capture row (spec 051)', () => {
+  afterEach(() => {
+    vi.mocked(isNative).mockReturnValue(true)
+  })
+
+  it('is off until asked for, and says what it would do', async () => {
+    const { onCapture } = setup({ capture: false })
+    const toggle = await screen.findByRole('switch', { name: 'Quick capture row' })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByText('A permanent shortcut to the box')).toBeTruthy()
+    await userEvent.click(toggle)
+    expect(onCapture).toHaveBeenCalledWith(true)
+  })
+
+  it('says where it lives once it is on', async () => {
+    const { onCapture } = setup({ capture: true })
+    const toggle = await screen.findByRole('switch', { name: 'Quick capture row' })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByText('Always in your notifications')).toBeTruthy()
+    await userEvent.click(toggle)
+    expect(onCapture).toHaveBeenCalledWith(false)
+  })
+
+  it('is absent on the web, which has no shade to sit in', () => {
+    vi.mocked(isNative).mockReturnValue(false)
+    setup()
+    expect(screen.queryByRole('switch', { name: 'Quick capture row' })).toBeNull()
   })
 })
 
